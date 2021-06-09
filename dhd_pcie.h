@@ -828,7 +828,7 @@ extern void dhd_bus_doorbell_timeout_reset(struct dhd_bus *bus);
 #elif defined(CONFIG_SOC_EXYNOS8895) || defined(CONFIG_SOC_EXYNOS9810) || \
 	defined(CONFIG_SOC_EXYNOS9820) || defined(CONFIG_SOC_EXYNOS9830) || \
 	defined(CONFIG_SOC_EXYNOS2100) || defined(CONFIG_SOC_EXYNOS1000) || \
-	defined(CONFIG_SOC_GS101)
+	defined(CONFIG_SOC_GOOGLE)
 #define EXYNOS_PCIE_DEVICE_ID 0xecec
 #define EXYNOS_PCIE_CH_NUM 0
 #else

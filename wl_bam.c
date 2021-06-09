@@ -236,7 +236,7 @@ wl_bad_ap_mngr_fread(struct bcm_cfg80211 *cfg, const char *fname)
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	fp = filp_open(fname, O_RDONLY, 0);
+	fp = dhd_filp_open(fname, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		fp = NULL;
 		WL_ERR(("%s: file open failed(%d)\n", __FUNCTION__, ret));
@@ -283,7 +283,7 @@ wl_bad_ap_mngr_fwrite(struct bcm_cfg80211 *cfg, const char *fname)
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	fp = filp_open(fname, O_CREAT | O_RDWR | O_TRUNC,  0666);
+	fp = dhd_filp_open(fname, O_CREAT | O_RDWR | O_TRUNC,  0666);
 	if (IS_ERR(fp)) {
 		ret = PTR_ERR(fp);
 		WL_ERR(("%s: file open failed(%d)\n", __FUNCTION__, ret));

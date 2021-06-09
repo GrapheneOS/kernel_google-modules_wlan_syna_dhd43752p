@@ -2292,7 +2292,7 @@ _wl_cfg80211_check_axi_error(struct bcm_cfg80211 *cfg)
 
 	WL_ERR(("%s: starts to read %s. Axi error \n", __FUNCTION__, filename));
 
-	fp = filp_open(filename, O_RDONLY, 0);
+	fp = dhd_filp_open(filename, O_RDONLY, 0);
 
 	if (IS_ERR(fp) || (fp == NULL)) {
 		WL_ERR(("%s: Couldn't read the file, err %ld,File [%s]  No previous axi error \n",

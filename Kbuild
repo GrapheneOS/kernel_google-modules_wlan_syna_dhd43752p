@@ -46,16 +46,23 @@ CONFIG_BCMDHD_PCIE=y
 CONFIG_BCM43752=y
 CONFIG_BCM4389=
 CONFIG_DHD_OF_SUPPORT=y
-ifneq ($(CONFIG_ARCH_HISI),)
+
+# CONFIG_ARCH_HISI=y is defined in GKI,
+# so undefined it if CONFIG_SOC_GOOGLE is defined
+ifneq ($(CONFIG_SOC_GOOGLE),)
+CONFIG_ARCH_HISI=
+endif
+
+ifneq ($(filter y, $(CONFIG_ARCH_HISI)),)
  CONFIG_BCMDHD_FW_PATH="\"/vendor/etc/wifi/fw_bcmdhd.bin\""
  CONFIG_BCMDHD_NVRAM_PATH="\"/vendor/etc/wifi/bcmdhd.cal\""
  CONFIG_BCMDHD_CLM_PATH="\"/vendor/etc/wifi/bcmdhd_clm.blob\""
  CONFIG_BCMDHD_MAP_PATH="\"/vendor/etc/wifi/fw_bcmdhd.map\""
 else
- CONFIG_BCMDHD_FW_PATH="\"/vendor/firmware/fw_bcmdhd.bin\""
- CONFIG_BCMDHD_NVRAM_PATH="\"/vendor/etc/wifi/bcmdhd.cal\""
- CONFIG_BCMDHD_CLM_PATH="\"/vendor/etc/wifi/bcmdhd_clm.blob\""
- CONFIG_BCMDHD_MAP_PATH="\"/vendor/etc/wifi/fw_bcmdhd.map\""
+ CONFIG_BCMDHD_FW_PATH="\"fw_bcmdhd.bin\""
+ CONFIG_BCMDHD_NVRAM_PATH="\"bcmdhd.cal\""
+ CONFIG_BCMDHD_CLM_PATH="\"bcmdhd_clm.blob\""
+ CONFIG_BCMDHD_MAP_PATH="\"fw_bcmdhd.map\""
 endif
 CONFIG_BROADCOM_WIFI_RESERVED_MEM=y
 CONFIG_DHD_USE_STATIC_BUF=y
@@ -118,7 +125,9 @@ DHDCFLAGS += -DDHD_COREDUMP
 # Common feature
 #################
 DHDCFLAGS += -DWL_VIRTUAL_APSTA
+ifeq ($(CONFIG_SOC_GOOGLE),)
 DHDCFLAGS += -DDHD_SUPPORT_VFS_CALL
+endif
 # Dongle init fail
 DHDCFLAGS += -DPOWERUP_MAX_RETRY=3
 
@@ -210,7 +219,6 @@ DHDCFLAGS += -DAPSTA_BLOCK_ARP_DURING_DHCP
 DHDCFLAGS += -DWL_SKIP_CONNECT_HINTS
 
 ifneq ($(CONFIG_BCMDHD_PCIE),)
-	DHDCFLAGS += -DWLAN_ACCEL_BOOT
 # Use spin_lock_bh locks
 	DHDCFLAGS += -DDHD_USE_SPIN_LOCK_BH
 # Enable SSSR Dump
@@ -791,7 +799,7 @@ ifeq ($(DRIVER_TYPE),m)
 endif
 
 DHDCFLAGS += -DDHD_CAP_CUSTOMER="\"hw2 \""
-ifneq ($(CONFIG_ARCH_HISI),)
+ifneq ($(filter y, $(CONFIG_ARCH_HISI)),)
 	DHDCFLAGS += -DBOARD_HIKEY -DBOARD_HIKEY_HW2
 	DHDCFLAGS += -DBOARD_MODULAR_INIT
 ifneq ($(CONFIG_BCMDHD_PCIE),)
@@ -809,8 +817,10 @@ else
 	DHDCFLAGS += -DCUSTOMER_HW2_DEBUG
 endif
 
-ifneq ($(filter y, $(CONFIG_SOC_GS101) $(CONFIG_SOC_EXYNOS9820)),)
+ifneq ($(filter y, $(CONFIG_SOC_GOOGLE) $(CONFIG_SOC_EXYNOS9820)),)
 	DHDCFLAGS += -DDHD_CAP_PLATFORM="\"exynos \""
+	DHDCFLAGS += -DCONFIG_ARCH_EXYNOS
+	DHDCFLAGS += -DBOARD_MODULAR_INIT
 # Add chip specific suffix to the output in case of customer release
 ifneq ($(filter y, $(CONFIG_BCM43752)),)
 	BCM_WLAN_CHIP_SUFFIX = 43752
@@ -821,11 +831,12 @@ ifneq ($(filter y, $(CONFIG_BCM4389)),)
 	DHDCFLAGS += -DBCMPCI_DEV_ID=0x4441
 endif
 ifneq ($(CONFIG_BCMDHD_PCIE),)
+	DHDCFLAGS += -DBCMPCIE_DISABLE_ASYNC_SUSPEND
 	DHDCFLAGS += -DDHD_LINUX_STD_FW_API
-	DHDCFLAGS += -DDHD_FW_NAME="\"fw_bcm$(BCM_WLAN_CHIP_SUFFIX).bin\""
-	DHDCFLAGS += -DDHD_NVRAM_NAME="\"bcmdhd_$(BCM_WLAN_CHIP_SUFFIX).cal\""
-	DHDCFLAGS += -DDHD_CLM_NAME="\"bcmdhd_clm_$(BCM_WLAN_CHIP_SUFFIX).blob\""
-	DHDCFLAGS += -DDHD_MAP_NAME="\"fw_bcm$(BCM_WLAN_CHIP_SUFFIX).map\""
+	DHDCFLAGS += -DDHD_FW_NAME="\"fw_bcmdhd.bin\""
+	DHDCFLAGS += -DDHD_NVRAM_NAME="\"bcmdhd.cal\""
+	DHDCFLAGS += -DDHD_CLM_NAME="\"bcmdhd_clm.blob\""
+	DHDCFLAGS += -DDHD_MAP_NAME="\"fw_bcmdhd.map\""
 endif
 endif
 
@@ -866,11 +877,11 @@ ifneq ($(filter -DDHD_STATUS_LOGGING,$(DHDCFLAGS)),)
 	DHDOFILES += dhd_statlog.o
 endif
 
-ifneq ($(filter y, $(CONFIG_SOC_GS101) $(CONFIG_SOC_EXYNOS9820)),)
+ifneq ($(filter y, $(CONFIG_SOC_GOOGLE) $(CONFIG_SOC_EXYNOS9820)),)
 	DHDOFILES += dhd_custom_google.o
 endif
 
-ifneq ($(CONFIG_ARCH_HISI),)
+ifneq ($(filter y, $(CONFIG_ARCH_HISI)),)
 	DHDOFILES += dhd_custom_hikey.o
 endif
 

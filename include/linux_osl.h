@@ -371,11 +371,11 @@ extern uint64 osl_systztime_us(void);
 #define	bzero(b, len)		memset((b), '\0', (len))
 
 #if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS9820) || \
-	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_GS101)
+	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_GOOGLE)
 extern int pcie_ch_num;
 extern int exynos_pcie_l1_exit(int ch_num);
 #endif /* CONFIG_SOC_EXYNOS9810 || CONFIG_SOC_EXYNOS9820
-	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_GS101
+	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_GOOGLE
 	*/
 
 /* register access macros */
@@ -411,7 +411,7 @@ extern void osl_writeq(osl_t *osh, volatile uint64 *r, uint64 v);
 #ifdef CONFIG_64BIT
 /* readq is defined only for 64 bit platform */
 #if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS9820) || \
-	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_GS101)
+	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_GOOGLE)
 #define R_REG(osh, r) (\
 	SELECT_BUS_READ(osh, \
 		({ \
@@ -453,7 +453,7 @@ extern void osl_writeq(osl_t *osh, volatile uint64 *r, uint64 v);
 		OSL_READ_REG(osh, r)) \
 )
 #endif /* CONFIG_SOC_EXYNOS9810 || CONFIG_SOC_EXYNOS9820
-	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_GS101
+	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_GOOGLE
 	*/
 #else /* !CONFIG_64BIT */
 #define R_REG(osh, r) (\
@@ -477,7 +477,7 @@ extern void osl_writeq(osl_t *osh, volatile uint64 *r, uint64 v);
 #ifdef CONFIG_64BIT
 /* writeq is defined only for 64 bit platform */
 #if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS9820) || \
-	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_GS101)
+	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_GOOGLE)
 #define W_REG(osh, r, v) do { \
 	SELECT_BUS_WRITE(osh, \
 		({ \
@@ -507,7 +507,7 @@ extern void osl_writeq(osl_t *osh, volatile uint64 *r, uint64 v);
 		(OSL_WRITE_REG(osh, r, v))); \
 	} while (0)
 #endif /* CONFIG_SOC_EXYNOS9810 || CONFIG_SOC_EXYNOS9820
-	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_GS101
+	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_GOOGLE
 	*/
 #else /* !CONFIG_64BIT */
 #define W_REG(osh, r, v) do { \

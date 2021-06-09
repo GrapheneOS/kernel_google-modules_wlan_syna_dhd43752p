@@ -1708,7 +1708,7 @@ osl_os_open_image(char *filename)
 {
 	struct file *fp;
 
-	fp = filp_open(filename, O_RDONLY, 0);
+	fp = dhd_filp_open(filename, O_RDONLY, 0);
 	/*
 	 * 2.6.11 (FC4) supports filp_open() but later revs don't?
 	 * Alternative:

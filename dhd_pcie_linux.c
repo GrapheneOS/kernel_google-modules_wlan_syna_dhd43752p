@@ -63,11 +63,11 @@
 
 #if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS9820) || \
 	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_EXYNOS2100) || \
-	defined(CONFIG_SOC_EXYNOS1000) || defined(CONFIG_SOC_GS101)
+	defined(CONFIG_SOC_EXYNOS1000) || defined(CONFIG_SOC_GOOGLE)
 #include <linux/exynos-pci-ctrl.h>
 #endif /* CONFIG_SOC_EXYNOS9810 || CONFIG_SOC_EXYNOS9820 ||
 	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_EXYNOS2100 ||
-	* CONFIG_SOC_EXYNOS1000 || CONFIG_SOC_GS101
+	* CONFIG_SOC_EXYNOS1000 || CONFIG_SOC_GOOGLE
 	*/
 
 #ifdef DHD_PCIE_NATIVE_RUNTIMEPM
@@ -1151,10 +1151,10 @@ static int dhdpcie_suspend_dev(struct pci_dev *dev)
 	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_EXYNOS2100 ||
 	* CONFIG_SOC_EXYNOS1000
 	*/
-#if defined(CONFIG_SOC_GS101)
+#if defined(CONFIG_SOC_GOOGLE)
 	DHD_ERROR(("%s: Disable L1ss EP side\n", __FUNCTION__));
-	exynos_pcie_rc_l1ss_ctrl(0, PCIE_L1SS_CTRL_WIFI, 1);
-#endif /* CONFIG_SOC_GS101 */
+	exynos_pcie_rc_l1ss_ctrl(0, PCIE_L1SS_CTRL_WIFI, pcie_ch_num);
+#endif /* CONFIG_SOC_GOOGLE */
 
 	dhdpcie_suspend_dump_cfgregs(bus, "BEFORE_EP_SUSPEND");
 #if defined(OEM_ANDROID) && (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0))
@@ -1248,10 +1248,10 @@ static int dhdpcie_resume_dev(struct pci_dev *dev)
 	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_EXYNOS2100 ||
 	* CONFIG_SOC_EXYNOS1000
 	*/
-#if defined(CONFIG_SOC_GS101)
+#if defined(CONFIG_SOC_GOOGLE)
 	DHD_ERROR(("%s: Enable L1ss EP side\n", __FUNCTION__));
-	exynos_pcie_rc_l1ss_ctrl(1, PCIE_L1SS_CTRL_WIFI, 1);
-#endif /* CONFIG_SOC_GS101 */
+	exynos_pcie_rc_l1ss_ctrl(1, PCIE_L1SS_CTRL_WIFI, pcie_ch_num);
+#endif /* CONFIG_SOC_GOOGLE */
 
 out:
 	return err;

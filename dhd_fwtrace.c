@@ -348,7 +348,7 @@ fwtrace_open_file(uint32 fw_trace_enabled, dhd_pub_t *dhdp)
 		         ts_str);
 
 		fwtrace_info->fw_trace_fp =
-		        filp_open(fwtrace_info->trace_file, file_mode, 0664);
+		        dhd_filp_open(fwtrace_info->trace_file, file_mode, 0664);
 
 		if (IS_ERR(fwtrace_info->fw_trace_fp)) {
 			DHD_ERROR(("Unable to create the fw trace file file: %s\n",
