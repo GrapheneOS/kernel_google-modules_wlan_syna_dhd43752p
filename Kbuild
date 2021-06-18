@@ -1,4 +1,4 @@
-# bcmdhd
+# synadhd
 #
 # Copyright (C) 2021, Broadcom.
 #
@@ -893,8 +893,8 @@ ifneq ($(filter -DDHD_EVENT_LOG_FILTER, $(DHDCFLAGS)),)
 DHDOFILES += dhd_event_log_filter.o
 endif
 
-bcmdhd$(BCM_WLAN_CHIP_SUFFIX)-objs := $(DHDOFILES)
-obj-$(DRIVER_TYPE)   += bcmdhd$(BCM_WLAN_CHIP_SUFFIX).o
+synadhd$(BCM_WLAN_CHIP_SUFFIX)-objs := $(DHDOFILES)
+obj-$(DRIVER_TYPE)   += synadhd$(BCM_WLAN_CHIP_SUFFIX).o
 ccflags-y := $(KBUILD_CFLAGS)
 ccflags-y += $(EXTRA_CFLAGS)
 
