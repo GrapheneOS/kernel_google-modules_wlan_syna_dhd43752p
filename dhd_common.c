@@ -9250,7 +9250,7 @@ error:
 } /* dhd_parse_logstrs_file */
 
 #ifdef DHD_LINUX_STD_FW_API
-int dhd_parse_map_file(osl_t *osh, void *ptr, uint32 *ramstart, uint32 *rodata_start,
+int dhd_parse_map_file(osl_t *osh, const void *ptr, uint32 *ramstart, uint32 *rodata_start,
 		uint32 *rodata_end)
 {
 	char *raw_fmts =  NULL, *raw_fmts_loc = NULL;
@@ -9264,7 +9264,7 @@ int dhd_parse_map_file(osl_t *osh, void *ptr, uint32 *ramstart, uint32 *rodata_s
 	*ramstart = 0;
 	*rodata_start = 0;
 	*rodata_end = 0;
-	size = (uint32)(((struct firmware *)ptr)->size);
+	size = (uint32)(((const struct firmware *)ptr)->size);
 
 	/* Allocate 1 byte more than read_size to terminate it with NULL */
 	raw_fmts = MALLOCZ(osh, read_size + 1);
@@ -9282,7 +9282,7 @@ int dhd_parse_map_file(osl_t *osh, void *ptr, uint32 *ramstart, uint32 *rodata_s
 		}
 
 		error = memcpy_s(raw_fmts, read_size,
-			(((char *)((struct firmware *)ptr)->data) + offset), read_size);
+			(((const char *)((const struct firmware *)ptr)->data) + offset), read_size);
 		if (error) {
 			DHD_ERROR(("%s: failed to copy raw_fmts, err=%d\n",
 				__FUNCTION__, error));

@@ -3766,8 +3766,13 @@ int dhd_apply_default_clm(dhd_pub_t *dhd, char *clm_path);
 #ifdef SHOW_LOGTRACE
 int dhd_parse_logstrs_file(osl_t *osh, char *raw_fmts, int logstrs_size,
 		dhd_event_log_t *event_log);
+#ifdef DHD_LINUX_STD_FW_API
+int dhd_parse_map_file(osl_t *osh, const void *ptr, uint32 *ramstart,
+		uint32 *rodata_start, uint32 *rodata_end);
+#else
 int dhd_parse_map_file(osl_t *osh, void *file, uint32 *ramstart,
 		uint32 *rodata_start, uint32 *rodata_end);
+#endif /* DHD_LINUX_STD_FW_API */
 #ifdef PCIE_FULL_DONGLE
 int dhd_event_logtrace_infobuf_pkt_process(dhd_pub_t *dhdp, void *pktbuf,
 		dhd_event_log_t *event_data);

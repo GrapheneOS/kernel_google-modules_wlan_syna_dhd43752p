@@ -3960,15 +3960,23 @@ dhdpcie_download_code_file(struct dhd_bus *bus, char *pfw_path)
 		/* if address is 0, store the reset instruction to be written in 0 */
 		if (store_reset) {
 			ASSERT(offset == 0);
-			bus->resetinstr = *(((uint32*)fw->data + buf_offset));
+			bus->resetinstr = *(((const uint32*)fw->data + buf_offset));
 			/* Add start of RAM address to the address given by user */
 			offset += bus->dongle_ram_base;
 			offset_end += offset;
 			store_reset = FALSE;
 		}
 
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif // defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 		bcmerror = dhdpcie_bus_membytes(bus, TRUE, offset,
 			(uint8 *)fw->data + buf_offset, len);
+#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif // defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
+
 		if (bcmerror) {
 			DHD_ERROR(("%s: error %d on writing %d membytes at 0x%08x\n",
 				__FUNCTION__, bcmerror, MEMBLOCK, offset));

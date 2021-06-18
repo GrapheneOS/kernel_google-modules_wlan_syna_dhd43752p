@@ -10563,7 +10563,7 @@ dhd_lookup_map(osl_t *osh, char *fname, uint32 pc, char *pc_fn,
 		}
 
 		err = memcpy_s(raw_fmts, read_size,
-			((char *)(fw->data) + mem_offset), read_size);
+			((const char *)(fw->data) + mem_offset), read_size);
 		if (err) {
 			DHD_ERROR(("%s: failed to copy raw_fmts, err=%d\n",
 				__FUNCTION__, err));
@@ -10755,7 +10755,7 @@ dhd_init_logstrs_array(osl_t *osh, dhd_event_log_t *temp)
 			goto fail;
 		}
 	}
-	error = memcpy_s(raw_fmts, logstrs_size, (char *)(fw->data), logstrs_size);
+	error = memcpy_s(raw_fmts, logstrs_size, (const char *)(fw->data), logstrs_size);
 	if (error) {
 		DHD_ERROR(("%s: failed to copy raw_fmts, err=%d\n",
 			__FUNCTION__, error));
@@ -10803,7 +10803,7 @@ dhd_read_map(osl_t *osh, char *fname, uint32 *ramstart, uint32 *rodata_start,
 		goto fail;
 	}
 
-	if ((err = dhd_parse_map_file(osh, (struct firmware *)fw, ramstart,
+	if ((err = dhd_parse_map_file(osh, fw, ramstart,
 			rodata_start, rodata_end)) < 0) {
 		goto fail;
 	}
@@ -10871,7 +10871,7 @@ dhd_init_static_strs_array(osl_t *osh, dhd_event_log_t *temp, char *str_file, ch
 		goto fail;
 	}
 
-	error = memcpy_s(raw_fmts, logstrs_size, (char *)((fw->data) + logfilebase),
+	error = memcpy_s(raw_fmts, logstrs_size, (const char *)((fw->data) + logfilebase),
 		logstrs_size);
 	if (error) {
 		DHD_ERROR(("%s: failed to copy raw_fmts, err=%d\n",
