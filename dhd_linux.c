@@ -10600,6 +10600,7 @@ dhd_lookup_map(osl_t *osh, char *fname, uint32 pc, char *pc_fn,
 				(type2 == 'W')) {
 				addr1 = addr2;
 				type1 = type2;
+				UNUSED_PARAMETER(type1);
 				(void)memcpy_s(func1, DHD_FUNC_STR_LEN,
 					func2, DHD_FUNC_STR_LEN);
 				DHD_TRACE(("%s: %x %c %s \n",
