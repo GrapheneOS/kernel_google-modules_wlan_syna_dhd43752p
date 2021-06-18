@@ -562,13 +562,21 @@ uint dhd_download_fw_on_driverload = TRUE;
 /* Definitions to provide path to the firmware and nvram
  * example nvram_path[MOD_PARAM_PATHLEN]="/projects/wlan/nvram.txt"
  */
+#ifdef DHD_LINUX_STD_FW_API
+char firmware_path[MOD_PARAM_PATHLEN] = DHD_FW_NAME;
+char nvram_path[MOD_PARAM_PATHLEN] = DHD_NVRAM_NAME;
+char clm_path[MOD_PARAM_PATHLEN] = DHD_CLM_NAME;
+#else
 char firmware_path[MOD_PARAM_PATHLEN] = CONFIG_BCMDHD_FW_PATH;
 char nvram_path[MOD_PARAM_PATHLEN] = CONFIG_BCMDHD_NVRAM_PATH;
+char clm_path[MOD_PARAM_PATHLEN] = CONFIG_BCMDHD_CLM_PATH;
+#endif /* DHD_LINUX_STD_FW_API */
 #ifdef DHD_UCODE_DOWNLOAD
 char ucode_path[MOD_PARAM_PATHLEN];
 #endif /* DHD_UCODE_DOWNLOAD */
-char clm_path[MOD_PARAM_PATHLEN] = CONFIG_BCMDHD_CLM_PATH;
+#ifdef READ_CONFIG_FROM_FILE
 char config_path[MOD_PARAM_PATHLEN] = CONFIG_BCMDHD_CONFIG_PATH;
+#endif /* READ_CONFIG_FROM_FILE */
 
 /* backup buffer for firmware and nvram path */
 char fw_bak_path[MOD_PARAM_PATHLEN];
@@ -666,11 +674,13 @@ module_param(disable_proptx, int, 0660);
 /* load firmware and/or nvram values from the filesystem */
 module_param_string(firmware_path, firmware_path, MOD_PARAM_PATHLEN, 0660);
 module_param_string(nvram_path, nvram_path, MOD_PARAM_PATHLEN, 0660);
+module_param_string(clm_path, clm_path, MOD_PARAM_PATHLEN, 0660);
 #ifdef DHD_UCODE_DOWNLOAD
 module_param_string(ucode_path, ucode_path, MOD_PARAM_PATHLEN, 0660);
 #endif /* DHD_UCODE_DOWNLOAD */
-module_param_string(clm_path, clm_path, MOD_PARAM_PATHLEN, 0660);
+#ifdef READ_CONFIG_FROM_FILE
 module_param_string(config_path, config_path, MOD_PARAM_PATHLEN, 0660);
+#endif /* READ_CONFIG_FROM_FILE */
 
 /* wl event forwarding */
 #ifdef WL_EVENT_ENAB
@@ -17793,6 +17803,7 @@ exit:
 
 #endif /* DHD_PCIE_RUNTIMEPM */
 
+#ifdef DHD_LINUX_STD_FW_API
 int
 dhd_os_get_img_fwreq(const struct firmware **fw, char *file_path)
 {
@@ -17813,6 +17824,7 @@ dhd_os_close_img_fwreq(const struct firmware *fw)
 {
 	release_firmware(fw);
 }
+#endif // DHD_LINUX_STD_FW_API
 
 void *
 dhd_os_open_image1(dhd_pub_t *pub, char *filename)
