@@ -4212,11 +4212,6 @@ wl_notify_sched_scan_results(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 
 	WL_DBG(("Enter\n"));
 
-// Ignore compiler warnings due to -Werror=vla
-#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wvla"
-#endif // defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 	/* These static asserts guarantee v1/v2 net_info and subnet_info are compatible
 	 * in size and SSID offset, allowing v1 to be used below except for the results
 	 * fields themselves (status, count, offset to netinfo).
@@ -4224,13 +4219,8 @@ wl_notify_sched_scan_results(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	STATIC_ASSERT(sizeof(wl_pfn_net_info_v1_t) == sizeof(wl_pfn_net_info_v2_t));
 	STATIC_ASSERT(sizeof(wl_pfn_lnet_info_v1_t) == sizeof(wl_pfn_lnet_info_v2_t));
 	STATIC_ASSERT(sizeof(wl_pfn_subnet_info_v1_t) == sizeof(wl_pfn_subnet_info_v2_t));
-/*
-	STATIC_ASSERT(OFFSETOF(wl_pfn_subnet_info_v1_t, SSID) ==
+	ASSERT(OFFSETOF(wl_pfn_subnet_info_v1_t, SSID) ==
 	              OFFSETOF(wl_pfn_subnet_info_v2_t, u.SSID));
-*/
-#if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif // defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 
 	/* Extract the version-specific items */
 	if (pfn_result_v1->version == PFN_SCANRESULT_VERSION_V1) {
