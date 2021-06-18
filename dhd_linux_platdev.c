@@ -71,11 +71,11 @@ static bool is_power_on = FALSE;
  * to support in this case.
  */
 #if !defined(CONFIG_DHD_DTS)
-#if defined(DHD_OF_SUPPORT)
+#if defined(BOARD_MODULAR_INIT)
 static bool dts_enabled = TRUE;
 extern struct resource dhd_wlan_resources;
 extern struct wifi_platform_data dhd_wlan_control;
-#else // !defined(DHD_OF_SUPPORT)
+#else // !defined(BOARD_MODULAR_INIT)
 static bool dts_enabled = FALSE;
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic push
@@ -86,7 +86,7 @@ struct wifi_platform_data dhd_wlan_control = {0};
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
-#endif /* !defined(DHD_OF_SUPPORT) */
+#endif /* !defined(BOARD_MODULAR_INIT) */
 #endif /* !defind(CONFIG_DHD_DTS) */
 
 static int dhd_wifi_platform_load(void);
