@@ -833,7 +833,7 @@ extern void dhd_bus_doorbell_timeout_reset(struct dhd_bus *bus);
 #define EXYNOS_PCIE_CH_NUM 0
 #else
 #error "Not supported platform"
-#endif /* CONFIG_SOC_EXYNOSXXXX & CONFIG_MACH_UNIVERSALXXXX */
+#endif /* CONFIG_MACH_UNIVERSALXXXX || CONFIG_SOC_EXYNOSXXXX || CONFIG_SOC_GOOGLE */
 extern void exynos_pcie_pm_suspend(int ch_num);
 extern void exynos_pcie_pm_resume(int ch_num);
 #endif /* CONFIG_ARCH_EXYNOS */

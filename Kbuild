@@ -46,23 +46,16 @@ CONFIG_BCMDHD_PCIE=y
 CONFIG_BCM43752=y
 CONFIG_BCM4389=
 CONFIG_DHD_OF_SUPPORT=y
-
-# CONFIG_ARCH_HISI=y is defined in GKI,
-# so undefined it if CONFIG_SOC_GOOGLE is defined
 ifneq ($(CONFIG_SOC_GOOGLE),)
-CONFIG_ARCH_HISI=
-endif
-
-ifneq ($(filter y, $(CONFIG_ARCH_HISI)),)
+ CONFIG_BCMDHD_FW_PATH="\"/vendor/firmware/fw_bcmdhd.bin\""
+ CONFIG_BCMDHD_NVRAM_PATH="\"/vendor/firmware/bcmdhd.cal\""
+ CONFIG_BCMDHD_CLM_PATH="\"/vendor/firmware/bcmdhd_clm.blob\""
+ CONFIG_BCMDHD_MAP_PATH="\"/vendor/firmware/fw_bcmdhd.map\""
+else
  CONFIG_BCMDHD_FW_PATH="\"/vendor/etc/wifi/fw_bcmdhd.bin\""
  CONFIG_BCMDHD_NVRAM_PATH="\"/vendor/etc/wifi/bcmdhd.cal\""
  CONFIG_BCMDHD_CLM_PATH="\"/vendor/etc/wifi/bcmdhd_clm.blob\""
  CONFIG_BCMDHD_MAP_PATH="\"/vendor/etc/wifi/fw_bcmdhd.map\""
-else
- CONFIG_BCMDHD_FW_PATH="\"fw_bcmdhd.bin\""
- CONFIG_BCMDHD_NVRAM_PATH="\"bcmdhd.cal\""
- CONFIG_BCMDHD_CLM_PATH="\"bcmdhd_clm.blob\""
- CONFIG_BCMDHD_MAP_PATH="\"fw_bcmdhd.map\""
 endif
 CONFIG_BROADCOM_WIFI_RESERVED_MEM=y
 CONFIG_DHD_USE_STATIC_BUF=y
@@ -125,9 +118,6 @@ DHDCFLAGS += -DDHD_COREDUMP
 # Common feature
 #################
 DHDCFLAGS += -DWL_VIRTUAL_APSTA
-ifeq ($(CONFIG_SOC_GOOGLE),)
-DHDCFLAGS += -DDHD_SUPPORT_VFS_CALL
-endif
 # Dongle init fail
 DHDCFLAGS += -DPOWERUP_MAX_RETRY=3
 
@@ -799,25 +789,10 @@ ifeq ($(DRIVER_TYPE),m)
 endif
 
 DHDCFLAGS += -DDHD_CAP_CUSTOMER="\"hw2 \""
-ifneq ($(filter y, $(CONFIG_ARCH_HISI)),)
-	DHDCFLAGS += -DBOARD_HIKEY -DBOARD_HIKEY_HW2
-	DHDCFLAGS += -DBOARD_MODULAR_INIT
-ifneq ($(CONFIG_BCMDHD_PCIE),)
-	DHDCFLAGS += -DDHD_LINUX_STD_FW_API
-	DHDCFLAGS += -DDHD_FW_NAME="\"fw_bcmdhd.bin\""
-	DHDCFLAGS += -DDHD_NVRAM_NAME="\"bcmdhd.cal\""
-	DHDCFLAGS += -DDHD_CLM_NAME="\"bcmdhd_clm.blob\""
-	DHDCFLAGS += -DDHD_MAP_NAME="\"fw_bcmdhd.map\""
-endif
-# Allow wl event forwarding as network packet
-	DHDCFLAGS += -DWL_EVENT_ENAB
-	DHDCFLAGS += -DDHD_CAP_PLATFORM="\"hikey \""
-else
+ifneq ($(CONFIG_SOC_GOOGLE),)
 # The flag will be enabled only on customer platform
 	DHDCFLAGS += -DCUSTOMER_HW2_DEBUG
-endif
 
-ifneq ($(filter y, $(CONFIG_SOC_GOOGLE) $(CONFIG_SOC_EXYNOS9820)),)
 	DHDCFLAGS += -DDHD_CAP_PLATFORM="\"exynos \""
 	DHDCFLAGS += -DCONFIG_ARCH_EXYNOS
 	DHDCFLAGS += -DBOARD_MODULAR_INIT
@@ -838,6 +813,19 @@ ifneq ($(CONFIG_BCMDHD_PCIE),)
 	DHDCFLAGS += -DDHD_CLM_NAME="\"bcmdhd_clm.blob\""
 	DHDCFLAGS += -DDHD_MAP_NAME="\"fw_bcmdhd.map\""
 endif
+else ifneq ($(CONFIG_ARCH_HISI),)
+	DHDCFLAGS += -DBOARD_HIKEY -DBOARD_HIKEY_HW2
+	DHDCFLAGS += -DBOARD_MODULAR_INIT
+ifneq ($(CONFIG_BCMDHD_PCIE),)
+	DHDCFLAGS += -DDHD_LINUX_STD_FW_API
+	DHDCFLAGS += -DDHD_FW_NAME="\"fw_bcmdhd.bin\""
+	DHDCFLAGS += -DDHD_NVRAM_NAME="\"bcmdhd.cal\""
+	DHDCFLAGS += -DDHD_CLM_NAME="\"bcmdhd_clm.blob\""
+	DHDCFLAGS += -DDHD_MAP_NAME="\"fw_bcmdhd.map\""
+endif
+# Allow wl event forwarding as network packet
+	DHDCFLAGS += -DWL_EVENT_ENAB
+	DHDCFLAGS += -DDHD_CAP_PLATFORM="\"hikey \""
 endif
 
 EXTRA_CFLAGS += $(DHDCFLAGS) -DDHD_DEBUG
@@ -877,11 +865,9 @@ ifneq ($(filter -DDHD_STATUS_LOGGING,$(DHDCFLAGS)),)
 	DHDOFILES += dhd_statlog.o
 endif
 
-ifneq ($(filter y, $(CONFIG_SOC_GOOGLE) $(CONFIG_SOC_EXYNOS9820)),)
+ifneq ($(CONFIG_SOC_GOOGLE),)
 	DHDOFILES += dhd_custom_google.o
-endif
-
-ifneq ($(filter y, $(CONFIG_ARCH_HISI)),)
+else ifneq ($(CONFIG_ARCH_HISI),)
 	DHDOFILES += dhd_custom_hikey.o
 endif
 
