@@ -2300,8 +2300,9 @@ _wl_cfg80211_check_axi_error(struct bcm_cfg80211 *cfg)
 		return ret;
 	}
 
-	kernel_read_compat(fp, fp->f_pos, (char *)dhd->axi_err_dump, sizeof(dhd_axi_error_dump_t));
-	filp_close(fp, NULL);
+	dhd_kernel_read_compat(fp, fp->f_pos, (char *)dhd->axi_err_dump,
+		sizeof(dhd_axi_error_dump_t));
+	dhd_filp_close(fp, NULL);
 
 	/* Delete axi error info file */
 	if (dhd_file_delete(filename) < 0) {
