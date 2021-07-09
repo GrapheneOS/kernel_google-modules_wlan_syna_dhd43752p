@@ -17232,6 +17232,9 @@ dhd_module_init(void)
 		dhd_hdm_wlan_sysfs_init();
 	}
 #endif /* DHD_SUPPORT_HDM */
+#if defined(BCMDHD_MODULAR) && defined(DHD_MODULE_INIT_FORCE_SUCCESS)
+	err = 0;
+#endif /* BCMDHD_MODULAR && DHD_MODULE_INIT_FORCE_SUCCESS */
 	return err;
 
 }

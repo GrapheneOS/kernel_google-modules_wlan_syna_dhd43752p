@@ -244,6 +244,16 @@ static struct pci_device_id dhdpcie_pci_devid[] __devinitdata = {
 	class_mask: 0xffff00,
 	driver_data: 0,
 	},
+#if (BCMPCI_DEV_ID != PCI_ANY_ID) && defined(BCMPCI_NOOTP_DEV_ID)
+	{ vendor: VENDOR_BROADCOM,
+	device: BCMPCI_NOOTP_DEV_ID,
+	subvendor: PCI_ANY_ID,
+	subdevice: PCI_ANY_ID,
+	class: PCI_CLASS_NETWORK_OTHER << 8,
+	class_mask: 0xffff00,
+	driver_data: 0,
+	},
+#endif /* BCMPCI_DEV_ID != PCI_ANY_ID && BCMPCI_NOOTP_DEV_ID */
 	{ 0, 0, 0, 0, 0, 0, 0}
 };
 MODULE_DEVICE_TABLE(pci, dhdpcie_pci_devid);
