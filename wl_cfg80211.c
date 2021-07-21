@@ -10366,6 +10366,42 @@ wl_cfg80211_cleanup_connection(struct net_device *net, bool user_enforced)
 #endif /* WL_NAN */
 }
 
+#ifdef WL_AUTO_COUNTRY
+static bool wl_is_auto_cc(char *country_code)
+{
+	if (!country_code) {
+		return FALSE;
+	}
+
+	if ((country_code[0] == '0') && (country_code[1] == '0')) {
+		/* Enable auto country for world domain (00) */
+		return TRUE;
+	}
+	return  FALSE;
+}
+static int
+wl_config_autocountry(struct bcm_cfg80211 *cfg,
+		struct net_device *ndev, char *country_code)
+{
+	bool val = FALSE;
+	s32 err;
+
+	if (!country_code) {
+		return -EINVAL;
+	}
+
+	val = wl_is_auto_cc(country_code);
+
+	err = wldev_iovar_setint(ndev, "autocountry", val);
+	if (err) {
+		WL_ERR(("Failed to config auto country (%d) ret:%d\n", val, err));
+		return err;
+	}
+
+	return err;
+}
+#endif /* WL_AUTO_COUNTRY */
+
 s32
 wl_cfg80211_set_country_code(struct net_device *net, char *country_code,
 	bool notify, bool user_enforced, int revinfo)
@@ -10373,8 +10409,8 @@ wl_cfg80211_set_country_code(struct net_device *net, char *country_code,
 	s32 ret = BCME_OK;
 	struct wireless_dev *wdev = ndev_to_wdev(net);
 	struct wiphy *wiphy = wdev->wiphy;
-#ifdef READ_CONFIG_FROM_FILE
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+#ifdef READ_CONFIG_FROM_FILE
 	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
 #endif /* READ_CONFIG_FROM_FILE */
 
@@ -10389,12 +10425,30 @@ wl_cfg80211_set_country_code(struct net_device *net, char *country_code,
 		goto exit;
 	}
 
+#ifdef WL_AUTO_COUNTRY
+	ret = wl_config_autocountry(cfg, net, country_code);
+#endif /* WL_AUTO_COUNTRY */
+
 	wl_cfg80211_cleanup_connection(net, user_enforced);
 
+	/* Store before applying - so that if event comes earlier that is handled properly */
+	if (strlcpy(cfg->country, country_code, WL_CCODE_LEN) >= WLC_CNTRY_BUF_SZ) {
+		WL_ERR(("country code copy failed :%d\n", ret));
+		goto exit;
+	}
+
+#ifdef WL_AUTO_COUNTRY
+	/* if it is not 00 country or auto country set failed, try to set real CC */
+	if (ret || !wl_is_auto_cc(country_code)) {
+#endif /* WL_AUTO_COUNTRY */
 	ret = wldev_set_country(net, country_code,
 		notify, revinfo);
+#ifdef WL_AUTO_COUNTRY
+	}
+#endif /* WL_AUTO_COUNTRY */
 	if (ret < 0) {
 		WL_ERR(("set country Failed :%d\n", ret));
+		bzero(cfg->country, sizeof(cfg->country));
 		goto exit;
 	}
 #ifdef READ_CONFIG_FROM_FILE
@@ -10494,16 +10548,43 @@ int wl_features_set(u8 *array, uint8 len, u32 ftidx)
 	return BCME_OK;
 }
 
+static void wl_copy_regd(struct ieee80211_regdomain *regd_copy,
+		const struct ieee80211_regdomain *regd_orig)
+{
+	int i;
+
+	memcpy_s(regd_copy, sizeof(struct ieee80211_regdomain),
+		regd_orig, sizeof(struct ieee80211_regdomain));
+	for (i = 0; i < regd_orig->n_reg_rules; i++) {
+		memcpy_s(&regd_copy->reg_rules[i], sizeof(struct ieee80211_reg_rule),
+			&regd_orig->reg_rules[i], sizeof(struct ieee80211_reg_rule));
+	}
+
+}
+
 static
 void wl_config_custom_regulatory(struct wiphy *wiphy)
 {
 
 #if defined(WL_SELF_MANAGED_REGDOM) && \
 	(LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0))
+	int regd_len = 0;
+	struct ieee80211_regdomain *regd_copy = NULL;
+
 	/* Use self managed regulatory domain */
 	wiphy->regulatory_flags |= REGULATORY_WIPHY_SELF_MANAGED |
 			REGULATORY_IGNORE_STALE_KICKOFF;
-	wiphy->regd = &brcm_regdom;
+	regd_len = sizeof(struct ieee80211_regdomain) +
+		(brcm_regdom.n_reg_rules * sizeof(struct ieee80211_reg_rule));
+	/* it will be released in function reg_process_self_managed_hints */
+	regd_copy = kzalloc(regd_len, GFP_ATOMIC);
+
+	if (regd_copy) {
+		wl_copy_regd(regd_copy, &brcm_regdom);
+		wiphy->regd = regd_copy;
+	} else {
+		wiphy->regd = &brcm_regdom;
+	}
 	WL_DBG(("Self managed regdom\n"));
 	return;
 #else /* WL_SELF_MANAGED_REGDOM && KERNEL >= 4.0 */
@@ -14469,14 +14550,80 @@ exit:
 }
 
 #if defined(CUSTOMER_HW6) || defined(WIPHY_DYNAMIC_UPDATE)
+static void
+wl_check_brcm_specifc_country_code(char *country_code)
+{
+	/* If a country code is Brcm specific change the domain to world domain */
+	if (!strcmp("AA", country_code) ||	/* AA */
+		!strcmp("ZZ", country_code) ||	/* ZZ */
+		country_code[0] == 'X' ||		/* XA - XZ */
+		(country_code[0] == 'Q' &&		/* QM - QZ */
+		(country_code[1] >= 'M' && country_code[1] <= 'Z'))) {
+			country_code[0] = '0';
+			country_code[1] = '0';
+	}
+}
+
 static s32
 wl_cfg80211_ccode_evt_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	const wl_event_msg_t *event, void *data)
 {
-	s32 err = 0;
+	s32 err = BCME_OK;
+	char country_str_lookup[WLC_CNTRY_BUF_SZ] = { 0 };
+	struct wiphy *wiphy = bcmcfg_to_wiphy(cfg);
+	int regd_len = 0;
+	struct ieee80211_regdomain *regd_copy = NULL;
+
+	strncpy(country_str_lookup, data, WLC_CNTRY_BUF_SZ);
+
+	if (strncmp(cfg->country, country_str_lookup, WL_CCODE_LEN) == 0) {
+		/* If country code is updated from command context, skip wiphy update */
+		WL_DBG_MEM(("No change in country (%s)\n", country_str_lookup));
+		return BCME_OK;
+	}
 	/* Indicate to upper layer for regdom change */
 	WL_INFORM_MEM(("Received country code change event\n"));
 	err = wl_update_wiphybands(cfg, true);
+	if (err != BCME_OK) {
+		WL_ERR(("%s: update wiphy bands failed\n", __FUNCTION__));
+		return err;
+	}
+
+	wl_check_brcm_specifc_country_code(country_str_lookup);
+
+	WL_DBG(("Updating new country %s\n", country_str_lookup));
+
+	if (!IS_REGDOM_SELF_MANAGED(wiphy)) {
+		err = regulatory_hint(wiphy, country_str_lookup);
+		if (err) {
+			WL_ERR(("%s: update country change to upper layers failed\n", __FUNCTION__));
+		}
+	}
+	else {
+
+		regd_len = sizeof(struct ieee80211_regdomain) +
+			(brcm_regdom.n_reg_rules * sizeof(struct ieee80211_reg_rule));
+		/* it will be released in function reg_process_self_managed_hints */
+		regd_copy = kzalloc(regd_len, GFP_ATOMIC);
+
+		if (!regd_copy) {
+			return BCME_NOMEM;
+		}
+		wl_copy_regd(regd_copy, &brcm_regdom);
+		/* Set country code for REGDOM_SELF_MANAGED  */
+		regd_copy->alpha2[0] = country_str_lookup[0];
+		regd_copy->alpha2[1] = country_str_lookup[1];
+		/* TODO update dfs flag and reg rules here */
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0))
+		rtnl_lock();
+		regulatory_set_wiphy_regd_sync_rtnl(wiphy, regd_copy);
+		rtnl_unlock();
+#else
+		regulatory_set_wiphy_regd_sync(wiphy, regd_copy);
+#endif /* LINUX_VERSION < VERSION(5, 12, 0) */
+		kfree(regd_copy);
+	}
 
 	return err;
 }

@@ -5117,6 +5117,12 @@ wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
 	case WLC_E_TWT_INFO_FRM:
 		DHD_EVENT(("MACEVENT: %s, MAC %s\n", event_name, eabuf));
 		break;
+#ifdef WL_CFG80211
+	case WLC_E_COUNTRY_CODE_CHANGED:
+		DHD_EVENT(("MACEVENT: %s: Country code changed to %s\n", event_name,
+			(char*)event_data));
+		break;
+#endif /* WL_CFG80211 */
 	default:
 		DHD_INFO(("MACEVENT: %s %d, MAC %s, status %d, reason %d, auth %d\n",
 		       event_name, event_type, eabuf, (int)status, (int)reason,

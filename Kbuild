@@ -206,6 +206,9 @@ DHDCFLAGS += -DAPSTA_BLOCK_ARP_DURING_DHCP
 # Bypass wpa_supplicant's BSSID selection
 DHDCFLAGS += -DWL_SKIP_CONNECT_HINTS
 
+# Enable auto country to support country 00
+DHDCFLAGS += -DWL_AUTO_COUNTRY -DWIPHY_DYNAMIC_UPDATE
+
 ifneq ($(CONFIG_BCMDHD_PCIE),)
 # Use spin_lock_bh locks
 	DHDCFLAGS += -DDHD_USE_SPIN_LOCK_BH

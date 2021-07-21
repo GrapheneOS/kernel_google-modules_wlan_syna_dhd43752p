@@ -1981,6 +1981,7 @@ struct bcm_cfg80211 {
 #ifdef WLFBT
 	struct ether_addr start_roam_addr;
 #endif
+	u8 country[WLC_CNTRY_BUF_SZ];
 };
 
 /* Max auth timeout allowed in case of EAP is 70sec, additional 5 sec for
