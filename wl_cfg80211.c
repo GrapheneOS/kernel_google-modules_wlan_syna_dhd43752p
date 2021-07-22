@@ -6305,6 +6305,13 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		WL_ERR(("fw assoc sync failed\n"));
 	}
 
+#ifdef DBG_PKT_MON
+	/* Start pkt monitor here to avoid probe auth and assoc lost */
+	if (dev == bcmcfg_to_prmry_ndev(cfg)) {
+		wl_pkt_mon_start(cfg, dev);
+	}
+#endif /* DBG_PKT_MON */
+
 	if (assoc_info.reassoc) {
 		/* Handle roam to same ESS */
 		if ((err = wl_handle_reassoc(cfg, dev, &assoc_info)) != BCME_OK) {
@@ -6350,10 +6357,6 @@ fail:
 		wl_cfg80211_tdls_config(cfg, TDLS_STATE_DISCONNECT, false);
 #endif /* WLTDLS */
 	} else {
-#ifdef DBG_PKT_MON
-		/* start packet log in adv to ensure that EAPOL msgs aren't missed */
-		wl_pkt_mon_start(cfg, dev);
-#endif /* DBG_PKT_MON */
 #ifdef DHD_LOSSLESS_ROAMING
 		((dhd_pub_t *)(cfg->pub))->during_assoc_roaming = 1;
 #endif // DHD_LOSSLESS_ROAMING

@@ -25854,6 +25854,64 @@ typedef enum {
 	LATENCY_CRT_DATA_MODE_LAST
 } latency_crt_mode_t;
 
+/* Additional header pushed to the logged mgmt frame in aml(assoc mgmt frame logger) */
+typedef struct wl_aml_header_v1 {
+	uint16 version;		/* Header version, now 1 */
+	uint16 length;		/* frame length excluding this header */
+	uint16 flags;		/* flag to indicate tx/rx, acked/noack and others */
+	uint8 pad[2];		/* pad bytes for align */
+} wl_aml_header_v1_t;
+
+/* Version for aml header */
+#define WL_AML_HEADER_VERSION	1u
+
+/* Flags for aml header */
+#define WL_AML_F_DIRECTION 0x0001	/* This flag indicates this is Tx mgmt, otherwise Rx */
+#define WL_AML_F_ACKED     0x0002	/* This flag indicates the frame is acked */
+
+/* Version for IOVAR 'aml' */
+#define WL_AML_IOV_MAJOR_VER 1u
+#define WL_AML_IOV_MINOR_VER 0u
+#define WL_AML_IOV_MAJOR_VER_SHIFT 8u
+#define WL_AML_IOV_VERSION \
+	((WL_AML_IOV_MAJOR_VER << WL_AML_IOV_MAJOR_VER_SHIFT) | WL_AML_IOV_MINOR_VER)
+
+/* Common header for IOVAR 'aml' */
+typedef struct wl_aml_iov_cmnhdr {
+	uint16 ver;	/* IOVAR cmd structure version */
+	uint16 len;	/* IOVAR cmd structure total len (cmnhdr + following subcmd) */
+	uint16 subcmd;	/* IOVAR subcmd */
+	uint8 pad[2];
+} wl_aml_iov_cmnhdr_t;
+
+/* IOVAR 'aml' data structure, cmn header is followed by subcmd structure */
+typedef struct wl_aml_iovar {
+	wl_aml_iov_cmnhdr_t hdr;
+	uint32 data[0];
+} wl_aml_iovar_t;
+
+/* IOVAR 'aml' subcmd list */
+enum wl_aml_subcmd_ids {
+	WL_AML_SUBCMD_ENABLE = 1,	/* Enable/disable aml feature */
+	WL_AML_SUBCMD_LAST
+};
+
+/* IOVAR 'aml' subcmd structure for uint32 data
+ * Subcmd 'enable' uses this structure
+ */
+typedef struct wl_aml_iov_uint_data {
+	uint32 val;
+} wl_aml_iov_uint_data_t;
+
+/* IOVAR 'aml enable' subcmd bit numbers
+ *  wl_aml_iov_uint_data.val is popluated with following bits
+ */
+enum wl_aml_cmd_enable_bitnums {
+	WL_AML_ASSOC_ENABLE = 0,	/* Logging for association */
+	WL_AML_ROAM_ENABLE = 1,		/* Logging for roaming */
+	WL_AML_ENABLE_LAST
+};
+
 typedef struct wl_ext_auth_evt {
 	wlc_ssid_t ssid;
 	struct ether_addr bssid;

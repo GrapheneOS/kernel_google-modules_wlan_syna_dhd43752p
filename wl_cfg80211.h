@@ -272,7 +272,6 @@ struct wl_ibss;
 extern void dhd_log_dump_write(int type, char *binary_data,
 		int binary_len, const char *fmt, ...);
 extern char *dhd_log_dump_get_timestamp(void);
-extern char *dhd_dbg_get_system_timestamp(void);
 #ifndef _DHD_LOG_DUMP_DEFINITIONS_
 #define DHD_LOG_DUMP_WRITE(fmt, ...) \
 	dhd_log_dump_write(DLD_BUF_TYPE_GENERAL, NULL, 0, fmt, ##__VA_ARGS__)
@@ -437,7 +436,7 @@ extern char *dhd_dbg_get_system_timestamp(void);
 
 #if defined(CUSTOMER_DBG_SYSTEM_TIME) && defined(DHD_DEBUGABILITY_LOG_DUMP_RING)
 #define WL_DBG_PRINT_SYSTEM_TIME \
-	pr_cont("[%s]", dhd_dbg_get_system_timestamp())
+	pr_cont("[%s]", OSL_GET_RTCTIME())
 #else
 #define WL_DBG_PRINT_SYSTEM_TIME
 #endif /* defined(CUSTOMER_DBG_SYSTEM_TIME) && defined(DHD_DEBUGABILITY_LOG_DUMP_RING) */

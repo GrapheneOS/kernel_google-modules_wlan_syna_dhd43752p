@@ -9033,6 +9033,38 @@ exit:
 }
 #endif /* WL_SAR_TX_POWER */
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+const struct nla_policy hal_start_attr_policy[SET_HAL_START_ATTRIBUTE_MAX] = {
+	[0] = { .strict_start_type = 0 },
+	[SET_HAL_START_ATTRIBUTE_DEINIT] = { .type = NLA_UNSPEC },
+	[SET_HAL_START_ATTRIBUTE_PRE_INIT] = { .type = NLA_NUL_STRING },
+	[SET_HAL_START_ATTRIBUTE_EVENT_SOCK_PID] = { .type = NLA_U32 },
+};
+
+const struct nla_policy andr_dbg_policy[DEBUG_ATTRIBUTE_MAX] = {
+	[DEBUG_ATTRIBUTE_GET_DRIVER] = { .type = NLA_BINARY },
+	[DEBUG_ATTRIBUTE_GET_FW] = { .type = NLA_BINARY },
+	[DEBUG_ATTRIBUTE_RING_ID] = { .type = NLA_U32 },
+	[DEBUG_ATTRIBUTE_RING_NAME] = { .type = NLA_NUL_STRING },
+	[DEBUG_ATTRIBUTE_RING_FLAGS] = { .type = NLA_U32 },
+	[DEBUG_ATTRIBUTE_LOG_LEVEL] = { .type = NLA_U32 },
+	[DEBUG_ATTRIBUTE_LOG_TIME_INTVAL] = { .type = NLA_U32 },
+	[DEBUG_ATTRIBUTE_LOG_MIN_DATA_SIZE] = { .type = NLA_U32 },
+	[DEBUG_ATTRIBUTE_FW_DUMP_LEN] = { .type = NLA_U32 },
+	[DEBUG_ATTRIBUTE_FW_DUMP_DATA] = { .type = NLA_U64 },
+	[DEBUG_ATTRIBUTE_FW_ERR_CODE] = { .type = NLA_U32 },
+	[DEBUG_ATTRIBUTE_RING_DATA] = { .type = NLA_BINARY },
+	[DEBUG_ATTRIBUTE_RING_STATUS] = { .type = NLA_BINARY },
+	[DEBUG_ATTRIBUTE_RING_NUM] = { .type = NLA_U32 },
+	[DEBUG_ATTRIBUTE_DRIVER_DUMP_LEN] = { .type = NLA_U32 },
+	[DEBUG_ATTRIBUTE_DRIVER_DUMP_DATA] = { .type = NLA_BINARY },
+	[DEBUG_ATTRIBUTE_PKT_FATE_NUM] = { .type = NLA_U32 },
+	[DEBUG_ATTRIBUTE_PKT_FATE_DATA] = { .type = NLA_U64 },
+	[DEBUG_ATTRIBUTE_HANG_REASON] = { .type = NLA_BINARY },
+};
+
+#endif
+
 static struct wiphy_vendor_command wl_vendor_cmds [] = {
 	{
 		{
@@ -9330,7 +9362,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_GET_VER
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_dbg_get_version
+		.doit = wl_cfgvendor_dbg_get_version,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = andr_dbg_policy,
+		.maxattr = DEBUG_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #ifdef DHD_LOG_DUMP
 	{
@@ -9358,7 +9394,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_GET_MEM_DUMP
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_dbg_get_mem_dump
+		.doit = wl_cfgvendor_dbg_get_mem_dump,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = andr_dbg_policy,
+		.maxattr = DEBUG_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -9366,7 +9406,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_START_LOGGING
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_dbg_start_logging
+		.doit = wl_cfgvendor_dbg_start_logging,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = andr_dbg_policy,
+		.maxattr = DEBUG_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -9382,7 +9426,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_GET_RING_STATUS
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_dbg_get_ring_status
+		.doit = wl_cfgvendor_dbg_get_ring_status,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = andr_dbg_policy,
+		.maxattr = DEBUG_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -9390,7 +9438,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_GET_RING_DATA
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_dbg_get_ring_data
+		.doit = wl_cfgvendor_dbg_get_ring_data,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = andr_dbg_policy,
+		.maxattr = DEBUG_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* DEBUGABILITY */
 	{
@@ -9416,7 +9468,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_GET_TX_PKT_FATES
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_dbg_get_tx_pkt_fates
+		.doit = wl_cfgvendor_dbg_get_tx_pkt_fates,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = andr_dbg_policy,
+		.maxattr = DEBUG_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -9424,7 +9480,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_GET_RX_PKT_FATES
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_dbg_get_rx_pkt_fates
+		.doit = wl_cfgvendor_dbg_get_rx_pkt_fates,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = andr_dbg_policy,
+		.maxattr = DEBUG_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* DBG_PKT_MON */
 #ifdef KEEP_ALIVE
@@ -9696,7 +9756,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_SET_HAL_PID
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_set_hal_pid
+		.doit = wl_cfgvendor_set_hal_pid,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = hal_start_attr_policy,
+		.maxattr = SET_HAL_START_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* WL_CFG80211 */
 #ifdef WL_LATENCY_MODE
@@ -9787,7 +9851,9 @@ wl_cfgvendor_apply_cmd_policy(struct wiphy *wiphy)
 
 	WL_INFORM(("Apply CMD_RAW_DATA policy\n"));
 	for (i = 0; i < n_cmds; i++) {
-		wl_vendor_cmds[i].policy = VENDOR_CMD_RAW_DATA;
+		if (wl_vendor_cmds[i].policy == NULL) {
+			wl_vendor_cmds[i].policy = VENDOR_CMD_RAW_DATA;
+		}
 	}
 }
 #endif /* LINUX VER >= 5.3 */
@@ -9810,11 +9876,20 @@ int wl_cfgvendor_attach(struct wiphy *wiphy, dhd_pub_t *dhd)
 
 #ifdef DEBUGABILITY
 	dhd_os_dbg_register_callback(FW_VERBOSE_RING_ID, wl_cfgvendor_dbg_ring_send_evt);
+#ifdef DHD_DEBUGABILITY_EVENT_RING
 	dhd_os_dbg_register_callback(DHD_EVENT_RING_ID, wl_cfgvendor_dbg_ring_send_evt);
+#endif /* DHD_DEBUGABILITY_EVENT_RING */
 #ifdef DHD_DEBUGABILITY_LOG_DUMP_RING
 	dhd_os_dbg_register_callback(DRIVER_LOG_RING_ID, wl_cfgvendor_dbg_ring_send_evt);
 	dhd_os_dbg_register_callback(ROAM_STATS_RING_ID, wl_cfgvendor_dbg_ring_send_evt);
+#ifdef DHD_DEBUGABILITY_DEBUG_DUMP
+	dhd_os_dbg_register_callback(DEBUG_DUMP_RING1_ID, wl_cfgvendor_dbg_ring_send_evt);
+	dhd_os_dbg_register_callback(DEBUG_DUMP_RING2_ID, wl_cfgvendor_dbg_ring_send_evt);
+#endif /* DHD_DEBUGABILITY_DEBUG_DUMP */
 #endif /* DHD_DEBUGABILITY_LOG_DUMP_RING */
+#ifdef DHD_PKT_LOGGING_DBGRING
+	dhd_os_dbg_register_callback(PACKET_LOG_RING_ID, wl_cfgvendor_dbg_ring_send_evt);
+#endif /* DHD_PKT_LOGGING_DBGRING */
 #endif /* DEBUGABILITY */
 #ifdef DHD_LOG_DUMP
 	dhd_os_dbg_register_urgent_notifier(dhd, wl_cfgvendor_dbg_send_file_dump_evt);

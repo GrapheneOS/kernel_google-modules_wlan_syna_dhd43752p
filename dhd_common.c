@@ -143,10 +143,13 @@ int log_print_threshold = 0;
 #endif /* DHD_LOG_PRINT_RATE_LIMIT */
 
 #ifdef DHD_DEBUGABILITY_LOG_DUMP_RING
-int dbgring_msg_level = DHD_ERROR_VAL | DHD_FWLOG_VAL | DHD_INFO_VAL
-		| DHD_EVENT_VAL | DHD_PKT_MON_VAL | DHD_IOVAR_MEM_VAL;
 int dhd_msg_level = DHD_ERROR_VAL | DHD_EVENT_VAL
+#ifdef BOARD_HIKEY
+		| DHD_FWLOG_VAL
+#endif /* BOARD_HIKEY */
 	        | DHD_PKT_MON_VAL;
+int dhd_log_level = DHD_ERROR_VAL | DHD_EVENT_VAL
+		| DHD_PKT_MON_VAL | DHD_FWLOG_VAL | DHD_IOVAR_MEM_VAL;
 #else
 int dbgring_msg_level = 0;
 /* For CUSTOMER_HW4/Hikey do not enable DHD_ERROR_MEM_VAL by default */
@@ -159,6 +162,17 @@ int dhd_msg_level = DHD_ERROR_VAL | DHD_FWLOG_VAL | DHD_EVENT_VAL
 	| DHD_MSGTRACE_VAL
 #endif /* OEM_ANDROID */
 	| DHD_PKT_MON_VAL;
+
+int dhd_log_level = DHD_ERROR_VAL | DHD_FWLOG_VAL | DHD_EVENT_VAL
+	/* For CUSTOMER_HW4 do not enable DHD_IOVAR_MEM_VAL by default */
+#if !defined(CUSTOMER_HW4) && !defined(DHD_EFI) && !defined(BOARD_HIKEY)
+	| DHD_IOVAR_MEM_VAL
+#endif /* !CUSTOMER_HW4 && !DHD_EFI */
+#ifndef OEM_ANDROID
+	| DHD_MSGTRACE_VAL
+#endif /* OEM_ANDROID */
+	| DHD_PKT_MON_VAL;
+
 #endif /* DHD_DEBUGABILITY_LOG_DUMP_RING */
 
 #ifdef NDIS
@@ -10762,6 +10776,33 @@ fail:
 	return rc;
 }
 #ifdef DHD_LOG_DUMP
+
+#ifdef DHD_DEBUGABILITY_DEBUG_DUMP
+static dhd_debug_dump_ring_entry_t dhd_debug_dump_ring_map[] = {
+	{LOG_DUMP_SECTION_TIMESTAMP, DEBUG_DUMP_RING1_ID},
+	{LOG_DUMP_SECTION_ECNTRS, DEBUG_DUMP_RING2_ID},
+	{LOG_DUMP_SECTION_STATUS, DEBUG_DUMP_RING1_ID},
+	{LOG_DUMP_SECTION_RTT, DEBUG_DUMP_RING2_ID},
+	{LOG_DUMP_SECTION_DHD_DUMP, DEBUG_DUMP_RING1_ID},
+	{LOG_DUMP_SECTION_EXT_TRAP, DEBUG_DUMP_RING1_ID},
+	{LOG_DUMP_SECTION_HEALTH_CHK, DEBUG_DUMP_RING1_ID},
+	{LOG_DUMP_SECTION_COOKIE, DEBUG_DUMP_RING1_ID},
+	{LOG_DUMP_SECTION_RING, DEBUG_DUMP_RING1_ID},
+};
+
+int dhd_debug_dump_get_ring_num(int sec_type)
+{
+	int idx = 0;
+	for (idx = 0; idx < ARRAYSIZE(dhd_debug_dump_ring_map); idx++) {
+		if (dhd_debug_dump_ring_map[idx].type == sec_type) {
+			idx = dhd_debug_dump_ring_map[idx].debug_dump_ring;
+			return idx;
+		}
+	}
+	return idx;
+}
+#endif /* DHD_DEBUGABILITY_DEBUG_DUMP */
+
 int
 dhd_dump_debug_ring(dhd_pub_t *dhdp, void *ring_ptr, const void *user_buf,
 		log_dump_section_hdr_t *sec_hdr,
@@ -10773,12 +10814,41 @@ dhd_dump_debug_ring(dhd_pub_t *dhdp, void *ring_ptr, const void *user_buf,
 	unsigned long flags = 0;
 	int ret = 0;
 	dhd_dbg_ring_t *ring = (dhd_dbg_ring_t *)ring_ptr;
+#ifndef DHD_DEBUGABILITY_DEBUG_DUMP
 	int pos = 0;
+#endif /* !DHD_DEBUGABILITY_DEBUG_DUMP */
 	int fpos_sechdr = 0;
+	int tot_len = 0;
+	char *tmp_buf = NULL;
+	int idx;
+	int ring_num = 0;
 
+	BCM_REFERENCE(idx);
+#ifndef DHD_DEBUGABILITY_DEBUG_DUMP
+	BCM_REFERENCE(pos);
+#endif /* !DHD_DEBUGABILITY_DEBUG_DUMP */
+	BCM_REFERENCE(tot_len);
+	BCM_REFERENCE(fpos_sechdr);
+	BCM_REFERENCE(data_len);
+	BCM_REFERENCE(tmp_buf);
+	BCM_REFERENCE(ring_num);
+
+#ifdef DHD_DEBUGABILITY_DEBUG_DUMP
+	if (!dhdp || !ring || !sec_hdr || !text_hdr) {
+		return BCME_BADARG;
+	}
+
+	tmp_buf = (char *)VMALLOCZ(dhdp->osh, ring->ring_size);
+	if (!tmp_buf) {
+		DHD_ERROR(("%s: VMALLOC Fail id:%d size:%u\n",
+			__func__, ring->id, ring->ring_size));
+		return BCME_NOMEM;
+	}
+#else
 	if (!dhdp || !ring || !user_buf || !sec_hdr || !text_hdr) {
 		return BCME_BADARG;
 	}
+#endif /* DHD_DEBUGABILITY_DEBUG_DUMP */
 	/* do not allow further writes to the ring
 	 * till we flush it
 	 */
@@ -10786,6 +10856,28 @@ dhd_dump_debug_ring(dhd_pub_t *dhdp, void *ring_ptr, const void *user_buf,
 	ring->state = RING_SUSPEND;
 	DHD_DBG_RING_UNLOCK(ring->lock, flags);
 
+#ifdef DHD_DEBUGABILITY_DEBUG_DUMP
+	ring_num = dhd_debug_dump_get_ring_num(sec_type);
+	dhd_export_debug_data(text_hdr, NULL, NULL, strlen(text_hdr), &ring_num);
+
+	data = tmp_buf;
+	do {
+		rlen = dhd_dbg_ring_pull_single(ring, data, ring->ring_size, TRUE);
+		if (rlen > 0) {
+			tot_len += rlen;
+			data += rlen;
+		}
+	} while ((rlen > 0));
+
+	sec_hdr->type = sec_type;
+	sec_hdr->length = tot_len;
+	DHD_ERROR(("%s: DUMP id:%d type:%u tot_len:%d\n", __func__, ring->id, sec_type, tot_len));
+
+	dhd_export_debug_data((char *)sec_hdr, NULL, NULL, sizeof(*sec_hdr), &ring_num);
+	dhd_export_debug_data(tmp_buf, NULL, NULL, tot_len, &ring_num);
+
+	VMFREE(dhdp->osh, tmp_buf, ring->ring_size);
+#else
 	if (dhdp->concise_dbg_buf) {
 		/* re-use concise debug buffer temporarily
 		 * to pull ring data, to write
@@ -10819,6 +10911,8 @@ dhd_dump_debug_ring(dhd_pub_t *dhdp, void *ring_ptr, const void *user_buf,
 	} else {
 		DHD_ERROR(("%s: No concise buffer available !\n", __FUNCTION__));
 	}
+#endif /* DHD_DEBUGABILITY_DEBUG_DUMP */
+
 	DHD_DBG_RING_LOCK(ring->lock, flags);
 	ring->state = RING_ACTIVE;
 	/* Resetting both read and write pointer,
@@ -11200,7 +11294,11 @@ dhd_log_dump_cookie_to_file(dhd_pub_t *dhdp, void *fp, const void *user_buf, uns
 	int ret = BCME_ERROR;
 	uint32 buf_size = MAX_LOGUDMP_COOKIE_CNT * LOGDUMP_COOKIE_STR_LEN;
 
+#ifdef DHD_DEBUGABILITY_DEBUG_DUMP
+	if (!dhdp || !dhdp->logdump_cookie) {
+#else
 	if (!dhdp || !dhdp->logdump_cookie || (!fp && !user_buf) || !f_pos) {
+#endif /* DHD_DEBUGABILITY_DEBUG_DUMP */
 		DHD_ERROR(("%s At least one ptr is NULL "
 			"dhdp = %p cookie %p fp = %p f_pos = %p\n",
 			__FUNCTION__, dhdp, dhdp?dhdp->logdump_cookie:NULL, fp, f_pos));

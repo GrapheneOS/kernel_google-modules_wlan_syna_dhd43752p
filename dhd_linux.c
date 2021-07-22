@@ -471,7 +471,6 @@ static void dhd_log_dump(void *handle, void *event_info, u8 event);
 static int do_dhd_log_dump(dhd_pub_t *dhdp, log_dump_type_t *type);
 static void dhd_print_buf_addr(dhd_pub_t *dhdp, char *name, void *buf, unsigned int size);
 static void dhd_log_dump_buf_addr(dhd_pub_t *dhdp, log_dump_type_t *type);
-char *dhd_dbg_get_system_timestamp(void);
 #endif /* DHD_LOG_DUMP */
 
 #ifdef DHD_PCIE_NATIVE_RUNTIMEPM
@@ -3896,6 +3895,11 @@ dhd_handle_pktdata(dhd_pub_t *dhdp, int ifidx, void *pkt, uint8 *pktdata, uint32
 	uint16 ether_type;
 	uint32 pkthash;
 	uint8 pkt_type = PKT_TYPE_DATA;
+#ifdef DHD_PKT_LOGGING_DBGRING
+	bool verbose_logging = FALSE;
+	dhd_dbg_ring_t *ring;
+	ring = &dhdp->dbg->dbg_rings[PACKET_LOG_RING_ID];
+#endif /* DHD_PKT_LOGGING_DBGRING */
 
 	if (!pktdata || pktlen < ETHER_HDR_LEN) {
 		return;
@@ -3914,13 +3918,28 @@ dhd_handle_pktdata(dhd_pub_t *dhdp, int ifidx, void *pkt, uint8 *pktdata, uint32
 			pkt_type = PKT_TYPE_DNS;
 		}
 	}
+	else if (ether_type == ETHER_TYPE_IPV6) {
+		if (dhd_check_icmpv6(pktdata, pktlen)) {
+			pkt_type = PKT_TYPE_ICMPV6;
+		}
+	}
 	else if (dhd_check_arp(pktdata, ether_type)) {
 		pkt_type = PKT_TYPE_ARP;
 	}
 	else if (ether_type == ETHER_TYPE_802_1X) {
 		pkt_type = PKT_TYPE_EAP;
 	}
-
+#ifdef DHD_PKT_LOGGING_DBGRING
+	/* Allow logging for all packets without pktlog filter */
+	if (ring->log_level == RING_LOG_LEVEL_EXCESSIVE) {
+		verbose_logging = TRUE;
+		pkt_log = TRUE;
+	/* Not allow logging for any packets */
+	} else if (ring->log_level == RING_LOG_LEVEL_NONE) {
+		verbose_logging = FALSE;
+		pkt_log = FALSE;
+	}
+#endif /* DHD_PKT_LOGGING_DBGRING */
 #ifdef DHD_SBN
 	/* Set UDR based on packet type */
 	if (dhd_udr && (pkt_type == PKT_TYPE_DHCP ||
@@ -3933,7 +3952,11 @@ dhd_handle_pktdata(dhd_pub_t *dhdp, int ifidx, void *pkt, uint8 *pktdata, uint32
 #ifdef DHD_PKT_LOGGING
 #ifdef DHD_SKIP_PKTLOGGING_FOR_DATA_PKTS
 	if (pkt_type != PKT_TYPE_DATA)
-#endif
+#else
+#ifdef DHD_PKT_LOGGING_DBGRING
+	if ((verbose_logging == TRUE) || (pkt_type != PKT_TYPE_DATA))
+#endif /* DHD_PKT_LOGGING_DBGRING */
+#endif /* DHD_PKT_LOGGING */
 	{
 		if (pkt_log) {
 			if (tx) {
@@ -6255,8 +6278,8 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 		skb->data = eth;
 		skb->len = len;
 
-		/* TODO: XXX: re-look into dropped packets. */
-		DHD_DBG_PKT_MON_RX(dhdp, skb);
+		/* TODO: re-look into dropped packets. */
+		DHD_DBG_PKT_MON_RX(dhdp, skb, FRAME_TYPE_ETHERNET_II);
 		/* Strip header, count, deliver upward */
 		skb_pull(skb, ETH_HLEN);
 
@@ -7552,6 +7575,24 @@ static bool dhd_check_hang(struct net_device *net, dhd_pub_t *dhdp, int error)
 	return FALSE;
 }
 
+#if defined(DBG_PKT_MON) && defined(PCIE_FULL_DONGLE)
+void
+dhd_80211_mon_pkt(dhd_pub_t *dhdp, host_rxbuf_cmpl_t* msg, void *pkt, int ifidx)
+{
+	/* Distinguish rx/tx frame */
+	wl_aml_header_v1_t hdr;
+
+	hdr = *(wl_aml_header_v1_t *)PKTDATA(dhdp->osh, pkt);
+	PKTPULL(dhdp->osh, pkt, sizeof(hdr));
+	if (hdr.flags & WL_AML_F_DIRECTION) {
+		bool ack = !!(hdr.flags & WL_AML_F_ACKED);
+		DHD_DBG_PKT_MON_TX(dhdp, pkt, 0, FRAME_TYPE_80211_MGMT, (uint8)ack);
+	} else {
+		DHD_DBG_PKT_MON_RX(dhdp, (struct sk_buff *)pkt, FRAME_TYPE_80211_MGMT);
+	}
+}
+#endif /* DBG_PKT_MON && PCIE_FULL_DONGLE */
+
 #ifdef WL_MONITOR
 #ifndef WL_MON_OWN_PKT
 bool
@@ -7566,6 +7607,7 @@ dhd_monitor_enabled(dhd_pub_t *dhd, int ifidx)
 	return (dhd->info->monitor_type > 0 ) && (dhd->info->monitor_type != DHD_MONITOR_TYPE_MGMT );
 }
 #endif // WL_MON_OWN_PKT
+
 #ifdef BCMPCIE
 void
 dhd_rx_mon_pkt(dhd_pub_t *dhdp, host_rxbuf_cmpl_t* msg, void *pkt, int ifidx)
@@ -10033,7 +10075,7 @@ dhd_update_iflist_info(dhd_pub_t *dhdp, struct net_device *ndev, int ifidx,
 		}
 		if (mac != NULL) {
 			/* To and fro locations have same size - ETHER_ADDR_LEN */
-			(void)memcpy_s(&ifp->mac_addr, ETHER_ADDR_LEN, mac, ETHER_ADDR_LEN);
+			(void)memcpy_s(ifp->mac_addr, ETHER_ADDR_LEN, mac, ETHER_ADDR_LEN);
 		}
 	}
 	DHD_INFO(("[STATIC_IF] ifp ptr updated for ifidx:%d curidx:%d if_state:%d\n",
@@ -10112,7 +10154,7 @@ dhd_allocate_if(dhd_pub_t *dhdpub, int ifidx, const char *name,
 	ifp->rx_pkt_chainable = TRUE;
 
 	if (mac != NULL)
-		memcpy(&ifp->mac_addr, mac, ETHER_ADDR_LEN);
+		memcpy(ifp->mac_addr, mac, ETHER_ADDR_LEN);
 
 	/* Allocate etherdev, including space for private structure */
 #ifdef DHD_MQ
@@ -11492,6 +11534,16 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	}
 #endif /* SHOW_LOGTRACE */
 
+#ifdef DHD_LOG_DUMP
+	dhd_log_dump_init(&dhd->pub);
+#endif /* DHD_LOG_DUMP */
+#ifdef DHD_PKTDUMP_ROAM
+	dhd_dump_pkt_init(&dhd->pub);
+#endif /* DHD_PKTDUMP_ROAM */
+#ifdef DHD_PKT_LOGGING
+	dhd_os_attach_pktlog(&dhd->pub);
+#endif /* DHD_PKT_LOGGING */
+
 	/* attach debug if support */
 	if (dhd_os_dbg_attach(&dhd->pub)) {
 		DHD_ERROR(("%s debug module attach failed\n", __FUNCTION__));
@@ -11533,16 +11585,6 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 		DHD_ERROR(("%s: alloc statlog failed\n", __FUNCTION__));
 	}
 #endif /* DHD_STATUS_LOGGING */
-
-#ifdef DHD_LOG_DUMP
-	dhd_log_dump_init(&dhd->pub);
-#endif /* DHD_LOG_DUMP */
-#ifdef DHD_PKTDUMP_ROAM
-	dhd_dump_pkt_init(&dhd->pub);
-#endif /* DHD_PKTDUMP_ROAM */
-#ifdef DHD_PKT_LOGGING
-	dhd_os_attach_pktlog(&dhd->pub);
-#endif /* DHD_PKT_LOGGING */
 
 #ifdef WL_CFGVENDOR_SEND_HANG_EVENT
 	dhd->pub.hang_info = MALLOCZ(osh, VENDOR_SEND_HANG_EXT_INFO_LEN);
@@ -21724,6 +21766,92 @@ int dhd_set_ap_isolate(dhd_pub_t *dhdp, uint32 idx, int val)
 	return 0;
 }
 
+#ifdef DHD_LOG_DUMP
+static int
+dhd_log_flush(dhd_pub_t *dhdp, log_dump_type_t *type)
+{
+	unsigned long flags = 0;
+#ifdef EWP_EDL
+	int i = 0;
+#endif /* EWP_EDL */
+	dhd_info_t *dhd_info = NULL;
+
+	BCM_REFERENCE(dhd_info);
+
+	/* if dhdp is null, its extremely unlikely that log dump will be scheduled
+	 * so not freeing 'type' here is ok, even if we want to free 'type'
+	 * we cannot do so, since 'dhdp->osh' is unavailable
+	 * as dhdp is null
+	 */
+	if (!dhdp || !type) {
+		if (dhdp) {
+			DHD_GENERAL_LOCK(dhdp, flags);
+			DHD_BUS_BUSY_CLEAR_IN_LOGDUMP(dhdp);
+			dhd_os_busbusy_wake(dhdp);
+			DHD_GENERAL_UNLOCK(dhdp, flags);
+		}
+		return BCME_ERROR;
+	}
+
+#if defined(BCMPCIE)
+	if (dhd_bus_get_linkdown(dhdp)) {
+		/* As link is down donot collect any data over PCIe.
+		 * Also return BCME_OK to caller, so that caller can
+		 * dump all the outstanding data to file
+		 */
+		return BCME_OK;
+	}
+#endif /* BCMPCIE */
+
+	dhd_info = (dhd_info_t *)dhdp->info;
+	/* in case of trap get preserve logs from ETD */
+#if defined(BCMPCIE) && defined(EWP_ETD_PRSRV_LOGS)
+	if (dhdp->dongle_trap_occured &&
+			dhdp->extended_trap_data) {
+		dhdpcie_get_etd_preserve_logs(dhdp, (uint8 *)dhdp->extended_trap_data,
+				&dhd_info->event_data);
+	}
+#endif /* BCMPCIE */
+
+	/* flush the event work items to get any fw events/logs
+	 * flush_work is a blocking call
+	 */
+#ifdef SHOW_LOGTRACE
+#ifdef EWP_EDL
+	if (dhd_info->pub.dongle_edl_support) {
+		/* wait till existing edl items are processed */
+		dhd_flush_logtrace_process(dhd_info);
+		/* dhd_flush_logtrace_process will ensure the work items in the ring
+		* (EDL ring) from rd to wr are processed. But if wr had
+		* wrapped around, only the work items from rd to ring-end are processed.
+		* So to ensure that the work items at the
+		* beginning of ring are also processed in the wrap around case, call
+		* it twice
+		*/
+		for (i = 0; i < 2; i++) {
+			/* blocks till the edl items are processed */
+			dhd_flush_logtrace_process(dhd_info);
+		}
+	} else {
+		dhd_flush_logtrace_process(dhd_info);
+	}
+#else
+	dhd_flush_logtrace_process(dhd_info);
+#endif /* EWP_EDL */
+#endif /* SHOW_LOGTRACE */
+
+#ifdef CUSTOMER_HW4_DEBUG
+	/* print last 'x' KB of preserve buffer data to kmsg console
+	* this is to address cases where debug_dump is not
+	* available for debugging
+	*/
+	dhd_log_dump_print_tail(dhdp,
+		&g_dld_buf[DLD_BUF_TYPE_PRESERVE], logdump_prsrv_tailsize);
+#endif /* CUSTOMER_HW4_DEBUG */
+	return BCME_OK;
+}
+#endif /* DHD_LOG_DUMP */
+
 #ifdef DHD_RND_DEBUG
 /*
  * XXX The filename to store .rnd.(in/out) is defined for each platform.
@@ -21882,6 +22010,11 @@ err1:
 #endif /* DHD_RND_DEBUG */
 
 #ifdef DHD_FW_COREDUMP
+bool dhd_memdump_is_scheduled(dhd_pub_t *dhdp)
+{
+	return dhdp->info->scheduled_memdump;
+}
+
 void dhd_schedule_memdump(dhd_pub_t *dhdp, uint8 *buf, uint32 size)
 {
 	dhd_dump_t *dump = NULL;
@@ -21969,6 +22102,11 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 	dhd_info_t *dhd = handle;
 	dhd_pub_t *dhdp = NULL;
 	unsigned long flags = 0;
+#if defined(WL_CFG80211) && defined(DHD_LOG_DUMP)
+#if defined(DHD_FILE_DUMP_EVENT) || defined(DHD_DEBUGABILITY_DEBUG_DUMP)
+	log_dump_type_t type = DLD_BUF_TYPE_ALL;
+#endif /* DHD_FILE_DUMP_EVENT || DHD_DEBUGABILITY_DEBUG_DUMP */
+#endif /* WL_CFG80211 && DHD_LOG_DUMP */
 
 #if defined(WL_CFG80211) && defined(DHD_FILE_DUMP_EVENT)
 	int ret = 0;
@@ -22041,18 +22179,34 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 	dhdp->collect_sssr = FALSE;
 #endif /* DHD_SSSR_DUMP */
 
-#if defined(WL_CFG80211) && defined(DHD_FILE_DUMP_EVENT)
+#if defined(WL_CFG80211) && (defined(DHD_FILE_DUMP_EVENT) || defined(DHD_DEBUGABILITY_DEBUG_DUMP))
+	if (dhdp->memdump_enabled == DUMP_MEMONLY) {
+		DHD_ERROR(("%s: Force BUG_ON for memdump_enabled:%d\n",
+			__FUNCTION__, dhdp->memdump_enabled));
+		BUG_ON(1);
+	}
+
+#ifdef DHD_LOG_DUMP
+	if (dhd_log_flush(dhdp, &type) < 0) {
+		DHD_ERROR(("%s: Failed to flush Preserve/FW logs\n",
+			__FUNCTION__));
+	}
+#endif /* DHD_LOG_DUMP */
+#if defined(DHD_FILE_DUMP_EVENT)
 	ret = dhd_wait_for_file_dump(dhdp);
-	UNUSED_PARAMETER(ret);
-#ifdef BOARD_HIKEY
-	/* For Hikey do force kernel write of socram if HAL dump fails */
 	if (ret) {
+		DHD_ERROR(("%s: file_dump failed.\n", __FUNCTION__));
+#ifdef BOARD_HIKEY
+		/* For Hikey do force kernel write of socram if HAL dump fails */
 		if (write_dump_to_file(&dhd->pub, dump->buf, dump->bufsize, "mem_dump")) {
 			DHD_ERROR(("%s: writing SoC_RAM dump to the file failed\n", __FUNCTION__));
 		}
-	}
 #endif /* BOARD_HIKEY */
-#endif /* WL_CFG80211 && DHD_FILE_DUMP_EVENT */
+	}
+#elif defined(DHD_DEBUGABILITY_DEBUG_DUMP)
+	dhd_debug_dump_to_ring(dhdp);
+#endif /* DHD_FILE_DUMP_EVENT */
+#endif /* WL_CFG80211 && (DHD_FILE_DUMP_EVENT || DHD_DEBUGABILITY_DEBUG_DUMP) */
 
 #ifdef DHD_COREDUMP
 	memset_s(dhdp->memdump_str, DHD_MEMDUMP_LONGSTR_LEN, 0, DHD_MEMDUMP_LONGSTR_LEN);
@@ -23231,90 +23385,6 @@ exit:
 	return ret;
 }
 
-static int
-dhd_log_flush(dhd_pub_t *dhdp, log_dump_type_t *type)
-{
-	unsigned long flags = 0;
-#ifdef EWP_EDL
-	int i = 0;
-#endif /* EWP_EDL */
-	dhd_info_t *dhd_info = NULL;
-
-	BCM_REFERENCE(dhd_info);
-
-	/* if dhdp is null, its extremely unlikely that log dump will be scheduled
-	 * so not freeing 'type' here is ok, even if we want to free 'type'
-	 * we cannot do so, since 'dhdp->osh' is unavailable
-	 * as dhdp is null
-	 */
-	if (!dhdp || !type) {
-		if (dhdp) {
-			DHD_GENERAL_LOCK(dhdp, flags);
-			DHD_BUS_BUSY_CLEAR_IN_LOGDUMP(dhdp);
-			dhd_os_busbusy_wake(dhdp);
-			DHD_GENERAL_UNLOCK(dhdp, flags);
-		}
-		return BCME_ERROR;
-	}
-
-#if defined(BCMPCIE)
-	if (dhd_bus_get_linkdown(dhdp)) {
-		/* As link is down donot collect any data over PCIe.
-		 * Also return BCME_OK to caller, so that caller can
-		 * dump all the outstanding data to file
-		 */
-		return BCME_OK;
-	}
-#endif /* BCMPCIE */
-
-	dhd_info = (dhd_info_t *)dhdp->info;
-	/* in case of trap get preserve logs from ETD */
-#if defined(BCMPCIE) && defined(EWP_ETD_PRSRV_LOGS)
-	if (dhdp->dongle_trap_occured &&
-			dhdp->extended_trap_data) {
-		dhdpcie_get_etd_preserve_logs(dhdp, (uint8 *)dhdp->extended_trap_data,
-				&dhd_info->event_data);
-	}
-#endif /* BCMPCIE */
-
-	/* flush the event work items to get any fw events/logs
-	 * flush_work is a blocking call
-	 */
-#ifdef SHOW_LOGTRACE
-#ifdef EWP_EDL
-	if (dhd_info->pub.dongle_edl_support) {
-		/* wait till existing edl items are processed */
-		dhd_flush_logtrace_process(dhd_info);
-		/* dhd_flush_logtrace_process will ensure the work items in the ring
-		* (EDL ring) from rd to wr are processed. But if wr had
-		* wrapped around, only the work items from rd to ring-end are processed.
-		* So to ensure that the work items at the
-		* beginning of ring are also processed in the wrap around case, call
-		* it twice
-		*/
-		for (i = 0; i < 2; i++) {
-			/* blocks till the edl items are processed */
-			dhd_flush_logtrace_process(dhd_info);
-		}
-	} else {
-		dhd_flush_logtrace_process(dhd_info);
-	}
-#else
-	dhd_flush_logtrace_process(dhd_info);
-#endif /* EWP_EDL */
-#endif /* SHOW_LOGTRACE */
-
-#ifdef CUSTOMER_HW4_DEBUG
-	/* print last 'x' KB of preserve buffer data to kmsg console
-	* this is to address cases where debug_dump is not
-	* available for debugging
-	*/
-	dhd_log_dump_print_tail(dhdp,
-		&g_dld_buf[DLD_BUF_TYPE_PRESERVE], logdump_prsrv_tailsize);
-#endif /* CUSTOMER_HW4_DEBUG */
-	return BCME_OK;
-}
-
 int
 dhd_get_debug_dump_file_name(void *dev, dhd_pub_t *dhdp, char *dump_path, int size)
 {
@@ -23606,18 +23676,12 @@ dhd_print_flowring_data(void *dev, dhd_pub_t *dhdp, const void *user_buf,
 	memset(dhdp->concise_dbg_buf, 0, CONCISE_DUMP_BUFLEN);
 
 	/* write the section header first */
-	ret = dhd_export_debug_data(FLOWRING_DUMP_HDR, fp, user_buf,
-		strlen(FLOWRING_DUMP_HDR), pos);
+	ret = dhd_export_debug_data(RING_DUMP_HDR, fp, user_buf,
+		strlen(RING_DUMP_HDR), pos);
 	if (ret < 0)
 		goto exit;
 
-	/* Write the ring summary */
-	ret = dhd_export_debug_data(dhdp->concise_dbg_buf, fp, user_buf,
-		(CONCISE_DUMP_BUFLEN - remain_len), pos);
-	if (ret < 0)
-		goto exit;
-
-	sec_hdr.type = LOG_DUMP_SECTION_FLOWRING;
+	sec_hdr.type = LOG_DUMP_SECTION_RING;
 	sec_hdr.length = len;
 	ret = dhd_export_debug_data((char *)&sec_hdr, fp, user_buf, sizeof(sec_hdr), pos);
 	if (ret < 0)
@@ -24010,6 +24074,9 @@ int
 dhd_export_debug_data(void *mem_buf, void *fp, const void *user_buf, uint32 buf_len, void *pos)
 {
 	int ret = BCME_OK;
+#ifdef DHD_DEBUGABILITY_DEBUG_DUMP
+	struct dhd_dbg_ring_buf *ring_buf;
+#endif /* DHD_DEBUGABILITY_DEBUG_DUMP */
 
 	if (fp) {
 		ret = dhd_vfs_write(fp, mem_buf, buf_len, (loff_t *)pos);
@@ -24045,6 +24112,18 @@ dhd_export_debug_data(void *mem_buf, void *fp, const void *user_buf, uint32 buf_
 		}
 		(*(int *)pos) += buf_len;
 	}
+#ifdef DHD_DEBUGABILITY_DEBUG_DUMP
+	else {
+		ring_buf = &g_ring_buf;
+		if (ring_buf->dhd_pub) {
+			ret = dhd_debug_dump_ring_push(ring_buf->dhd_pub, (*(int *)pos),
+				buf_len, mem_buf);
+			if (ret != BCME_OK) {
+				DHD_ERROR(("%s: ring push failed ret:%d\n", __func__, ret));
+			}
+		}
+	}
+#endif /* DHD_DEBUGABILITY_DEBUG_DUMP */
 exit:
 	return ret;
 }
@@ -24368,6 +24447,10 @@ dhd_os_get_version(struct net_device *dev, bool dhd_ver, char **buf, uint32 size
 int
 dhd_os_get_pktlog_dump(void *dev, const void *user_buf, uint32 len)
 {
+#ifdef DHD_PKT_LOGGING_DBGRING
+	/* With DHD_PKT_LOGGING_DBGRING, this path is not allowed. */
+	return BCME_UNSUPPORTED;
+#else
 	int ret = BCME_OK;
 	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(dev);
 	dhd_pub_t *dhdp = &dhd->pub;
@@ -24382,6 +24465,13 @@ dhd_os_get_pktlog_dump(void *dev, const void *user_buf, uint32 len)
 		return ret;
 	}
 	return ret;
+#endif /* DHD_PKT_LOGGING_DBGRING */
+}
+
+spinlock_t *
+dhd_os_get_pktlog_lock(dhd_pub_t *dhdp)
+{
+	return dhdp->pktlog->pktlog_ring->pktlog_ring_lock;
 }
 
 uint32
@@ -25515,68 +25605,6 @@ dhd_log_dump_write(int type, char *binary_data,
 		}
 	}
 }
-
-#ifdef DHD_DEBUGABILITY_LOG_DUMP_RING
-char*
-dhd_dbg_get_system_timestamp(void)
-{
-	static char timebuf[DEBUG_DUMP_TIME_BUF_LEN];
-	struct timespec64 tv;
-	unsigned long long local_time;
-	struct rtc_time tm;
-
-	memset_s(timebuf, DEBUG_DUMP_TIME_BUF_LEN, 0, DEBUG_DUMP_TIME_BUF_LEN);
-	ktime_get_real_ts64(&tv);
-	local_time = (u64)(tv.tv_sec -
-			(sys_tz.tz_minuteswest * DHD_LOG_DUMP_TS_MULTIPLIER_VALUE));
-	rtc_time_to_tm(local_time, &tm);
-	scnprintf(timebuf, DEBUG_DUMP_TIME_BUF_LEN,
-			"%02d:%02d:%02d.%06lu",
-			tm.tm_hour, tm.tm_min, tm.tm_sec, tv.tv_nsec / NSEC_PER_USEC);
-	return timebuf;
-}
-
-extern struct dhd_dbg_ring_buf g_ring_buf;
-void
-dhd_dbg_ring_write(int type, char *binary_data,
-		int binary_len, const char *fmt, ...)
-{
-	int len = 0;
-	va_list args;
-	struct dhd_dbg_ring_buf *ring_buf = NULL;
-	char tmp_buf[DHD_LOG_DUMP_MAX_TEMP_BUFFER_SIZE] = {0, };
-
-	ring_buf = &g_ring_buf;
-
-	va_start(args, fmt);
-	len = vsnprintf(tmp_buf, DHD_LOG_DUMP_MAX_TEMP_BUFFER_SIZE, fmt, args);
-	/* Non ANSI C99 compliant returns -1,
-	 * ANSI compliant return len >= DHD_LOG_DUMP_MAX_TEMP_BUFFER_SIZE
-	 */
-	va_end(args);
-	if (len < 0) {
-		return;
-	}
-
-	if (len >= DHD_LOG_DUMP_MAX_TEMP_BUFFER_SIZE) {
-		len = DHD_LOG_DUMP_MAX_TEMP_BUFFER_SIZE - 1;
-		tmp_buf[len] = '\0';
-	}
-
-	if (ring_buf->dhd_pub) {
-		dhd_pub_t *dhdp = (dhd_pub_t *)ring_buf->dhd_pub;
-		if (type == DRIVER_LOG_RING_ID || type == FW_VERBOSE_RING_ID ||
-				type == ROAM_STATS_RING_ID) {
-			if (DBG_RING_ACTIVE(dhdp, type)) {
-				dhd_os_push_push_ring_data(dhdp, type,
-						tmp_buf, strlen(tmp_buf));
-				return;
-			}
-		}
-	}
-	return;
-}
-#endif /* DHD_DEBUGABILITY_LOG_DUMP_RING */
 
 char*
 dhd_log_dump_get_timestamp(void)
