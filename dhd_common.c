@@ -199,6 +199,10 @@ extern uint wl_msg_level;
 #error "BT logging supported only with PCIe"
 #endif  /* defined(BTLOG) && !defined(BCMPCIE) */
 
+#if defined(DHD_LOGLEVEL) && !defined(DHD_DEBUG)
+#error "Log level control is supported only with DHD_DEBUG"
+#endif  /* defined(DHD_LOGLEVEL) && !defined(DHD_DEBUG) */
+
 #ifdef SOFTAP
 char fw_path2[MOD_PARAM_PATHLEN];
 extern bool softap_enabled;
@@ -341,6 +345,11 @@ static int traffic_mgmt_add_dwm_filter(dhd_pub_t *dhd,
 #endif
 
 static char* ioctl2str(uint32 ioctl);
+
+#ifdef DHD_LOGLEVEL
+void dhd_loglevel_set(dhd_loglevel_data_t *);
+void dhd_loglevel_get(dhd_loglevel_data_t *);
+#endif /* DHD_LOGLEVEL */
 
 /* IOVar table */
 enum {
@@ -507,7 +516,9 @@ enum {
 #if defined(WL_MON_OWN_PKT)
 	IOV_ROAM_EVENTS,
 #endif
-
+#ifdef DHD_LOGLEVEL
+	IOV_LOGLEVEL,
+#endif /* DHD_LOGLEVEL */
 	IOV_LAST
 };
 
@@ -695,6 +706,9 @@ const bcm_iovar_t dhd_iovars[] = {
 #if defined(WL_MON_OWN_PKT)
 	{"roam_events", IOV_ROAM_EVENTS, 0, 0, IOVT_UINT32, 0},
 #endif
+#ifdef DHD_LOGLEVEL
+	{"loglevel", IOV_LOGLEVEL, (0), 0, IOVT_BUFFER, sizeof(dhd_loglevel_data_t)},
+#endif /* DHD_LOGLEVEL */
 	/* --- add new iovars *ABOVE* this line --- */
 	{NULL, 0, 0, 0, 0, 0 }
 };
@@ -2490,14 +2504,30 @@ dhd_doiovar(dhd_pub_t *dhd_pub, const bcm_iovar_t *vi, uint32 actionid, const ch
 		 * do not change dhd msg level enable whole WL msg level
 		 */
 		/* Enable DHD and WL logs in oneshot */
-		if (int_val & DHD_WL_VAL2)
+		if (int_val & DHD_WL_VAL2) {
 			wl_cfg80211_enable_trace(TRUE, int_val & (~DHD_WL_VAL2));
-		else if (int_val & DHD_WL_VAL)
+			wl_cfg80211_enable_log_trace(TRUE, int_val & (~DHD_WL_VAL2));
+		} else if (int_val & DHD_WL_VAL) {
 			wl_cfg80211_enable_trace(FALSE, WL_DBG_DBG);
+			wl_cfg80211_enable_log_trace(FALSE, WL_DBG_DBG);
+		}
 		if (!(int_val & DHD_WL_VAL2))
 #endif /* WL_CFG80211 */
-		dhd_msg_level = int_val;
+		{
+			dhd_msg_level = int_val;
+			dhd_log_level = int_val;
+		}
 		break;
+#ifdef DHD_LOGLEVEL
+	case IOV_GVAL(IOV_LOGLEVEL):
+		dhd_loglevel_get((dhd_loglevel_data_t *)arg);
+		break;
+
+	case IOV_SVAL(IOV_LOGLEVEL):
+		dhd_loglevel_set((dhd_loglevel_data_t *)arg);
+		break;
+#endif /* DHD_LOGLEVEL */
+
 #if defined(NDIS) && defined(BCMDBG)
 	case IOV_GVAL(IOV_WLMSGLEVEL):
 		int_val = (int32)wl_msg_level;
@@ -11849,3 +11879,50 @@ exit:
 	}
 	return ret;
 }
+#ifdef DHD_LOGLEVEL
+void dhd_loglevel_get(dhd_loglevel_data_t *level_data)
+{
+	level_data->dhd_print_lv = dhd_msg_level;
+	level_data->dhd_log_lv = dhd_log_level;
+	level_data->wl_print_lv = wl_cfg80211_get_print_level();
+	level_data->wl_log_lv = wl_cfg80211_get_log_level();
+}
+
+void dhd_loglevel_set(dhd_loglevel_data_t *level_data)
+{
+	if (level_data->type == DHD_LOGLEVEL_TYPE_ALL) {
+#ifdef WL_CFG80211
+		if (level_data->component == DHD_LOGLEVEL_COMP_WL) {
+			wl_cfg80211_enable_trace(TRUE, level_data->wl_print_lv);
+			wl_cfg80211_enable_log_trace(TRUE, level_data->wl_log_lv);
+		} else
+#endif /* WL_CFG80211 */
+		{
+			dhd_msg_level = level_data->dhd_print_lv;
+			dhd_log_level = level_data->dhd_log_lv;
+		}
+	} else if (level_data->type == DHD_LOGLEVEL_TYPE_PRINT) {
+#ifdef WL_CFG80211
+		if (level_data->component == DHD_LOGLEVEL_COMP_WL) {
+			wl_cfg80211_enable_trace(TRUE, level_data->wl_print_lv);
+		} else
+#endif /* WL_CFG80211 */
+		{
+			dhd_msg_level = level_data->dhd_print_lv;
+		}
+	} else if (level_data->type == DHD_LOGLEVEL_TYPE_LOG) {
+#ifdef WL_CFG80211
+		if (level_data->component == DHD_LOGLEVEL_COMP_WL) {
+			wl_cfg80211_enable_log_trace(TRUE, level_data->wl_log_lv);
+		} else
+#endif /* WL_CFG80211 */
+		{
+			dhd_log_level = level_data->dhd_log_lv;
+		}
+	}
+	DHD_ERROR(("%s: type:%u dhd_msg_level:0x%x dhd_log_level:0x%x\n",
+		__func__, level_data->type, dhd_msg_level, dhd_log_level));
+	DHD_ERROR(("%s: type:%u wl_dbg_level:0x%x wl_log_level:0x%x\n",
+		__func__, level_data->type, wl_dbg_level, wl_log_level));
+}
+#endif /* DHD_LOGLEVEL */

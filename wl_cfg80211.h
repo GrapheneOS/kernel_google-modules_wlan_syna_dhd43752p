@@ -471,7 +471,9 @@ do {	\
 	if (wl_dbg_level & WL_DBG_ERR) {	\
 		WL_DBG_PRINT_SYSTEM_TIME;				\
 		pr_cont(CFG80211_ERROR_TEXT "%s : ", __func__);	\
-		pr_cont args;							\
+		pr_cont args;			\
+	}					\
+	if (wl_log_level & WL_DBG_ERR) {	\
 		DHD_LOG_DUMP_WRITE_TS_FN;	\
 		DHD_LOG_DUMP_WRITE args;	\
 	}	\
@@ -481,12 +483,16 @@ do {	\
 	if (wl_dbg_level & WL_DBG_ERR) {	\
 		WL_DBG_PRINT_SYSTEM_TIME;				\
 		pr_cont(CFG80211_ERROR_TEXT "%s : ", __func__);	\
-		pr_cont args;							\
-	}	\
+		pr_cont args;			\
+	}					\
+	if (wl_log_level & WL_DBG_ERR) {	\
+		DHD_LOG_DUMP_WRITE_TS_FN;	\
+		DHD_LOG_DUMP_WRITE args;	\
+	}					\
 } while (0)
 #define	WL_ERR_MEM(args)	\
 do {	\
-	if (wl_dbg_level & WL_DBG_ERR) {	\
+	if (wl_log_level & WL_DBG_ERR) {	\
 		DHD_LOG_DUMP_WRITE_TS_FN;	\
 		DHD_LOG_DUMP_WRITE args;	\
 	}	\
@@ -509,7 +515,9 @@ do {	\
 	if (wl_dbg_level & WL_DBG_INFO) {	\
 		WL_DBG_PRINT_SYSTEM_TIME;				\
 		pr_cont(CFG80211_INFO_TEXT "%s : ", __func__);	\
-		pr_cont args;						\
+		pr_cont args;			\
+	}					\
+	if (wl_log_level & WL_DBG_INFO) {	\
 		DHD_LOG_DUMP_WRITE_TS_FN;	\
 		DHD_LOG_DUMP_WRITE args;	\
 	}	\
@@ -519,15 +527,19 @@ do {	\
 	if (wl_dbg_level & WL_DBG_ERR) {	\
 		WL_DBG_PRINT_SYSTEM_TIME;				\
 		pr_cont(CFG80211_ERROR_TEXT "%s : ", __func__);	\
-		pr_cont args;							\
+		pr_cont args;			\
+	}					\
+	if (wl_log_level & WL_DBG_ERR) {	\
 		DHD_LOG_DUMP_WRITE_EX_TS_FN;	\
 		DHD_LOG_DUMP_WRITE_EX args;	\
 	}	\
 } while (0)
 #define	WL_MEM(args)	\
 do {	\
-	DHD_LOG_DUMP_WRITE_TS_FN;	\
-	DHD_LOG_DUMP_WRITE args;	\
+	if (wl_log_level & WL_DBG_ERR) {	\
+		DHD_LOG_DUMP_WRITE_TS_FN;	\
+		DHD_LOG_DUMP_WRITE args;	\
+	}					\
 } while (0)
 #else
 #define	WL_ERR(args)									\
@@ -2783,6 +2795,9 @@ void wl_cfg80211_generate_mac_addr(struct ether_addr *ea_addr);
 extern s32 wl_mode_to_nl80211_iftype(s32 mode);
 int wl_cfg80211_do_driver_init(struct net_device *net);
 void wl_cfg80211_enable_trace(bool set, u32 level);
+void wl_cfg80211_enable_log_trace(bool set, u32 level);
+extern uint32 wl_cfg80211_get_print_level(void);
+extern uint32 wl_cfg80211_get_log_level(void);
 extern s32 wl_update_wiphybands(struct bcm_cfg80211 *cfg, bool notify);
 extern s32 wl_cfg80211_if_is_group_owner(void);
 extern chanspec_t wl_chspec_host_to_driver(chanspec_t chanspec);
@@ -3066,6 +3081,7 @@ extern int wl_cfg80211_config_rsnxe_ie(struct bcm_cfg80211 *cfg, struct net_devi
 		const u8 *parse, u32 len);
 extern bool dhd_force_country_change(struct net_device *dev);
 extern u32 wl_dbg_level;
+extern u32 wl_log_level;
 extern u32 wl_cfg80211_debug_data_dump(struct net_device *dev, u8 *buf, u32 buf_len);
 extern void wl_cfg80211_concurrent_roam(struct bcm_cfg80211 *cfg, int enable);
 

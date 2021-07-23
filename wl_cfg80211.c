@@ -146,7 +146,16 @@ module_param(wl_reassoc_support, uint, 0660);
 
 static struct device *cfg80211_parent_dev = NULL;
 static struct bcm_cfg80211 *g_bcmcfg = NULL;
+
+/*
+ * wl_dbg_level : a default level to print to dmesg buffer
+ * wl_log_level : a default level to log to DLD or Ring
+ * To keep one level operation(dhd_msg_level) in HW4,
+ * dhd_msg_level and dhd_log_level have the same level
+ * IOVAR(loglevel) can adjust logging level dynamically
+ */
 u32 wl_dbg_level = WL_DBG_ERR | WL_DBG_P2P_ACTION | WL_DBG_INFO;
+u32 wl_log_level = WL_DBG_ERR | WL_DBG_P2P_ACTION | WL_DBG_INFO;
 
 #define MAX_WAIT_TIME 1500
 #ifdef WLAIBSS_MCHAN
@@ -18982,6 +18991,15 @@ int wl_cfg80211_do_driver_init(struct net_device *net)
 	return 0;
 }
 
+void wl_cfg80211_enable_log_trace(bool set, u32 level)
+{
+	if (set) {
+		wl_log_level = level & WL_DBG_LEVEL;
+	} else {
+		wl_log_level |= (WL_DBG_LEVEL & level);
+	}
+}
+
 void wl_cfg80211_enable_trace(bool set, u32 level)
 {
 	if (set)
@@ -18989,6 +19007,17 @@ void wl_cfg80211_enable_trace(bool set, u32 level)
 	else
 		wl_dbg_level |= (WL_DBG_LEVEL & level);
 }
+
+uint32 wl_cfg80211_get_print_level()
+{
+	return wl_dbg_level;
+}
+
+uint32 wl_cfg80211_get_log_level()
+{
+	return wl_log_level;
+}
+
 #if defined(WL_SUPPORT_BACKPORTED_KPATCHES) || (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0))
 static s32
 wl_cfg80211_mgmt_tx_cancel_wait(struct wiphy *wiphy,
@@ -20572,9 +20601,11 @@ wl_cfg80211_set_dbg_verbose(struct net_device *ndev, u32 level)
 	if (level) {
 		/* Enable increased verbose */
 		wl_dbg_level |= WL_DBG_DBG;
+		wl_log_level |= WL_DBG_DBG;
 	} else {
 		/* Disable */
 		wl_dbg_level &= ~WL_DBG_DBG;
+		wl_log_level &= ~WL_DBG_DBG;
 	}
 	WL_INFORM(("debug verbose set to %d\n", level));
 
