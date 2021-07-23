@@ -3093,6 +3093,9 @@ extern s32 wl_handle_auth_event(struct bcm_cfg80211 *cfg, struct net_device *nde
 extern bool wl_customer6_legacy_chip_check(struct bcm_cfg80211 *cfg,
 	struct net_device *ndev);
 #endif /* CUSTOMER_HW6 */
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+extern int wl_cfg80211_alert(struct net_device *dev);
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 
 #define BRCM_ROAMMING_EVENT_LENGTH 64
 #endif /* _wl_cfg80211_h_ */

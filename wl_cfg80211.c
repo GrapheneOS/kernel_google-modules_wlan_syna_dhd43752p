@@ -12383,19 +12383,25 @@ wl_handle_link_down(struct bcm_cfg80211 *cfg, wl_assoc_status_t *as)
 			ie_len = datalen - DOT11_DISCONNECT_RC;
 		}
 	}
-#ifdef WL_ANALYTICS
 	else if ((event == WLC_E_LINK) &&
 			(reason == WLC_E_LINK_BCN_LOSS)) {
 		if (ndev == bcmcfg_to_prmry_ndev(cfg)) {
+#ifdef WL_ANALYTICS
 			if (wl_vndr_ies_find_vendor_oui(cfg, ndev,
 				CISCO_AIRONET_OUI)) {
 				WL_INFORM_MEM(("Analytics Beacon loss\n"));
 				ie_ptr = (uchar*)disco_bcnloss_vsie;
 				ie_len = sizeof(disco_bcnloss_vsie);
 			}
-		}
-	}
 #endif /* WL_ANALYTICS */
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+			dhdp->alert_reason = ALERT_BCN_LOST;
+			dhd_os_send_alert_message(dhdp);
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
+		}
+		/* force reset reason code to prevent autoreconnect in bcnloss case */
+		reason = 0;
+	}
 
 #ifdef BCMDONGLEHOST
 #if defined(DHDTCPSYNC_FLOOD_BLK) && defined(CUSTOMER_TCPSYNC_FLOOD_DIS_RC)
@@ -22503,6 +22509,27 @@ wl_cfg80211_handle_hang_event(struct net_device *ndev, uint16 hang_reason, uint3
 
 	return BCME_OK;
 }
+
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+int wl_cfg80211_alert(struct net_device *dev)
+{
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	dhd_pub_t *dhd;
+
+	if (!cfg) {
+		return BCME_ERROR;
+	}
+
+	RETURN_EIO_IF_NOT_UP(cfg);
+
+	dhd = (dhd_pub_t *)(cfg->pub);
+
+	WL_ERR(("In : error alert eventing, reason=0x%x\n", (uint32)(dhd->alert_reason)));
+	wl_cfgvendor_send_alert_event(dev, dhd->alert_reason);
+
+	return 0;
+}
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 
 static void
 wl_cfg80211_spmk_pmkdb_change_pmk_type(struct bcm_cfg80211 *cfg, pmkid_list_v3_t *pmk_list)

@@ -1952,6 +1952,9 @@ typedef struct dhd_pub {
 #ifdef DBG_PKT_MON
 	bool aml_enable;	/* aml(assoc mgmt frame logger) enable flags */
 #endif /* DBG_PKT_MON */
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+	uint32 alert_reason;		/* reason codes for alert event */
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 #ifdef READ_CONFIG_FROM_FILE
 	struct dhd_config *conf;
 #endif /* READ_CONFIG_FROM_FILE */
@@ -4585,6 +4588,20 @@ int dhd_awdl_llc_to_eth_hdr(struct dhd_pub *dhd, struct ether_header *eh, void *
 #error "DHD_DEBUGABILITY_LOG_DUMP_RING without DEBUGABILITY"
 #endif /* DEBUGABILITY */
 #endif /* DHD_DEBUGABILITY_LOG_DUMP_RING */
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+typedef enum dhd_alert_reason_codes {
+	ALERT_BCN_LOST = 0,
+	ALERT_TX_STALL = 1,
+	ALERT_RX_STALL = 2,
+	ALERT_IOCTL_TIMEOUT = 3,
+	ALERT_DONGLE_TRAP = 4,
+	ALERT_SCAN_STALL = 5,
+	ALERT_SCAN_ERR = 6,
+	ALERT_SCAN_BUSY = 7,
+	ALERT_FW_QUEUE_STALL = 8
+} dhd_alert_reason_codes_t;
+int dhd_os_send_alert_message(dhd_pub_t *dhdp);
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 
 #if defined(__linux__)
 #ifdef DHD_SUPPORT_VFS_CALL

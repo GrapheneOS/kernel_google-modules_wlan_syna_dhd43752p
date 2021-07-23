@@ -487,4 +487,7 @@ extern void dhd_reset_tcpsync_info_by_dev(struct net_device *dev);
 extern void dhd_net_del_flowrings_sta(dhd_pub_t * dhd, struct net_device * ndev);
 #endif /* PCIE_FULL_DONGLE */
 int dhd_get_fw_capabilities(dhd_pub_t * dhd);
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+void dhd_alert_process(struct work_struct *work_data);
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 #endif /* __DHD_LINUX_H__ */

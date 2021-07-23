@@ -854,4 +854,7 @@ int wl_cfgvendor_connect_params_handler(struct wiphy *wiphy, struct wireless_dev
 	const void  *data, int len);
 int wl_cfgvendor_start_ap_params_handler(struct wiphy *wiphy, struct wireless_dev *wdev,
 	const void  *data, int len);
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+void wl_cfgvendor_send_alert_event(struct net_device *dev, uint32 reason);
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 #endif /* _wl_cfgvendor_h_ */

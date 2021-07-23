@@ -10409,6 +10409,10 @@ dhd_msgbuf_wait_ioctl_cmplt(dhd_pub_t *dhd, uint32 len, void *buf)
 		dhd->bus->no_cfg_restore = 1;
 #endif /* CONFIG_ARCH_MSM */
 #endif /* SUPPORT_LINKDOWN_RECOVERY */
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+		dhd->alert_reason = ALERT_IOCTL_TIMEOUT;
+		dhd_os_send_alert_message(dhd);
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 		ret = -ETIMEDOUT;
 		goto out;
 	} else {

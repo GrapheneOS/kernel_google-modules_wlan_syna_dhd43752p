@@ -11994,6 +11994,9 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	}
 #endif /* defined(DHD_TX_PROFILE) */
 
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+	INIT_WORK(&dhd->dhd_alert_process_work, dhd_alert_process);
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 	return &dhd->pub;
 
 fail:
@@ -17046,6 +17049,9 @@ void dhd_detach(dhd_pub_t *dhdp)
 #ifdef DHD_TX_PROFILE
 	(void)dhd_tx_profile_detach(dhdp);
 #endif /* defined(DHD_TX_PROFILE) */
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+	cancel_work_sync(&dhd->dhd_alert_process_work);
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 #ifdef READ_CONFIG_FROM_FILE
 	dhd_conf_detach(dhdp);
 #endif /* READ_CONFIG_FROM_FILE */
@@ -29219,6 +29225,72 @@ dhd_schedule_socram_dump(dhd_pub_t *dhdp)
 		DHD_WQ_WORK_SOC_RAM_COLLECT, dhd_deferred_socram_dump, DHD_WQ_WORK_PRIORITY_HIGH);
 	return ret;
 }
+
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+void dhd_alert_process(struct work_struct *work_data)
+{
+	struct net_device *dev;
+	dhd_info_t *dhd_info = NULL;
+	dhd_pub_t *dhdp = NULL;
+
+	/* Ignore compiler warnings due to -Werror=cast-qual */
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	dhd_info = container_of(work_data, dhd_info_t, dhd_alert_process_work);
+	GCC_DIAGNOSTIC_POP();
+	dhdp = &dhd_info->pub;
+
+	if (!dhdp) {
+		DHD_ERROR(("dhd is NULL\n"));
+		return;
+	}
+	dev = dhd_linux_get_primary_netdev(dhdp);
+
+	if (dev) {
+		wl_cfg80211_alert(dev);
+	}
+}
+
+int dhd_os_send_alert_message(dhd_pub_t *dhdp)
+{
+	int ret = 0;
+	dhd_info_t *dhd_info = NULL;
+#ifdef WL_CFG80211
+	struct net_device *primary_ndev;
+	struct bcm_cfg80211 *cfg;
+#endif /* WL_CFG80211 */
+
+	if (!dhdp) {
+		DHD_ERROR(("dhdp is null\n"));
+		return -EINVAL;
+	}
+
+	dhd_info = (dhd_info_t *)dhdp->info;
+	BCM_REFERENCE(dhd_info);
+
+#ifdef WL_CFG80211
+	primary_ndev = dhd_linux_get_primary_netdev(dhdp);
+	if (!primary_ndev) {
+		DHD_ERROR(("Cannot find primary netdev\n"));
+		return -ENODEV;
+	}
+	cfg = wl_get_cfg(primary_ndev);
+	if (!cfg) {
+		DHD_ERROR(("Cannot find cfg\n"));
+		return -EINVAL;
+	}
+
+	/* Skip sending ALERT event to framework if driver is not ready */
+	if (!wl_get_drv_status(cfg, READY, primary_ndev)) {
+		DHD_ERROR(("device is not ready\n"));
+		return -ENODEV;
+	}
+
+	schedule_work(&dhdp->info->dhd_alert_process_work);
+#endif /* WL_CFG80211 */
+
+	return ret;
+}
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 
 #if defined(WLDWDS) && defined(FOURADDR_AUTO_BRG)
 /* This function is to automatically add/del interface to the bridged dev that priamy dev is in */
