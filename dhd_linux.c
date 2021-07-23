@@ -6207,7 +6207,7 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 #if defined(DHD_WAKE_STATUS) && defined(DHD_WAKEPKT_DUMP)
 		if (pkt_wake) {
 			dhd_prhex("[wakepkt_dump]", (char*)dump_data, MIN(len, 64), DHD_ERROR_VAL);
-			DHD_ERROR(("config check in_suspend: %d ", dhdp->in_suspend));
+			DHD_ERROR(("config check in_suspend: %d\n", dhdp->in_suspend));
 #ifdef ARP_OFFLOAD_SUPPORT
 			DHD_ERROR(("arp hmac_update:%d \n", dhdp->hmac_updated));
 #endif /* ARP_OFFLOAD_SUPPORT */
@@ -6378,7 +6378,18 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 			if (unlikely(pkt_wake)) {
 #ifdef DHD_WAKE_EVENT_STATUS
 				if (event.event_type < WLC_E_LAST) {
+#ifdef CUSTOM_WAKE_REASON_STATS
+					if (wcp->rc_event_idx == MAX_WAKE_REASON_STATS) {
+						wcp->rc_event_idx = 0;
+					}
+					DHD_ERROR(("[pkt_wake] event id %u = %s\n",
+						event.event_type,
+						bcmevent_get_name(event.event_type)));
+					wcp->rc_event[wcp->rc_event_idx] = event.event_type;
+					wcp->rc_event_idx++;
+#else
 					wcp->rc_event[event.event_type]++;
+#endif /* CUSTOM_WAKE_REASON_STATS */
 					wcp->rcwake++;
 					pkt_wake = 0;
 				}
@@ -6462,13 +6473,16 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 			if (unlikely(pkt_wake)) {
 				wcp->rxwake++;
 #ifdef DHD_WAKE_RX_STATUS
-#define ETHER_ICMP6_HEADER	20
-#define ETHER_IPV6_SADDR (ETHER_ICMP6_HEADER + 2)
-#define ETHER_IPV6_DAADR (ETHER_IPV6_SADDR + IPV6_ADDR_LEN)
-#define ETHER_ICMPV6_TYPE (ETHER_IPV6_DAADR + IPV6_ADDR_LEN)
 
 				if (ntoh16(skb->protocol) == ETHER_TYPE_ARP) /* ARP */
 					wcp->rx_arp++;
+				if (ntoh16(skb->protocol) == ETHER_TYPE_IP) {
+					struct iphdr *ipheader = NULL;
+					ipheader = (struct iphdr*)(skb->data);
+					if (ipheader && ipheader->protocol == IPPROTO_ICMP) {
+						wcp->rx_icmp++;
+					}
+				}
 				if (dump_data[0] == 0xFF) { /* Broadcast */
 					wcp->rx_bcast++;
 				} else if (dump_data[0] & 0x01) { /* Multicast */
@@ -6504,6 +6518,9 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 #undef ETHER_IPV6_SADDR
 #undef ETHER_IPV6_DAADR
 #undef ETHER_ICMPV6_TYPE
+#ifdef DHD_WAKE_STATUS_PRINT
+				dhd_dump_wake_status(dhdp, wcp, (struct ether_header *)eth);
+#endif /* DHD_WAKE_STATUS_PRINT */
 #endif /* DHD_WAKE_RX_STATUS */
 				pkt_wake = 0;
 			}

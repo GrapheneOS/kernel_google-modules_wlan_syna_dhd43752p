@@ -12067,3 +12067,30 @@ void dhd_loglevel_set(dhd_loglevel_data_t *level_data)
 		__func__, level_data->type, wl_dbg_level, wl_log_level));
 }
 #endif /* DHD_LOGLEVEL */
+#if defined(DHD_WAKE_STATUS_PRINT) && defined(DHD_WAKE_RX_STATUS) && defined(DHD_WAKE_STATUS)
+#ifdef BCMPCIE
+extern int bcmpcie_get_total_wake(struct dhd_bus *bus);
+#endif /* BCMPCIE */
+void
+dhd_dump_wake_status(dhd_pub_t *dhdp, wake_counts_t *wcp, struct ether_header *eh)
+{
+	uint wake = 0;
+
+	BCM_REFERENCE(wake);
+#ifdef BCMPCIE
+	wake = bcmpcie_get_total_wake(dhdp->bus);
+#endif /* BCMPCIE */
+
+	DHD_ERROR(("wake %u rxwake %u readctrlwake %u\n",
+		wake, wcp->rxwake, wcp->rcwake));
+	DHD_ERROR(("unicast %u muticast %u broadcast %u icmp %u\n",
+		wcp->rx_ucast, wcp->rx_mcast, wcp->rx_bcast, wcp->rx_icmp));
+	DHD_ERROR(("multi4 %u multi6 %u icmp6 %u multiother %u\n",
+		wcp->rx_multi_ipv4, wcp->rx_multi_ipv6, wcp->rx_icmpv6, wcp->rx_multi_other));
+	DHD_ERROR(("icmp6_ra %u, icmp6_na %u, icmp6_ns %u\n",
+		wcp->rx_icmpv6_ra, wcp->rx_icmpv6_na, wcp->rx_icmpv6_ns));
+	DHD_ERROR(("Src_mac: "MACDBG", Dst_mac: "MACDBG"\n",
+		MAC2STRDBG(eh->ether_shost), MAC2STRDBG(eh->ether_dhost)));
+	return;
+}
+#endif /* DHD_WAKE_STATUS_PRINT && DHD_WAKE_RX_STATUS && DHD_WAKE_STATUS */

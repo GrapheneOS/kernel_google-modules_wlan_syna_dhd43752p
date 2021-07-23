@@ -1972,6 +1972,7 @@ int dhd_wifi_platform_set_power(dhd_pub_t *pub, bool on);
 static INLINE int dhd_wifi_platform_set_power(dhd_pub_t *pub, bool on)  { return 0; }
 #endif /* __linux__ */
 
+#define MAX_WAKE_REASON_STATS	32u
 typedef struct {
 	uint rxwake;
 	uint rcwake;
@@ -1980,6 +1981,7 @@ typedef struct {
 	uint rx_arp;
 	uint rx_mcast;
 	uint rx_multi_ipv6;
+	uint rx_icmp;
 	uint rx_icmpv6;
 	uint rx_icmpv6_ra;
 	uint rx_icmpv6_na;
@@ -1989,7 +1991,12 @@ typedef struct {
 	uint rx_ucast;
 #endif /* DHD_WAKE_RX_STATUS */
 #ifdef DHD_WAKE_EVENT_STATUS
+#ifdef CUSTOM_WAKE_REASON_STATS
+	int rc_event[MAX_WAKE_REASON_STATS];
+	int rc_event_idx;
+#else
 	uint rc_event[WLC_E_LAST];
+#endif /* CUSTOM_WAKE_REASON_STATS */
 #endif /* DHD_WAKE_EVENT_STATUS */
 } wake_counts_t;
 

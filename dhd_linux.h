@@ -101,6 +101,12 @@ typedef struct dhd_coredump {
 #endif /* DHD_SSSR_DUMP */
 #endif /* DHD_COREDUMP */
 
+#ifdef DHD_WAKE_RX_STATUS
+#define ETHER_ICMP6_HEADER	20
+#define ETHER_IPV6_SADDR (ETHER_ICMP6_HEADER + 2)
+#define ETHER_IPV6_DAADR (ETHER_IPV6_SADDR + IPV6_ADDR_LEN)
+#define ETHER_ICMPV6_TYPE (ETHER_IPV6_DAADR + IPV6_ADDR_LEN)
+#endif /* DHD_WAKE_RX_STATUS */
 #define DHD_REGISTRATION_TIMEOUT  12000  /* msec : allowed time to finished dhd registration */
 
 typedef struct wifi_adapter_info {

@@ -11640,16 +11640,24 @@ void dhd_bus_dump(dhd_pub_t *dhdp, struct bcmstrbuf *strbuf)
 	bcm_bprintf(strbuf, " unicast %u muticast %u broadcast %u arp %u\n",
 		dhdp->bus->wake_counts.rx_ucast, dhdp->bus->wake_counts.rx_mcast,
 		dhdp->bus->wake_counts.rx_bcast, dhdp->bus->wake_counts.rx_arp);
-	bcm_bprintf(strbuf, " multi4 %u multi6 %u icmp6 %u multiother %u\n",
+	bcm_bprintf(strbuf, " multi4 %u multi6 %u icmp %u icmp6 %u multiother %u\n",
 		dhdp->bus->wake_counts.rx_multi_ipv4, dhdp->bus->wake_counts.rx_multi_ipv6,
-		dhdp->bus->wake_counts.rx_icmpv6, dhdp->bus->wake_counts.rx_multi_other);
+		dhdp->bus->wake_counts.rx_icmp, dhdp->bus->wake_counts.rx_icmpv6,
+		dhdp->bus->wake_counts.rx_multi_other);
 	bcm_bprintf(strbuf, " icmp6_ra %u, icmp6_na %u, icmp6_ns %u\n",
 		dhdp->bus->wake_counts.rx_icmpv6_ra, dhdp->bus->wake_counts.rx_icmpv6_na,
 		dhdp->bus->wake_counts.rx_icmpv6_ns);
 #endif /* DHD_WAKE_RX_STATUS */
 #ifdef DHD_WAKE_EVENT_STATUS
+#ifdef CUSTOM_WAKE_REASON_STATS
+	bcm_bprintf(strbuf, "rc_event_idx = %d, which indicates queue head\n",
+		dhdp->bus->wake_counts.rc_event_idx);
+	for (flowid = 0; flowid < MAX_WAKE_REASON_STATS; flowid++)
+		if (dhdp->bus->wake_counts.rc_event[flowid] != -1)
+#else
 	for (flowid = 0; flowid < WLC_E_LAST; flowid++)
 		if (dhdp->bus->wake_counts.rc_event[flowid] != 0)
+#endif /* CUSTOM_WAKE_REASON_STATS */
 			bcm_bprintf(strbuf, " %s = %u\n", bcmevent_get_name(flowid),
 				dhdp->bus->wake_counts.rc_event[flowid]);
 	bcm_bprintf(strbuf, "\n");

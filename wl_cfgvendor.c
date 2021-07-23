@@ -1338,6 +1338,11 @@ wl_cfgvendor_get_wake_reason_stats(struct wiphy *wiphy,
 	int ret, mem_needed;
 #if defined(DHD_DEBUG) && defined(DHD_WAKE_EVENT_STATUS)
 	int flowid;
+#ifdef CUSTOM_WAKE_REASON_STATS
+	int tmp_rc_event[MAX_WAKE_REASON_STATS];
+	int rc_event_used_cnt = 0;
+	int front = 0;
+#endif /* CUSTOM_WAKE_REASON_STATS */
 #endif /* DHD_DEBUG && DHD_WAKE_EVENT_STATUS */
 	struct sk_buff *skb = NULL;
 	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(ndev);
@@ -1356,29 +1361,65 @@ wl_cfgvendor_get_wake_reason_stats(struct wiphy *wiphy,
 	}
 #ifdef DHD_WAKE_EVENT_STATUS
 	WL_ERR(("pwake_count_info->rcwake %d\n", pwake_count_info->rcwake));
+#ifdef CUSTOM_WAKE_REASON_STATS
+	ret = nla_put_u32(skb, WAKE_STAT_ATTRIBUTE_TOTAL_DRIVER_FW, 0);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put total count of driver fw\n"));
+		goto exit;
+	}
+#endif /* CUSTOM_WAKE_REASON_STATS */
 	ret = nla_put_u32(skb, WAKE_STAT_ATTRIBUTE_TOTAL_CMD_EVENT, pwake_count_info->rcwake);
 	if (unlikely(ret)) {
 		WL_ERR(("Failed to put Total count of CMD event, ret=%d\n", ret));
 		goto exit;
 	}
-	ret = nla_put_u32(skb, WAKE_STAT_ATTRIBUTE_CMD_EVENT_COUNT_USED, WLC_E_LAST);
+#ifdef CUSTOM_WAKE_REASON_STATS
+	front = pwake_count_info->rc_event_idx - 1;
+	for (flowid = 0; flowid < MAX_WAKE_REASON_STATS; flowid++) {
+		/* Reorder the rc_event, the latest event in the header index */
+		if (front < 0) {
+			front = MAX_WAKE_REASON_STATS - 1;
+		}
+		if (pwake_count_info->rc_event[front] != -1) {
+			rc_event_used_cnt++;
+		}
+		tmp_rc_event[flowid] = pwake_count_info->rc_event[front];
+		front--;
+	}
+
+	ret = nla_put_u32(skb, WAKE_STAT_ATTRIBUTE_CMD_EVENT_COUNT_USED, rc_event_used_cnt);
+#endif /* CUSTOM_WAKE_REASON_STATS */
 	if (unlikely(ret)) {
 		WL_ERR(("Failed to put Max count of event used, ret=%d\n", ret));
 		goto exit;
 	}
+#ifdef CUSTOM_WAKE_REASON_STATS
+	ret = nla_put(skb, WAKE_STAT_ATTRIBUTE_CMD_EVENT_WAKE,
+		(MAX_WAKE_REASON_STATS * sizeof(int)), tmp_rc_event);
+#else
 	ret = nla_put(skb, WAKE_STAT_ATTRIBUTE_CMD_EVENT_WAKE, (WLC_E_LAST * sizeof(uint)),
 		pwake_count_info->rc_event);
+#endif /* CUSTOM_WAKE_REASON_STATS */
 	if (unlikely(ret)) {
 		WL_ERR(("Failed to put Event wake data, ret=%d\n", ret));
 		goto exit;
 	}
 #ifdef DHD_DEBUG
+#ifdef CUSTOM_WAKE_REASON_STATS
+	for (flowid = 0; flowid < MAX_WAKE_REASON_STATS; flowid++) {
+		if (pwake_count_info->rc_event[flowid] != -1) {
+			WL_INFORM(("Event ID %u = %s\n", pwake_count_info->rc_event[flowid],
+				bcmevent_get_name(pwake_count_info->rc_event[flowid])));
+		}
+	}
+#else
 	for (flowid = 0; flowid < WLC_E_LAST; flowid++) {
 		if (pwake_count_info->rc_event[flowid] != 0) {
 			WL_ERR((" %s = %u\n", bcmevent_get_name(flowid),
 				pwake_count_info->rc_event[flowid]));
 		}
 	}
+#endif /* CUSTOM_WAKE_REASON_STATS */
 #endif /* DHD_DEBUG */
 #endif /* DHD_WAKE_EVENT_STATUS */
 #ifdef DHD_WAKE_RX_STATUS
@@ -1403,7 +1444,7 @@ wl_cfgvendor_get_wake_reason_stats(struct wiphy *wiphy,
 		WL_ERR(("Failed to put Total wake due to RX broadcast, ret=%d\n", ret));
 		goto exit;
 	}
-	ret = nla_put_u32(skb, WAKE_STAT_ATTRIBUTE_RX_ICMP_PKT, pwake_count_info->rx_arp);
+	ret = nla_put_u32(skb, WAKE_STAT_ATTRIBUTE_RX_ICMP_PKT, pwake_count_info->rx_icmp);
 	if (unlikely(ret)) {
 		WL_ERR(("Failed to put Total wake due to ICMP pkt, ret=%d\n", ret));
 		goto exit;
@@ -7903,6 +7944,7 @@ static void wl_cfgvendor_dbg_ring_send_evt(void *ctx,
 		WL_ERR(("Hal is not started\n"));
 		return;
 	}
+
 	/* Alloc the SKB for vendor_event */
 #if (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || \
 		LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
@@ -9080,6 +9122,36 @@ exit:
 #endif /* WL_SAR_TX_POWER */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+
+const struct nla_policy wake_stat_attr_policy[WAKE_STAT_ATTRIBUTE_MAX] = {
+	[WAKE_STAT_ATTRIBUTE_TOTAL_CMD_EVENT] = { .type = NLA_U32 },
+#ifdef CUSTOM_WAKE_REASON_STATS
+	[WAKE_STAT_ATTRIBUTE_CMD_EVENT_WAKE] = { .type = NLA_BINARY,
+	.len = (MAX_WAKE_REASON_STATS * sizeof(int))},
+#else
+	[WAKE_STAT_ATTRIBUTE_CMD_EVENT_WAKE] = { .type = NLA_BINARY,
+	.len = (WLC_E_LAST * sizeof(uint))},
+#endif /* CUSTOM_WAKE_REASON_STATS */
+	[WAKE_STAT_ATTRIBUTE_CMD_EVENT_COUNT] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_CMD_EVENT_COUNT_USED] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_TOTAL_DRIVER_FW] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_DRIVER_FW_WAKE] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_DRIVER_FW_COUNT] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_DRIVER_FW_COUNT_USED] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_TOTAL_RX_DATA_WAKE] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_RX_UNICAST_COUNT] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_RX_MULTICAST_COUNT] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_RX_BROADCAST_COUNT] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_RX_ICMP_PKT] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_RX_ICMP6_PKT] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_RX_ICMP6_RA] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_RX_ICMP6_NA] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_RX_ICMP6_NS] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_IPV4_RX_MULTICAST_ADD_CNT] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_IPV6_RX_MULTICAST_ADD_CNT] = { .type = NLA_U32 },
+	[WAKE_STAT_ATTRIBUTE_OTHER_RX_MULTICAST_ADD_CNT] = { .type = NLA_U32 },
+};
+
 const struct nla_policy hal_start_attr_policy[SET_HAL_START_ATTRIBUTE_MAX] = {
 	[0] = { .strict_start_type = 0 },
 	[SET_HAL_START_ATTRIBUTE_DEINIT] = { .type = NLA_UNSPEC },
@@ -9738,7 +9810,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_GET_WAKE_REASON_STATS
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_get_wake_reason_stats
+		.doit = wl_cfgvendor_get_wake_reason_stats,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = wake_stat_attr_policy,
+		.maxattr = WAKE_STAT_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* DHD_WAKE_STATUS */
 #ifdef DHDTCPACK_SUPPRESS
