@@ -494,6 +494,8 @@ typedef enum {
 	DUMP_LEN_ATTR_AXI_ERROR = 35,
 	DUMP_FILENAME_ATTR_AXI_ERROR_DUMP = 36,
 	DUMP_LEN_ATTR_RTT_LOG = 37,
+	DUMP_LEN_ATTR_SDTC_ETB_DUMP = 38,
+	DUMP_FILENAME_ATTR_SDTC_ETB_DUMP = 39,
 	/* Please add new attributes from here to sync up old HAL */
 	DUMP_TYPE_ATTR_MAX
 } EWP_DUMP_EVENT_ATTRIBUTE;
@@ -525,6 +527,7 @@ typedef enum {
 	DUMP_BUF_ATTR_STATUS_LOG = 22,
 	DUMP_BUF_ATTR_AXI_ERROR = 23,
 	DUMP_BUF_ATTR_RTT_LOG = 24,
+	DUMP_BUF_ATTR_SDTC_ETB_DUMP = 25,
 	/* Please add new attributes from here to sync up old HAL */
 	DUMP_BUF_ATTR_MAX
 } EWP_DUMP_CMD_ATTRIBUTE;

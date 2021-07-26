@@ -2832,6 +2832,10 @@ dhd_pktid_map_save(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, void *pkt,
 			/* collect core dump */
 			dhd->memdump_type = DUMP_TYPE_PKTID_INVALID;
 			dhd_bus_mem_dump(dhd);
+#ifdef OEM_ANDROID
+			dhd->hang_reason = HANG_REASON_PCIE_PKTID_ERROR;
+			dhd_os_send_hang_message(dhd);
+#endif /* OEM_ANDROID */
 		}
 #else
 		ASSERT(0);
@@ -2963,6 +2967,10 @@ BCMFASTPATH(dhd_pktid_map_free)(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, 
 			/* collect core dump */
 			dhd->memdump_type = DUMP_TYPE_PKTID_INVALID;
 			dhd_bus_mem_dump(dhd);
+#ifdef OEM_ANDROID
+			dhd->hang_reason = HANG_REASON_PCIE_PKTID_ERROR;
+			dhd_os_send_hang_message(dhd);
+#endif /* OEM_ANDROID */
 		}
 #else
 		ASSERT(0);
@@ -2987,6 +2995,10 @@ BCMFASTPATH(dhd_pktid_map_free)(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, 
 			/* collect core dump */
 			dhd->memdump_type = DUMP_TYPE_PKTID_INVALID;
 			dhd_bus_mem_dump(dhd);
+#ifdef OEM_ANDROID
+			dhd->hang_reason = HANG_REASON_PCIE_PKTID_ERROR;
+			dhd_os_send_hang_message(dhd);
+#endif /* OEM_ANDROID */
 		}
 #else
 		ASSERT(0);
@@ -3017,6 +3029,10 @@ BCMFASTPATH(dhd_pktid_map_free)(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle, 
 			/* collect core dump */
 			dhd->memdump_type = DUMP_TYPE_PKTID_INVALID;
 			dhd_bus_mem_dump(dhd);
+#ifdef OEM_ANDROID
+			dhd->hang_reason = HANG_REASON_PCIE_PKTID_ERROR;
+			dhd_os_send_hang_message(dhd);
+#endif /* OEM_ANDROID */
 		}
 #else
 		ASSERT(0);
@@ -8030,6 +8046,10 @@ BCMFASTPATH(dhd_prot_txstatus_process)(dhd_pub_t *dhd, void *msg)
 			/* collect core dump */
 			dhd->memdump_type = DUMP_TYPE_PKTID_INVALID;
 			dhd_bus_mem_dump(dhd);
+#ifdef OEM_ANDROID
+			dhd->hang_reason = HANG_REASON_PCIE_PKTID_ERROR;
+			dhd_os_send_hang_message(dhd);
+#endif /* OEM_ANDROID */
 		}
 #else
 		ASSERT(0);

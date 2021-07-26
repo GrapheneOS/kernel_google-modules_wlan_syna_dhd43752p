@@ -7444,6 +7444,12 @@ wl_cfgvendor_dbg_file_dump(struct wiphy *wiphy,
 					buf->data_buf[0], NULL, (uint32)buf->len,
 					DLD_BUF_TYPE_SPECIAL, &pos);
 				break;
+#ifdef DHD_SDTC_ETB_DUMP
+			case DUMP_BUF_ATTR_SDTC_ETB_DUMP:
+				ret = dhd_sdtc_etb_hal_file_dump(bcmcfg_to_prmry_ndev(cfg),
+					buf->data_buf[0], (uint32)buf->len);
+				break;
+#endif /* DHD_SDTC_ETB_DUMP */
 #ifdef DHD_SSSR_DUMP
 #ifdef DHD_SSSR_DUMP_BEFORE_SR
 			case DUMP_BUF_ATTR_SSSR_C0_D11_BEFORE :
@@ -8242,6 +8248,43 @@ static int wl_cfgvendor_nla_put_pktlogdump_data(struct sk_buff *skb,
 }
 #endif /* DHD_PKT_LOGGING */
 
+#ifdef DHD_SDTC_ETB_DUMP
+static int wl_cfgvendor_nla_put_sdtc_etb_dump_data(struct sk_buff *skb, struct net_device *ndev)
+{
+	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(ndev);
+	char memdump_path[MEMDUMP_PATH_LEN];
+	int ret = BCME_OK;
+
+	if (!dhdp->sdtc_etb_inited) {
+		WL_ERR(("sdtc not inited, hence donot collect SDTC dump through HAL\n"));
+		goto exit;
+	}
+	if (dhdp->sdtc_etb_dump_len <= sizeof(etb_info_t)) {
+		WL_ERR(("ETB is of zero size. Hence donot collect SDTC ETB\n"));
+		goto exit;
+	}
+	dhd_get_memdump_filename(ndev, memdump_path, MEMDUMP_PATH_LEN, "sdtc_etb_dump");
+	ret = nla_put_string(skb, DUMP_FILENAME_ATTR_SDTC_ETB_DUMP, memdump_path);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put stdc etb dump path, ret=%d\n", ret));
+		goto exit;
+	}
+
+	ret = nla_put_u32(skb, DUMP_LEN_ATTR_SDTC_ETB_DUMP, DHD_SDTC_ETB_MEMPOOL_SIZE);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to nla put stdc etb length, ret=%d\n", ret));
+		goto exit;
+	}
+
+exit:
+	return ret;
+}
+#else
+static int wl_cfgvendor_nla_put_sdtc_etb_dump_data(struct sk_buff *skb, struct net_device *ndev)
+{
+	return BCME_OK;
+}
+#endif /* DHD_SDTC_ETB_DUMP */
 static int wl_cfgvendor_nla_put_memdump_data(struct sk_buff *skb,
 		struct net_device *ndev, const uint32 fw_len)
 {
@@ -8278,6 +8321,9 @@ static int wl_cfgvendor_nla_put_dump_data(dhd_pub_t *dhd_pub, struct sk_buff *sk
 		if (((ret = wl_cfgvendor_nla_put_debug_dump_data(skb, ndev)) < 0) ||
 			((ret = wl_cfgvendor_nla_put_memdump_data(skb, ndev, fw_len)) < 0) ||
 			((ret = wl_cfgvendor_nla_put_sssr_dump_data(skb, ndev)) < 0)) {
+			goto done;
+		}
+		if ((ret = wl_cfgvendor_nla_put_sdtc_etb_dump_data(skb, ndev)) < 0) {
 			goto done;
 		}
 #ifdef DHD_PKT_LOGGING

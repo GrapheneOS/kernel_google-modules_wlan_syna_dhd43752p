@@ -668,6 +668,8 @@ enum dhd_hang_reason {
 	HANG_REASON_BSS_DOWN_FAILURE			= 0x8011,
 	HANG_REASON_IOCTL_SUSPEND_ERROR			= 0x8012,
 	HANG_REASON_ESCAN_SYNCID_MISMATCH		= 0x8013,
+	HANG_REASON_SCAN_TIMEOUT			= 0x8014,
+	HANG_REASON_SCAN_TIMEOUT_SCHED_ERROR		= 0x8015,
 	HANG_REASON_PCIE_LINK_DOWN_RC_DETECT		= 0x8805,
 	HANG_REASON_INVALID_EVENT_OR_DATA		= 0x8806,
 	HANG_REASON_UNKNOWN				= 0x8807,
@@ -1578,6 +1580,7 @@ typedef struct dhd_pub {
 #endif /* DHD_L2_FILTER */
 #ifdef DHD_SSSR_DUMP
 	bool sssr_inited;
+	bool force_sssr_init;
 	bool sssr_dump_collected;	/* Flag to indicate sssr dump is collected */
 	sssr_reg_info_cmn_t *sssr_reg_info;
 	uint8 *sssr_mempool;
@@ -1595,6 +1598,7 @@ typedef struct dhd_pub {
 #ifdef DHD_SDTC_ETB_DUMP
 	etb_addr_info_t etb_addr_info;
 	uint8 *sdtc_etb_mempool;
+	uint sdtc_etb_dump_len;
 	bool sdtc_etb_inited;
 	bool collect_sdtc;		/* Flag to indicate SDTC dump is required */
 #endif /* DHD_SDTC_ETB_DUMP */
@@ -1602,6 +1606,8 @@ typedef struct dhd_pub {
 	uint32 soc_ram_length;
 	uint32 memdump_type;
 #ifdef DHD_COREDUMP
+	uint8 *coredump_mem;
+	uint32 coredump_len;
 	char memdump_str[DHD_MEMDUMP_LONGSTR_LEN];
 #endif /* DHD_COREDUMP */
 #ifdef DHD_RND_DEBUG
@@ -3943,6 +3949,22 @@ extern uint dhd_sssr_mac_xmtdata(dhd_pub_t *dhdp, uint8 core_idx);
 #define DHD_SSSR_REG_INFO_DEINIT(dhdp)		do { /* noop */ } while (0)
 #endif /* DHD_SSSR_DUMP */
 
+#ifdef DHD_COREDUMP
+#define WLAN_DHD_MEMDUMP_SIZE	(3u * 1024u * 1024u)
+#ifdef DHD_SSSR_DUMP
+#define DHD_MEMDUMP_BUFFER_SIZE	(WLAN_DHD_MEMDUMP_SIZE + DHD_SSSR_MEMPOOL_SIZE)
+#else
+#define DHD_MEMDUMP_BUFFER_SIZE	(WLAN_DHD_MEMDUMP_SIZE)
+#endif
+extern int dhd_coredump_mempool_init(dhd_pub_t *dhd);
+extern void dhd_coredump_mempool_deinit(dhd_pub_t *dhd);
+#define DHD_COREDUMP_MEMPOOL_INIT(dhdp)		dhd_coredump_mempool_init(dhdp)
+#define DHD_COREDUMP_MEMPOOL_DEINIT(dhdp)	dhd_coredump_mempool_deinit(dhdp)
+#else
+#define DHD_COREDUMP_MEMPOOL_INIT(dhdp)		do { /* noop */ } while (0)
+#define DHD_COREDUMP_MEMPOOL_DEINIT(dhdp)	do { /* noop */ } while (0)
+#endif /* DHD_COREDUMP */
+
 #ifdef BCMPCIE
 extern int dhd_prot_debug_info_print(dhd_pub_t *dhd);
 extern bool dhd_bus_skip_clm(dhd_pub_t *dhdp);
@@ -4522,6 +4544,7 @@ extern void dhd_sdtc_etb_mempool_deinit(dhd_pub_t *dhd);
 extern void dhd_sdtc_etb_init(dhd_pub_t *dhd);
 extern void dhd_sdtc_etb_deinit(dhd_pub_t *dhd);
 extern void dhd_sdtc_etb_dump(dhd_pub_t *dhd);
+extern int dhd_sdtc_etb_hal_file_dump(void *dev, const void *user_buf, uint32 len);
 #endif /* DHD_SDTC_ETB_DUMP */
 
 #ifdef DHD_TX_PROFILE

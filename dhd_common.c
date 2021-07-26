@@ -1407,6 +1407,145 @@ dhd_sssr_print_filepath(dhd_pub_t *dhd, char *path)
 }
 #endif /* DHD_SSSR_DUMP */
 
+#ifdef DHD_COREDUMP
+int
+dhd_coredump_mempool_init(dhd_pub_t *dhd)
+{
+	dhd->coredump_mem = (uint8*) VMALLOCZ(dhd->osh, DHD_MEMDUMP_BUFFER_SIZE);
+	if (dhd->coredump_mem == NULL) {
+		DHD_ERROR(("%s: VMALLOCZ of coredump_mem failed\n", __FUNCTION__));
+		return BCME_ERROR;
+	}
+
+	dhd->coredump_len = DHD_MEMDUMP_BUFFER_SIZE;
+	return BCME_OK;
+}
+
+void
+dhd_coredump_mempool_deinit(dhd_pub_t *dhd)
+{
+	if (dhd->coredump_mem) {
+		VMFREE(dhd->osh, dhd->coredump_mem, DHD_MEMDUMP_BUFFER_SIZE);
+		dhd->coredump_mem = NULL;
+		dhd->coredump_len = 0;
+	}
+}
+
+#ifdef DHD_SSSR_DUMP
+dhd_coredump_t dhd_coredump_types[] = {
+	{DHD_COREDUMP_TYPE_SSSRDUMP_CORE0_BEFORE, 0, NULL},
+	{DHD_COREDUMP_TYPE_SSSRDUMP_CORE0_AFTER, 0, NULL},
+	{DHD_COREDUMP_TYPE_SSSRDUMP_CORE1_BEFORE, 0, NULL},
+	{DHD_COREDUMP_TYPE_SSSRDUMP_CORE1_AFTER, 0, NULL},
+	{DHD_COREDUMP_TYPE_SSSRDUMP_CORE2_BEFORE, 0, NULL},
+	{DHD_COREDUMP_TYPE_SSSRDUMP_CORE2_AFTER, 0, NULL},
+	{DHD_COREDUMP_TYPE_SSSRDUMP_DIG_BEFORE, 0, NULL},
+	{DHD_COREDUMP_TYPE_SSSRDUMP_DIG_AFTER, 0, NULL},
+	{DHD_COREDUMP_TYPE_SOCRAMDUMP, 0, NULL}
+};
+
+static int dhd_append_sssr_tlv(uint8 *buf_dst, int type_idx, int buf_remain)
+{
+	uint32 type_val, length_val;
+	uint32 *type, *length;
+	void *buf_src;
+	int total_size = 0, ret = 0;
+
+	/* DHD_COREDUMP_TYPE_SSSRDUMP_[CORE[0|1|2]|DIG]_[BEFORE|AFTER] */
+	type_val = dhd_coredump_types[type_idx].type;
+	length_val = dhd_coredump_types[type_idx].length;
+
+	if (length_val == 0) {
+		return 0;
+	}
+
+	type = (uint32*)buf_dst;
+	*type = type_val;
+	length = (uint32*)(buf_dst + sizeof(*type));
+	*length = length_val;
+
+	buf_dst += TLV_TYPE_LENGTH_SIZE;
+	total_size += TLV_TYPE_LENGTH_SIZE;
+
+	buf_src = dhd_coredump_types[type_idx].bufptr;
+	ret = memcpy_s(buf_dst, buf_remain, buf_src, *length);
+
+	if (ret) {
+		DHD_ERROR(("Failed to memcpy_s() for coredump.\n"));
+		return BCME_ERROR;
+	}
+
+	DHD_INFO(("%s: type: %u, length: %u\n",	__FUNCTION__, *type, *length));
+
+	total_size += *length;
+	return total_size;
+}
+
+/* reconstruct dump memory with socram and sssr dump as TLV format */
+int dhd_collect_coredump(dhd_pub_t *dhdp, dhd_dump_t *dump)
+{
+	uint8 *buf_ptr = dhdp->coredump_mem;
+	int buf_len = dhdp->coredump_len;
+	uint8 *socram_mem = dump->buf;
+	int socram_len = dump->bufsize;
+	int ret = 0, i = 0;
+	int total_size = 0;
+	uint8 num_d11cores = 0;
+
+	ret = memcpy_s(buf_ptr, buf_len,
+			socram_mem, socram_len);
+
+	if (ret) {
+		DHD_ERROR(("Failed to memmove_s() for coredump.\n"));
+		return BCME_ERROR;
+	}
+
+	total_size = socram_len;
+	/* SSSR dump */
+	if (!sssr_enab || !dhdp->collect_sssr) {
+		DHD_ERROR(("SSSR is not enabled or not collected yet "
+				"sssr_enab = %d, dhdp->collect_sssr = %d\n",
+				sssr_enab, dhdp->collect_sssr));
+		return BCME_ERROR;
+	}
+
+	num_d11cores = dhd_d11_slices_num_get(dhdp);
+	for (i = 0; i < num_d11cores + 1; i++) {
+		int written_bytes = 0;
+		int type_idx = i * 2;
+		if ((i < num_d11cores) && (!dhdp->sssr_d11_outofreset[i])) {
+			continue;
+		}
+
+#ifdef DHD_SSSR_DUMP_BEFORE_SR
+		/* DHD_COREDUMP_TYPE_SSSRDUMP_[CORE[0|1|2]|DIG]_BEFORE */
+		written_bytes = dhd_append_sssr_tlv(buf_ptr, type_idx,
+			buf_len - total_size);
+		if (written_bytes == BCME_ERROR) {
+			return BCME_ERROR;
+		}
+		buf_ptr += written_bytes;
+		total_size += written_bytes;
+#endif /* DHD_SSSR_DUMP_BEFORE_SR */
+
+		/* DHD_COREDUMP_TYPE_SSSRDUMP_[CORE[0|1|2]|DIG]_AFTER */
+		written_bytes = dhd_append_sssr_tlv(buf_ptr, type_idx + 1,
+			buf_len - total_size);
+		if (written_bytes == BCME_ERROR) {
+			return BCME_ERROR;
+		}
+		buf_ptr += written_bytes;
+		total_size += written_bytes;
+	}
+
+	dump->buf = dhdp->coredump_mem;
+	dump->bufsize = total_size;
+
+	return BCME_OK;
+}
+#endif /* DHD_SSSR_DUMP */
+#endif /* DHD_COREDUMP */
+
 #ifdef DHD_SDTC_ETB_DUMP
 /*
  * sdtc: system debug trace controller
@@ -1490,11 +1629,13 @@ void
 dhd_sdtc_etb_deinit(dhd_pub_t *dhd)
 {
 	dhd->sdtc_etb_inited = FALSE;
+	dhd->sdtc_etb_dump_len = 0;
 }
 
 int
 dhd_sdtc_etb_mempool_init(dhd_pub_t *dhd)
 {
+	dhd->sdtc_etb_dump_len = 0;
 	dhd->sdtc_etb_mempool = (uint8 *) MALLOCZ(dhd->osh, DHD_SDTC_ETB_MEMPOOL_SIZE);
 	if (dhd->sdtc_etb_mempool == NULL) {
 		DHD_ERROR(("%s: MALLOC of sdtc_etb_mempool failed\n",

@@ -71,6 +71,34 @@
 #define ALL_ADDR_VAL (PC_FOUND_BIT | LR_FOUND_BIT)
 #define READ_NUM_BYTES 1000
 #define DHD_FUNC_STR_LEN 80
+
+#define DHD_COREDUMP_MAGIC 0xDDCEDACF
+#define TLV_TYPE_LENGTH_SIZE	(8u)
+/* coredump is composed as following TLV format.
+ * Type(32bit) | Length(32bit) | Value(x bit)
+ * e.g) socram type | length | socram dump
+ *      sssr core1 type | length | sssr core1 dump
+ *      ...
+ */
+enum coredump_types {
+	DHD_COREDUMP_TYPE_SSSRDUMP_CORE0_BEFORE = 0,
+	DHD_COREDUMP_TYPE_SSSRDUMP_CORE0_AFTER,
+	DHD_COREDUMP_TYPE_SSSRDUMP_CORE1_BEFORE,
+	DHD_COREDUMP_TYPE_SSSRDUMP_CORE1_AFTER,
+	DHD_COREDUMP_TYPE_SSSRDUMP_CORE2_BEFORE,
+	DHD_COREDUMP_TYPE_SSSRDUMP_CORE2_AFTER,
+	DHD_COREDUMP_TYPE_SSSRDUMP_DIG_BEFORE,
+	DHD_COREDUMP_TYPE_SSSRDUMP_DIG_AFTER,
+	DHD_COREDUMP_TYPE_SOCRAMDUMP
+};
+
+#ifdef DHD_SSSR_DUMP
+typedef struct dhd_coredump {
+	uint32 type;
+	uint32 length;
+	void *bufptr;
+} dhd_coredump_t;
+#endif /* DHD_SSSR_DUMP */
 #endif /* DHD_COREDUMP */
 
 #define DHD_REGISTRATION_TIMEOUT  12000  /* msec : allowed time to finished dhd registration */
