@@ -3522,10 +3522,10 @@ wl_cfg80211_scan_mac_disable(struct net_device *dev)
 #endif /* SUPPORT_RANDOM_MAC_SCAN */
 
 #ifdef WL_SCHED_SCAN
-#define PNO_TIME                    30
-#define PNO_REPEAT                  4
-#define PNO_FREQ_EXPO_MAX           2
-#define PNO_ADAPTIVE_SCAN_LIMIT     60
+#define PNO_TIME                    30u
+#define PNO_REPEAT_MAX              100u
+#define PNO_FREQ_EXPO_MAX           2u
+#define PNO_ADAPTIVE_SCAN_LIMIT     60u
 static bool
 is_ssid_in_list(struct cfg80211_ssid *ssid, struct cfg80211_ssid *ssid_list, int count)
 {
@@ -3550,9 +3550,9 @@ wl_cfg80211_sched_scan_start(struct wiphy *wiphy,
 {
 	u16 chan_list[WL_NUMCHANNELS] = {0};
 	u32 num_channels = 0;
-	ushort pno_time;
-	int pno_repeat = PNO_REPEAT;
-	int pno_freq_expo_max = PNO_FREQ_EXPO_MAX;
+	ushort pno_time = 0;
+	int pno_repeat = 0;
+	int pno_freq_expo_max = 0;
 	wlc_ssid_ext_t ssids_local[MAX_PFN_LIST_COUNT];
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
@@ -3566,24 +3566,42 @@ wl_cfg80211_sched_scan_start(struct wiphy *wiphy,
 	int i;
 	int ret = 0;
 	unsigned long flags;
+	bool adaptive_pno = false;
 
 	if (!request) {
 		WL_ERR(("Sched scan request was NULL\n"));
 		return -EINVAL;
 	}
 
-	if ((request->n_scan_plans == 1) && request->scan_plans &&
-			(request->scan_plans->interval > PNO_ADAPTIVE_SCAN_LIMIT)) {
+	if (!(request->n_scan_plans == 1) || !request->scan_plans) {
+		WL_ERR(("wrong input. plans:%d\n", request->n_scan_plans));
+		return -EINVAL;
+	}
+
+#ifndef DISABLE_ADAPTIVE_PNO
+	if (request->scan_plans->interval <= PNO_ADAPTIVE_SCAN_LIMIT) {
 		/* If the host gives a high value for scan interval, then
-		 * doing adaptive scan doesn't make sense. Better stick to the
-		 * scan interval that host gives.
+		 * doing adaptive scan doesn't make sense. For smaller
+		 * values attempt adaptive scan.
 		 */
-		pno_time = request->scan_plans->interval;
-		pno_repeat = 0;
-		pno_freq_expo_max = 0;
-	} else {
+		adaptive_pno = true;
+	}
+#endif /* DISABLE_ADAPTIVE_PNO */
+
+	/* Use host provided iterations */
+	pno_repeat = request->scan_plans->iterations;
+	if (!pno_repeat || pno_repeat > PNO_REPEAT_MAX) {
+		/* (scan_plan->iterations == zero) means infinite */
+		pno_repeat = PNO_REPEAT_MAX;
+	}
+
+	if (adaptive_pno) {
 		/* Run adaptive PNO */
 		pno_time = PNO_TIME;
+		pno_freq_expo_max = PNO_FREQ_EXPO_MAX;
+	} else {
+		/* use host provided values */
+		pno_time = request->scan_plans->interval;
 	}
 
 	WL_DBG(("Enter. ssids:%d match_sets:%d pno_time:%d pno_repeat:%d channels:%d\n",
@@ -4187,7 +4205,7 @@ wl_cfgscan_update_v3_schedscan_results(struct bcm_cfg80211 *cfg, struct net_devi
 			err = wl_cfgp2p_discover_enable_search(cfg, false);
 			if (unlikely(err)) {
 				wl_clr_drv_status(cfg, SCANNING, ndev);
-				return err;
+				goto out_err;
 			}
 			p2p_scan(cfg) = false;
 		}
