@@ -26178,7 +26178,7 @@ int dhd_read_from_file(dhd_pub_t *dhd)
 	int ret = 0;
 #ifdef DHD_LINUX_STD_FW_API
 	const struct firmware *fw = NULL;
-	char *filepath = FILTER_IE_PATH;
+	char *filepath = FILTER_IE_NAME;
 	int filelen = 0;
 #else
 	int nread = 0;

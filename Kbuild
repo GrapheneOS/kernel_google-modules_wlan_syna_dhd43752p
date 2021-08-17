@@ -822,6 +822,7 @@ ifneq ($(CONFIG_BCMDHD_PCIE),)
 	DHDCFLAGS += -DDHD_NVRAM_NAME="\"bcmdhd.cal\""
 	DHDCFLAGS += -DDHD_CLM_NAME="\"bcmdhd_clm.blob\""
 	DHDCFLAGS += -DDHD_MAP_NAME="\"fw_bcmdhd.map\""
+	DHDCFLAGS += -DFILTER_IE_NAME="\"filter_ie\""
 endif
 else ifneq ($(CONFIG_ARCH_HISI),)
 	DHDCFLAGS += -DBOARD_HIKEY -DBOARD_HIKEY_HW2
@@ -832,6 +833,7 @@ ifneq ($(CONFIG_BCMDHD_PCIE),)
 	DHDCFLAGS += -DDHD_NVRAM_NAME="\"bcmdhd.cal\""
 	DHDCFLAGS += -DDHD_CLM_NAME="\"bcmdhd_clm.blob\""
 	DHDCFLAGS += -DDHD_MAP_NAME="\"fw_bcmdhd.map\""
+	DHDCFLAGS += -DFILTER_IE_NAME="\"filter_ie\""
 endif
 # Allow wl event forwarding as network packet
 	DHDCFLAGS += -DWL_EVENT_ENAB
