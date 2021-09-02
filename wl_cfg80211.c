@@ -125,11 +125,12 @@
 #endif /* CONFIG_WLAN_BEYONDX || defined(CONFIG_SEC_5GMODEL) */
 
 #if (defined(WL_FW_OCE_AP_SELECT) || defined(BCMFW_ROAM_ENABLE)) && \
-	((LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)) || defined(WL_COMPAT_WIRELESS))
+	((LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)) || defined(WL_COMPAT_WIRELESS)) && \
+	defined(WL_SKIP_CONNECT_HINTS)
 uint fw_ap_select = true;
 #else
 uint fw_ap_select = false;
-#endif /* WL_FW_OCE_AP_SELECT && (ROAM_ENABLE || BCMFW_ROAM_ENABLE) */
+#endif /* WL_FW_OCE_AP_SELECT && (ROAM_ENABLE || BCMFW_ROAM_ENABLE) && WL_SKIP_CONNECT_HINTS */
 
 #ifdef READ_CONFIG_FROM_FILE
 #include <dhd_config.h>
