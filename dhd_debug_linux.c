@@ -492,9 +492,6 @@ dhd_os_dbg_get_feature(dhd_pub_t *dhdp, int32 *features)
 	}
 #endif /* DBG_PKT_MON */
 #endif /* DEBUGABILITY */
-#ifdef DHD_PKT_LOGGING_DBGRING
-	*features |= DBG_PACKET_LOG_SUPPORTED;
-#endif /* DHD_PKT_LOGGING_DBGRING */
 	return ret;
 }
 
