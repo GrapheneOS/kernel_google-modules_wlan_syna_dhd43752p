@@ -1326,6 +1326,17 @@ struct wl_assoc_ielen {
 #define MIN_PMKID_LIST_V2_FW_MAJOR 12
 #define MIN_PMKID_LIST_V2_FW_MINOR 0
 
+#define NEW_PMK_MGR_API_BACK_PORTED(ver)  \
+	((ver.wlc_ver_major == 12) && (ver.wlc_ver_minor == 2))
+
+#define WLC_PMKDB_SUPPORT(ver) \
+	((ver.wlc_ver_major >= PMKDB_WLC_VER) || \
+	 NEW_PMK_MGR_API_BACK_PORTED(ver))
+
+#define WLC_PMKLIST_V3_SUPPORT(ver) \
+	((ver.wlc_ver_major >= MIN_PMKID_LIST_V3_FW_MAJOR) || \
+	 NEW_PMK_MGR_API_BACK_PORTED(ver))
+
 /* wpa2 pmk list */
 struct wl_pmk_list {
 	pmkid_list_v3_t pmkids;

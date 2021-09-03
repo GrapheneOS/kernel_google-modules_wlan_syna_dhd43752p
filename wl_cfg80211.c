@@ -6189,7 +6189,7 @@ wl_conn_debug_info(struct bcm_cfg80211 *cfg, struct net_device *dev, wlcfg_assoc
 #endif /* SIMPLE_MAC_PRINT */
 
 	/* Limited info */
-	WL_INFORM_MEM(("[%s] %s with " MACDBG " ssid_len:%d chan_cnt:%d eidx:%d",
+	WL_INFORM_MEM(("[%s] %s with " MACDBG " ssid_len:%d chan_cnt:%d eidx:%d\n",
 		dev->name, info->reassoc ? "Reassoc" : "Connecting",
 		MAC2STRDBG((u8*)(&info->bssid)),
 		info->ssid_len, info->chan_cnt, cfg->eidx.min_connect_idx));
@@ -8185,13 +8185,17 @@ wl_update_pmklist(struct net_device *dev, struct wl_pmk_list *pmk_list,
 			WL_DBG(("%02x\n", pmk_list->pmkids.pmkid[i].pmkid[j]));
 		}
 	}
-	if (cfg->wlc_ver.wlc_ver_major >= MIN_PMKID_LIST_V3_FW_MAJOR) {
+
+	WL_INFORM_MEM(("%s: wlc_ver_major %x(%x) minor %x\n", __func__, cfg->wlc_ver.wlc_ver_major,
+		MIN_PMKID_LIST_V3_FW_MAJOR, cfg->wlc_ver.wlc_ver_minor));
+
+	if (WLC_PMKLIST_V3_SUPPORT(cfg->wlc_ver)) {
+		WL_INFORM_MEM(("%s: PMKID_LIST_V3\n", __func__));
 			pmk_list->pmkids.version = PMKID_LIST_VER_3;
 			err = wldev_iovar_setbuf(dev, "pmkid_info", (char *)pmk_list,
 				sizeof(*pmk_list), cfg->ioctl_buf,
 				WLC_IOCTL_MAXLEN, &cfg->ioctl_buf_sync);
-	}
-	else if (cfg->wlc_ver.wlc_ver_major == MIN_PMKID_LIST_V2_FW_MAJOR) {
+	} else if (cfg->wlc_ver.wlc_ver_major == MIN_PMKID_LIST_V2_FW_MAJOR) {
 		u32 v2_list_size = (u32)(sizeof(pmkid_list_v2_t) + npmkids*sizeof(pmkid_v2_t));
 		pmkid_list_v2_t *pmkid_v2_list = (pmkid_list_v2_t *)MALLOCZ(cfg->osh, v2_list_size);
 		pmkid_list_v3_t *spmk_list = &cfg->spmk_info_list->pmkids;
@@ -8313,7 +8317,7 @@ wl_cfg80211_set_pmksa(struct wiphy *wiphy, struct net_device *dev,
 	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
 #endif /* BCMDONGLEHOST */
 
-	if (cfg->wlc_ver.wlc_ver_major >= PMKDB_WLC_VER) {
+	if (WLC_PMKDB_SUPPORT(cfg->wlc_ver)) {
 		err = wl_cfg80211_update_pmksa(wiphy, dev, pmksa, TRUE);
 		if (err != BCME_OK) {
 			WL_ERR(("wl_cfg80211_set_pmksa err:%d\n", err));
@@ -8418,8 +8422,8 @@ static s32 wl_cfg80211_update_pmksa(struct wiphy *wiphy, struct net_device *dev,
 
 	RETURN_EIO_IF_NOT_UP(cfg);
 
-	if (cfg->wlc_ver.wlc_ver_major < MIN_PMKID_LIST_V3_FW_MAJOR) {
-		WL_DBG(("wlc_ver_major not supported:%d\n", cfg->wlc_ver.wlc_ver_major));
+	if (!WLC_PMKLIST_V3_SUPPORT(cfg->wlc_ver)) {
+		WL_INFORM_MEM(("wlc_ver_major not supported:%d\n", cfg->wlc_ver.wlc_ver_major));
 		return BCME_VERSION;
 	}
 
@@ -8514,7 +8518,8 @@ wl_cfg80211_del_pmksa(struct wiphy *wiphy, struct net_device *dev,
 		WL_ERR(("pmksa is not initialized\n"));
 		return BCME_ERROR;
 	}
-	if (cfg->wlc_ver.wlc_ver_major >= PMKDB_WLC_VER) {
+
+	if (WLC_PMKDB_SUPPORT(cfg->wlc_ver)) {
 		err = wl_cfg80211_update_pmksa(wiphy, dev, pmksa, FALSE);
 		if (err != BCME_OK) {
 			WL_ERR(("wl_cfg80211_del_pmksa err:%d\n", err));
@@ -8608,7 +8613,7 @@ wl_cfg80211_flush_pmksa(struct wiphy *wiphy, struct net_device *dev)
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	s32 err = 0;
 	RETURN_EIO_IF_NOT_UP(cfg);
-	if (cfg->wlc_ver.wlc_ver_major >= PMKDB_WLC_VER) {
+	if (WLC_PMKDB_SUPPORT(cfg->wlc_ver)) {
 		/* NULL pmksa means delete whole PMKSA list */
 		err = wl_cfg80211_update_pmksa(wiphy, dev, NULL, FALSE);
 		if (err != BCME_OK) {
@@ -11077,7 +11082,7 @@ wl_cfg80211_event_sae_key(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	 * else ignore.
 	 * MIN_PMKID_LIST_V3_FW_MAJOR has two IOVAR's(pmklist_info and PMKDB).
 	 */
-	if (cfg->wlc_ver.wlc_ver_major == MIN_PMKID_LIST_V3_FW_MAJOR) {
+	if (WLC_PMKLIST_V3_SUPPORT(cfg->wlc_ver)) {
 		WL_INFORM_MEM(("Deleting the SAE PMK cache Info from firmware \n"));
 		memset_s(&pmksa, sizeof(pmksa), 0, sizeof(pmksa));
 		pmksa.bssid = sae_key->peer_mac;
@@ -12084,7 +12089,7 @@ wl_cfg8021_unlink_bss(struct bcm_cfg80211 *cfg, struct net_device *ndev, u8 *bss
 		if (bss) {
 			cfg80211_unlink_bss(wdev->wiphy, bss);
 			CFG80211_PUT_BSS(wdev->wiphy, bss);
-			WL_INFORM_MEM(("bss unlinked"));
+			WL_INFORM_MEM(("bss unlinked\n"));
 		}
 	}
 }
@@ -13552,7 +13557,8 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		WL_ERR(("failed to update bss info, err=%d\n", err));
 		goto fail;
 	}
-	if (cfg->wlc_ver.wlc_ver_major < PMKDB_WLC_VER) {
+
+	if (!WLC_PMKDB_SUPPORT(cfg->wlc_ver)) {
 		wl_update_pmklist(ndev, cfg->pmk_list, err);
 	}
 
@@ -13898,7 +13904,7 @@ wl_bss_connect_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			* need to update the cache based on bss info from fw.
 			*/
 		wl_update_bss_info(cfg, ndev, true);
-		if (cfg->wlc_ver.wlc_ver_major < PMKDB_WLC_VER) {
+		if (!WLC_PMKDB_SUPPORT(cfg->wlc_ver)) {
 			wl_update_pmklist(ndev, cfg->pmk_list, err);
 		}
 		wl_set_drv_status(cfg, CONNECTED, ndev);
