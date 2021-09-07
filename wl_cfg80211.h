@@ -3092,6 +3092,8 @@ extern struct wireless_dev *wl_cfg80211_get_wdev_from_ifname(struct bcm_cfg80211
 	const char *name);
 struct net_device* wl_get_netdev_by_name(struct bcm_cfg80211 *cfg, char *ifname);
 extern int wl_cfg80211_ifstats_counters(struct net_device *dev, wl_if_stats_t *if_stats);
+extern int wl_cfg80211_if_infra_enh_ifstats_counters(struct net_device *dev,
+		wl_if_infra_enh_stats_v2_t *if_infra_enh_stats);
 extern s32 wl_cfg80211_set_dbg_verbose(struct net_device *ndev, u32 level);
 extern int wl_cfg80211_deinit_p2p_discovery(struct bcm_cfg80211 * cfg);
 extern int wl_cfg80211_set_frameburst(struct bcm_cfg80211 *cfg, bool enable);
