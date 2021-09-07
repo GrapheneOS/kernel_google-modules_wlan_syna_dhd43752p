@@ -550,6 +550,10 @@ s32 wl_cfg80211_interface_ops(struct bcm_cfg80211 *cfg,
 s32 wl_cfg80211_add_del_bss(struct bcm_cfg80211 *cfg,
 	struct net_device *ndev, s32 bsscfg_idx,
 	wl_iftype_t brcm_iftype, s32 del, u8 *addr);
+#ifdef WL_CFG80211_MONITOR
+int wl_cfg80211_set_monitor_channel(struct wiphy *wiphy,
+	struct cfg80211_chan_def *chandef);
+#endif /* WL_CFG80211_MONITOR */
 #ifdef GTK_OFFLOAD_SUPPORT
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
 static s32 wl_cfg80211_set_rekey_data(struct wiphy *wiphy, struct net_device *dev,
@@ -3533,8 +3537,14 @@ cfg80211_to_wl_iftype(uint16 type, uint16 *role, uint16 *mode)
 			*mode = WL_MODE_BSS;
 			break;
 		case NL80211_IFTYPE_MONITOR:
+#ifdef WL_CFG80211_MONITOR
+			*role = WL_IF_TYPE_STA;
+			*mode = WL_MODE_BSS;
+			break;
+#else
 			WL_ERR(("Unsupported mode \n"));
 			return BCME_UNSUPPORTED;
+#endif
 		case NL80211_IFTYPE_ADHOC:
 			*role = WL_IF_TYPE_IBSS;
 			*mode = WL_MODE_IBSS;
@@ -10259,6 +10269,9 @@ static struct cfg80211_ops wl_cfg80211_ops = {
 #ifdef WL_CFG80211_ACL
 	.set_mac_acl = wl_cfg80211_set_mac_acl,
 #endif /* WL_CFG80211_ACL */
+#ifdef WL_CFG80211_MONITOR
+	.set_monitor_channel = wl_cfg80211_set_monitor_channel,
+#endif /* WL_CFG80211_MONITOR */
 #ifdef GTK_OFFLOAD_SUPPORT
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
 	.set_rekey_data = wl_cfg80211_set_rekey_data,
@@ -10662,7 +10675,8 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 	wdev->wiphy->interface_modes =
 		BIT(NL80211_IFTYPE_STATION)
 		| BIT(NL80211_IFTYPE_ADHOC)
-#if !defined(WL_ENABLE_P2P_IF) && !defined(WL_CFG80211_P2P_DEV_IF)
+#if (!defined(WL_ENABLE_P2P_IF) && !defined(WL_CFG80211_P2P_DEV_IF)) || \
+	(defined(WL_CFG80211_MONITOR))
 	/*
 	 * This monitor mode support creates an issue in registering
 	 * Action frame for P2P-GO, this was leading an error in receiving
@@ -10671,7 +10685,7 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 	 * though we are not supporting this mode.
 	 */
 		| BIT(NL80211_IFTYPE_MONITOR)
-#endif /* !WL_ENABLE_P2P_IF && !WL_CFG80211_P2P_DEV_IF */
+#endif /* !WL_ENABLE_P2P_IF && !WL_CFG80211_P2P_DEV_IF || WL_CFG80211_MONITOR */
 #if defined(WL_IFACE_COMB_NUM_CHANNELS) || \
 	defined(WL_CFG80211_P2P_DEV_IF)
 		| BIT(NL80211_IFTYPE_P2P_CLIENT)
@@ -16676,6 +16690,9 @@ static int wl_construct_reginfo(struct bcm_cfg80211 *cfg, s32 bw_cap_2g, s32 bw_
 							IEEE80211_CHAN_NO_HT40MINUS;
 				}
 			} else {
+#ifdef WL_CFG80211_MONITOR
+				if (!ht40_allowed)
+#endif /* WL_CFG80211_MONITOR */
 				band_chan_arr[index].flags = IEEE80211_CHAN_NO_HT40;
 				if (!legacy_chan_info) {
 					channel = dtoh32
@@ -17134,7 +17151,10 @@ static s32 __wl_cfg80211_up(struct bcm_cfg80211 *cfg)
 		 */
 		netinfo->iftype = WL_IF_TYPE_AP;
 	} else {
-		ndev->ieee80211_ptr->iftype = NL80211_IFTYPE_STATION;
+#ifdef WL_CFG80211_MONITOR
+		if (ndev->ieee80211_ptr->iftype != NL80211_IFTYPE_MONITOR)
+#endif /* WL_CFG80211_MONITOR */
+			ndev->ieee80211_ptr->iftype = NL80211_IFTYPE_STATION;
 		netinfo->iftype = WL_IF_TYPE_STA;
 	}
 
@@ -17448,8 +17468,11 @@ static s32 __wl_cfg80211_down(struct bcm_cfg80211 *cfg)
 		wl_clr_drv_status(cfg, NESTED_CONNECT, iter->ndev);
 		wl_clr_drv_status(cfg, CFG80211_CONNECT, iter->ndev);
 	}
-	bcmcfg_to_prmry_ndev(cfg)->ieee80211_ptr->iftype =
-		NL80211_IFTYPE_STATION;
+#ifdef WL_CFG80211_MONITOR
+	if (ndev->ieee80211_ptr->iftype != NL80211_IFTYPE_MONITOR)
+#endif /* WL_CFG80211_MONITOR */
+		bcmcfg_to_prmry_ndev(cfg)->ieee80211_ptr->iftype =
+			NL80211_IFTYPE_STATION;
 #if defined(WL_CFG80211) && \
 	(defined(WL_ENABLE_P2P_IF) || defined(WL_NEWCFG_PRIVCMD_SUPPORT)) && \
 	!defined(PLATFORM_SLP)
