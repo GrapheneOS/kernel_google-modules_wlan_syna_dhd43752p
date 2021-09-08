@@ -9152,6 +9152,14 @@ const struct nla_policy wake_stat_attr_policy[WAKE_STAT_ATTRIBUTE_MAX] = {
 	[WAKE_STAT_ATTRIBUTE_OTHER_RX_MULTICAST_ADD_CNT] = { .type = NLA_U32 },
 };
 
+#ifdef RSSI_MONITOR_SUPPORT
+const struct nla_policy rssi_monitor_attr_policy[RSSI_MONITOR_ATTRIBUTE_MAX] = {
+	[RSSI_MONITOR_ATTRIBUTE_MAX_RSSI] = { .type = NLA_U32 },
+	[RSSI_MONITOR_ATTRIBUTE_MIN_RSSI] = { .type = NLA_U32 },
+	[RSSI_MONITOR_ATTRIBUTE_START] = { .type = NLA_U32 }
+};
+#endif /* RSSI_MONITOR_SUPPORT */
+
 const struct nla_policy hal_start_attr_policy[SET_HAL_START_ATTRIBUTE_MAX] = {
 	[0] = { .strict_start_type = 0 },
 	[SET_HAL_START_ATTRIBUTE_DEINIT] = { .type = NLA_UNSPEC },
@@ -9800,7 +9808,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = WIFI_SUBCMD_SET_RSSI_MONITOR
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_set_rssi_monitor
+		.doit = wl_cfgvendor_set_rssi_monitor,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = rssi_monitor_attr_policy,
+		.maxattr = RSSI_MONITOR_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* RSSI_MONITOR_SUPPORT */
 #ifdef DHD_WAKE_STATUS
