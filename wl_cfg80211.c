@@ -8912,7 +8912,7 @@ wl_cfg80211_check_dwell_overflow(int32 requested_dwell, ulong dwell_jiffies)
 static bool
 wl_cfg80211_send_action_frame(struct wiphy *wiphy, struct net_device *dev,
 	bcm_struct_cfgdev *cfgdev, wl_af_params_t *af_params,
-	wl_action_frame_t *action_frame, u16 action_frame_len, s32 bssidx)
+	wl_action_frame_t *action_frame, u16 action_frame_len, s32 bssidx, const u8 *sa)
 {
 #ifdef WL11U
 	struct net_device *ndev = NULL;
@@ -8931,6 +8931,7 @@ wl_cfg80211_send_action_frame(struct wiphy *wiphy, struct net_device *dev,
 #ifdef BCMDONGLEHOST
 	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
 #endif /* BCMDONGLEHOST */
+	s8 eabuf[ETHER_ADDR_STR_LEN];
 
 	int32 requested_dwell = af_params->dwell_time;
 
@@ -9170,13 +9171,16 @@ wl_cfg80211_send_action_frame(struct wiphy *wiphy, struct net_device *dev,
 	off_chan_started_jiffies = jiffies;
 #endif /* VSDB */
 
-	wl_cfgp2p_print_actframe(true, action_frame->data, action_frame->len, af_params->channel);
+	wl_cfgp2p_print_actframe(true, action_frame->data, action_frame->len,
+		CHSPEC_CHANNEL(af_params->channel));
 
 	wl_cfgp2p_need_wait_actfrmae(cfg, action_frame->data, action_frame->len, true);
 
 	dwell_jiffies = jiffies;
 	/* Now send a tx action frame */
-	ack = wl_cfgp2p_tx_action_frame(cfg, dev, af_params, bssidx) ? false : true;
+	WL_DBG(("actframe sa addr " MACDBG" \n",
+			MAC2STRDBG(bcm_ether_ntoa((const struct ether_addr *)sa, eabuf))));
+	ack = wl_cfgp2p_tx_action_frame(cfg, cfgdev, dev, af_params, bssidx, sa) ? false : true;
 	dwell_overflow = wl_cfg80211_check_dwell_overflow(requested_dwell, dwell_jiffies);
 
 	/* if failed, retry it. tx_retry_max value is configure by .... */
@@ -9192,7 +9196,7 @@ wl_cfg80211_send_action_frame(struct wiphy *wiphy, struct net_device *dev,
 				OSL_SLEEP(AF_RETRY_DELAY_TIME);
 		}
 #endif /* VSDB */
-		ack = wl_cfgp2p_tx_action_frame(cfg, dev, af_params, bssidx) ?
+		ack = wl_cfgp2p_tx_action_frame(cfg, cfgdev, dev, af_params, bssidx, sa) ?
 			false : true;
 		dwell_overflow = wl_cfg80211_check_dwell_overflow(requested_dwell, dwell_jiffies);
 	}
@@ -9393,6 +9397,10 @@ wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 		id = cfg->send_action_id++;
 	*cookie = id;
 	mgmt = (const struct ieee80211_mgmt *)buf;
+
+	WL_DBG(("actframe sa addr " MACDBG" \n",
+			MAC2STRDBG(bcm_ether_ntoa((const struct ether_addr *)mgmt->sa, eabuf))));
+
 	if (ieee80211_is_mgmt(mgmt->frame_control)) {
 		if (ieee80211_is_probe_resp(mgmt->frame_control)) {
 			s32 ie_offset =  DOT11_MGMT_HDR_LEN + DOT11_BCN_PRB_FIXED_LEN;
@@ -9524,7 +9532,7 @@ wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 	memcpy(action_frame->data, &buf[DOT11_MGMT_HDR_LEN], action_frame->len);
 
 	ack = wl_cfg80211_send_action_frame(wiphy, dev, cfgdev, af_params,
-		action_frame, action_frame->len, bssidx);
+		action_frame, action_frame->len, bssidx, mgmt->sa);
 	cfg80211_mgmt_tx_status(cfgdev, *cookie, buf, len, ack, GFP_KERNEL);
 	WL_DBG(("txstatus notified for cookie:%llu. ack:%d\n", *cookie, ack));
 
@@ -10825,7 +10833,10 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 		WL_ERR(("Couldn not register wiphy device (%d)\n", err));
 		wiphy_free(wdev->wiphy);
 	}
-
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)) || \
+	defined(WL_SUPPORT_BACKPORTED_ANQP_RMAC)) && defined(WL_ACT_FRAME_MAC_RAND)
+	wiphy_ext_feature_set(wdev->wiphy, NL80211_EXT_FEATURE_MGMT_TX_RANDOM_TA);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) && defined(WL_ACT_FRAME_MAC_RAND) */
 #if ((LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0)) && \
 	(LINUX_VERSION_CODE <= KERNEL_VERSION(3, 3, 0))) && defined(WL_IFACE_COMB_NUM_CHANNELS)
 	/* Workaround for a cfg80211 bug */
@@ -14263,9 +14274,14 @@ wl_notify_rx_mgmt_frame(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 		}
 
 		err = wldev_ioctl_get(ndev, WLC_GET_BSSID, &bssid, ETHER_ADDR_LEN);
-		if (err < 0)
-			 WL_ERR(("WLC_GET_BSSID error %d\n", err));
+		if ((err < 0) && (err != BCME_NOTASSOCIATED)) {
+			WL_ERR(("WLC_GET_BSSID error %d\n", err));
+		}
 		memcpy(da.octet, ioctl_buf, ETHER_ADDR_LEN);
+		if ((ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_STATION) &&
+				cfg->randomized_gas_tx) {
+			da = cfg->af_randmac;
+		}
 		err = wl_frame_get_mgmt(cfg, FC_ACTION, &da, &e->addr, &bssid,
 			&mgmt_frame, &mgmt_frame_len,
 			(u8 *)((wl_event_rx_frame_data_t *)rxframe + 1));
@@ -14291,6 +14307,7 @@ wl_notify_rx_mgmt_frame(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 		} else if (wl_cfg80211_is_dpp_gas_action(&mgmt_frame[DOT11_MGMT_HDR_LEN],
 			mgmt_frame_len - DOT11_MGMT_HDR_LEN)) {
 			wl_clr_drv_status(cfg, WAITING_NEXT_ACT_FRM, ndev);
+			cfg->randomized_gas_tx = FALSE;
 
 			/* Stop waiting for next AF. */
 			wl_stop_wait_next_action_frame(cfg, ndev, bsscfgidx);
@@ -17097,6 +17114,7 @@ static s32 __wl_cfg80211_up(struct bcm_cfg80211 *cfg)
 	u16 wl_iftype = 0;
 	u16 wl_mode = 0;
 	u8 ioctl_buf[WLC_IOCTL_SMLEN];
+	wl_actframe_version_v1_t *af_ver_p;
 
 	WL_DBG(("In\n"));
 
@@ -17201,6 +17219,33 @@ static s32 __wl_cfg80211_up(struct bcm_cfg80211 *cfg)
 			(cfg->wlc_ver.wlc_ver_major >= MIN_JOINEXT_V1_FW_MAJOR)) {
 		cfg->join_iovar_ver = WL_EXTJOIN_VERSION_V1;
 		WL_INFORM_MEM(("join_ver:%d\n", cfg->join_iovar_ver));
+	}
+
+	ret = wldev_iovar_getbuf(ndev, "actframe_ver", NULL, 0, ioctl_buf, sizeof(ioctl_buf), NULL);
+	if (ret == BCME_OK) {
+		if (((wl_actframe_version_v1_t *)ioctl_buf)->version == WL_ACTFRAME_VERSION_V1) {
+			af_ver_p = (wl_actframe_version_v1_t *)ioctl_buf;
+		} else {
+			WL_INFORM_MEM(("unsupported -actframe_ver-, add support for ver %d\n",
+				((wl_actframe_version_v1_t *)ioctl_buf)->version));
+			return BCME_VERSION;
+		}
+		if (af_ver_p->actframe_ver_major == WL_ACTFRAME_VERSION_MAJOR_2) {
+			/* use actframe_params ver2 */
+			WL_INFORM_MEM(("actframe_params v2\n"));
+			cfg->actframe_params_ver = WL_ACTFRAME_VERSION_MAJOR_2;
+		} else {
+			WL_INFORM_MEM(("unsupported actframe_ver, add support"
+				"for ver %d\n", af_ver_p->actframe_ver_major));
+			return BCME_VERSION;
+		}
+	} else {
+		if (ret == BCME_UNSUPPORTED) {
+			/* Use default version (1) */
+		} else {
+			WL_ERR(("get actframe_ver failed ,err(%d)\n", ret));
+			return BCME_ERROR;
+		}
 	}
 
 #ifdef DHD_LOSSLESS_ROAMING
