@@ -14332,6 +14332,12 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 	uint32 lpc = 1;
 #endif /* DHD_ENABLE_LPC */
 	uint power_mode = PM_FAST;
+#ifdef ASSOC_PREFER_RSSI_THRESH
+	int assoc_pref_rssi_thresh = ASSOC_PREFER_RSSI_THRESH;
+#endif
+#ifdef ASSOC_PREF_5G
+	uint assoc_pref = WLC_BAND_5G;
+#endif
 #if defined(BCMSDIO)
 	uint32 dongle_align = DHD_SDALIGN;
 	uint32 glom = CUSTOM_GLOM_SETTING;
@@ -14979,7 +14985,16 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 	/* Set PowerSave mode */
 	(void) dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)&power_mode, sizeof(power_mode), TRUE, 0);
 #endif /* DHD_PM_CONTROL_FROM_FILE */
-
+#ifdef ASSOC_PREFER_RSSI_THRESH
+	ret = dhd_iovar(dhd, 0, "assoc_pref_rssi_thresh", (char *)&assoc_pref_rssi_thresh,
+		sizeof(assoc_pref_rssi_thresh), NULL, 0, TRUE);
+	if (ret < 0) {
+		DHD_ERROR(("%s set assoc_pref_rssi_thresh failed %d\n", __FUNCTION__, ret));
+	}
+#endif
+#ifdef ASSOC_PREF_5G
+	(void) dhd_wl_ioctl_cmd(dhd, WLC_SET_ASSOC_PREFER, (char *)&assoc_pref, sizeof(assoc_pref), TRUE, 0);
+#endif
 #if defined(BCMSDIO)
 	/* Match Host and Dongle rx alignment */
 	ret = dhd_iovar(dhd, 0, "bus:txglomalign", (char *)&dongle_align, sizeof(dongle_align),
