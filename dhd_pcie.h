@@ -266,6 +266,13 @@ typedef struct _dhd_flow_ring_status_trace_t {
 } dhd_frs_trace_t;
 #endif /* DHD_FLOW_RING_STATUS_TRACE */
 
+typedef enum dhd_pcie_link_state {
+	DHD_PCIE_ALL_GOOD = 0,
+	DHD_PCIE_LINK_DOWN = 1,
+	DHD_PCIE_COMMON_BP_DOWN = 2,
+	DHD_PCIE_WLAN_BP_DOWN = 3
+} dhd_pcie_link_state_type_t;
+
 /** Instantiated once for each hardware (dongle) instance that this DHD manages */
 typedef struct dhd_bus {
 	dhd_pub_t	*dhd;	/**< pointer to per hardware (dongle) unique instance */
@@ -589,6 +596,7 @@ typedef struct dhd_bus {
 	uint64 rd_shared_pass_time;
 	uint32 hwa_mem_base;
 	uint32 hwa_mem_size;
+	dhd_pcie_link_state_type_t link_state;
 } dhd_bus_t;
 
 #ifdef DHD_MSI_SUPPORT

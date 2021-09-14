@@ -4999,6 +4999,10 @@ dhdpcie_schedule_log_dump(dhd_bus_t *bus)
 #endif /* DHD_DUMP_FILE_WRITE_FROM_KERNEL && DHD_LOG_DUMP */
 }
 
+#ifdef DHD_SSSR_DUMP
+extern uint fis_enab;
+#endif /* DHD_SSSR_DUMP */
+
 /**
  * Opens the file given by bus->fw_path, reads part of the file into a buffer and closes the file.
  *
@@ -5147,19 +5151,27 @@ dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size)
 		dhd_bus_dump_console_buffer(bus);
 		dhd_prot_debug_info_print(bus->dhd);
 
-#if defined(DHD_FW_COREDUMP)
-		/* save core dump or write to a file */
-		if (bus->dhd->memdump_enabled) {
+#ifdef DHD_FW_COREDUMP
+#ifdef OEM_ANDROID
+		if (bus->dhd->up == 0) {
+			DHD_ERROR(("%s: socram will be collected in dhd_net_bus_devreset failure\n",
+				__FUNCTION__));
+		} else
+#endif /* OEM_ANDROID */
+		{
+			/* save core dump or write to a file */
+			if (bus->dhd->memdump_enabled) {
 #ifdef DHD_SSSR_DUMP
-			DHD_ERROR(("%s : Set collect_sssr as TRUE\n", __FUNCTION__));
-			bus->dhd->collect_sssr = TRUE;
+				DHD_ERROR(("%s : Set collect_sssr as TRUE\n", __FUNCTION__));
+				bus->dhd->collect_sssr = TRUE;
 #endif /* DHD_SSSR_DUMP */
 #ifdef DHD_SDTC_ETB_DUMP
-			DHD_ERROR(("%s : Set collect_sdtc as TRUE\n", __FUNCTION__));
-			bus->dhd->collect_sdtc = TRUE;
+				DHD_ERROR(("%s : Set collect_sdtc as TRUE\n", __FUNCTION__));
+				bus->dhd->collect_sdtc = TRUE;
 #endif /* DHD_SDTC_ETB_DUMP */
-			bus->dhd->memdump_type = DUMP_TYPE_DONGLE_TRAP;
-			dhdpcie_mem_dump(bus);
+				bus->dhd->memdump_type = DUMP_TYPE_DONGLE_TRAP;
+				dhdpcie_mem_dump(bus);
+			}
 		}
 #endif /* DHD_FW_COREDUMP */
 
@@ -5195,7 +5207,10 @@ dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size)
 #ifdef WL_CFGVENDOR_SEND_HANG_EVENT
 		copy_hang_info_trap(bus->dhd);
 #endif /* WL_CFGVENDOR_SEND_HANG_EVENT */
-
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+		bus->dhd->alert_reason = ALERT_DONGLE_TRAP;
+		dhd_os_send_alert_message(bus->dhd);
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 		dhd_schedule_reset(bus->dhd);
 
 #ifdef NDIS
@@ -5205,6 +5220,33 @@ dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size)
 		dhd_bus_check_died(bus);
 #endif
 
+	} else if (bus->dhd->dongle_trap_data) {
+		DHD_ERROR(("%s: TRAP/ASSERT flag not set in shared flags:0x%x\n",
+			__FUNCTION__, bus->pcie_sh->flags));
+		bus->dhd->dongle_trap_occured = TRUE;
+#ifdef DHD_FW_COREDUMP
+#ifdef OEM_ANDROID
+		if (bus->dhd->up == 0) {
+			DHD_ERROR(("%s: socram will be collected in dhd_net_bus_devreset failure\n",
+				__FUNCTION__));
+		} else
+#endif /* OEM_ANDROID */
+		{
+			/* save core dump or write to a file */
+			if (bus->dhd->memdump_enabled) {
+#ifdef DHD_SSSR_DUMP
+				DHD_ERROR(("%s : Set collect_sssr as TRUE\n", __FUNCTION__));
+				bus->dhd->collect_sssr = TRUE;
+#endif /* DHD_SSSR_DUMP */
+#ifdef DHD_SDTC_ETB_DUMP
+				DHD_ERROR(("%s : Set collect_sdtc as TRUE\n", __FUNCTION__));
+				bus->dhd->collect_sdtc = TRUE;
+#endif /* DHD_SDTC_ETB_DUMP */
+				bus->dhd->memdump_type = DUMP_TYPE_DONGLE_TRAP;
+				dhdpcie_mem_dump(bus);
+			}
+		}
+#endif /* DHD_FW_COREDUMP */
 	}
 
 done1:
@@ -5398,11 +5440,17 @@ dhdpcie_mem_dump(dhd_bus_t *bus)
 			/* intentional fall through */
 		case DUMP_TYPE_BY_LIVELOCK:
 			/* intentional fall through */
+		case DUMP_TYPE_TRANS_ID_MISMATCH:
+			/* intentional fall through */
 		case DUMP_TYPE_IFACE_OP_FAILURE:
 			/* intentional fall through */
 		case DUMP_TYPE_PKTID_POOL_DEPLETED:
 			/* intentional fall through */
 		case DUMP_TYPE_ESCAN_SYNCID_MISMATCH:
+			/* intentional fall through */
+		case DUMP_TYPE_PROXD_TIMEOUT:
+			/* intentional fall through */
+		case DUMP_TYPE_INBAND_DEVICE_WAKE_FAILURE:
 			/* intentional fall through */
 		case DUMP_TYPE_INVALID_SHINFO_NRFRAGS:
 			if (dhdp->db7_trap.fw_db7w_trap) {
@@ -11592,16 +11640,24 @@ void dhd_bus_dump(dhd_pub_t *dhdp, struct bcmstrbuf *strbuf)
 	bcm_bprintf(strbuf, " unicast %u muticast %u broadcast %u arp %u\n",
 		dhdp->bus->wake_counts.rx_ucast, dhdp->bus->wake_counts.rx_mcast,
 		dhdp->bus->wake_counts.rx_bcast, dhdp->bus->wake_counts.rx_arp);
-	bcm_bprintf(strbuf, " multi4 %u multi6 %u icmp6 %u multiother %u\n",
+	bcm_bprintf(strbuf, " multi4 %u multi6 %u icmp %u icmp6 %u multiother %u\n",
 		dhdp->bus->wake_counts.rx_multi_ipv4, dhdp->bus->wake_counts.rx_multi_ipv6,
-		dhdp->bus->wake_counts.rx_icmpv6, dhdp->bus->wake_counts.rx_multi_other);
+		dhdp->bus->wake_counts.rx_icmp, dhdp->bus->wake_counts.rx_icmpv6,
+		dhdp->bus->wake_counts.rx_multi_other);
 	bcm_bprintf(strbuf, " icmp6_ra %u, icmp6_na %u, icmp6_ns %u\n",
 		dhdp->bus->wake_counts.rx_icmpv6_ra, dhdp->bus->wake_counts.rx_icmpv6_na,
 		dhdp->bus->wake_counts.rx_icmpv6_ns);
 #endif /* DHD_WAKE_RX_STATUS */
 #ifdef DHD_WAKE_EVENT_STATUS
+#ifdef CUSTOM_WAKE_REASON_STATS
+	bcm_bprintf(strbuf, "rc_event_idx = %d, which indicates queue head\n",
+		dhdp->bus->wake_counts.rc_event_idx);
+	for (flowid = 0; flowid < MAX_WAKE_REASON_STATS; flowid++)
+		if (dhdp->bus->wake_counts.rc_event[flowid] != -1)
+#else
 	for (flowid = 0; flowid < WLC_E_LAST; flowid++)
 		if (dhdp->bus->wake_counts.rc_event[flowid] != 0)
+#endif /* CUSTOM_WAKE_REASON_STATS */
 			bcm_bprintf(strbuf, " %s = %u\n", bcmevent_get_name(flowid),
 				dhdp->bus->wake_counts.rc_event[flowid]);
 	bcm_bprintf(strbuf, "\n");
@@ -13381,9 +13437,7 @@ dhdpcie_readshared(dhd_bus_t *bus)
 #endif /* defined(PCIE_INB_DW) */
 	uint32 timeout = MAX_READ_TIMEOUT;
 	uint32 elapsed;
-#ifndef CUSTOMER_HW4_DEBUG
 	uint32 intstatus;
-#endif /* OEM_ANDROID */
 
 	if (MULTIBP_ENAB(bus->sih)) {
 		dhd_bus_pcie_pwr_req(bus);
@@ -13440,11 +13494,16 @@ dhdpcie_readshared(dhd_bus_t *bus)
 			bus->is_linkdown = TRUE;
 		} else {
 #if defined(DHD_FW_COREDUMP)
+#ifdef DHD_SSSR_DUMP
+#ifdef OEM_ANDROID
+			DHD_ERROR(("%s : Set collect_sssr and fis_enab as TRUE\n", __FUNCTION__));
+			bus->dhd->collect_sssr = TRUE;
+			fis_enab = TRUE;
+#endif /* OEM_ANDROID */
+#endif /* DHD_SSSR_DUMP */
 			/* save core dump or write to a file */
 			if (bus->dhd->memdump_enabled) {
-				/* since dhdpcie_readshared() is invoked only during init or trap */
-				bus->dhd->memdump_type = bus->dhd->dongle_trap_data ?
-					DUMP_TYPE_DONGLE_TRAP : DUMP_TYPE_DONGLE_INIT_FAILURE;
+				bus->dhd->memdump_type = DUMP_TYPE_READ_SHM_FAIL;
 				dhdpcie_mem_dump(bus);
 			}
 #endif /* DHD_FW_COREDUMP */
@@ -13462,20 +13521,23 @@ dhdpcie_readshared(dhd_bus_t *bus)
 		DHD_ERROR(("%s: address (0x%08x) of pciedev_shared invalid\n",
 			__FUNCTION__, addr));
 		DHD_ERROR(("Waited %u usec, dongle is not ready\n", elapsed));
-#ifdef DEBUG_DNGL_INIT_FAIL
+#ifndef OEM_ANDROID
 		if (addr != (uint32)-1) {	/* skip further PCIE reads if read this addr */
-#ifdef CUSTOMER_HW4_DEBUG
-			bus->dhd->memdump_enabled = DUMP_MEMONLY;
-#endif /* CUSTOMER_HW4_DEBUG */
-// modifiy to avoid warning
-#ifdef DHD_FW_COREDUMP
+#ifdef DHD_SSSR_DUMP
+			if (!bus->dhd->sssr_inited) {
+				bus->dhd->force_sssr_init = TRUE;
+				/* Hard code sssr_reg_info for 4389 */
+				DHD_SSSR_DUMP_INIT(bus->dhd);
+			}
+			bus->dhd->collect_sssr = TRUE;
+#endif /* DHD_SSSR_DUMP */
 			if (bus->dhd->memdump_enabled) {
 				bus->dhd->memdump_type = DUMP_TYPE_DONGLE_INIT_FAILURE;
 				dhdpcie_mem_dump(bus);
 			}
-#endif // DHD_FW_COREDUMP
 		}
-#endif /* DEBUG_DNGL_INIT_FAIL */
+#endif /* !OEM_ANDROID */
+
 #if defined(NDIS)
 		/* This is a very common code path to catch f/w init failures.
 		   Capture a socram dump.
@@ -13593,6 +13655,7 @@ dhdpcie_readshared(dhd_bus_t *bus)
 	bus->dhd->d2h_sync_mode = sh->flags & PCIE_SHARED_D2H_SYNC_MODE_MASK;
 
 	bus->dhd->dar_enable = (sh->flags & PCIE_SHARED_DAR) ? TRUE : FALSE;
+	DHD_ERROR(("FW supports DAR ? %s\n", bus->dhd->dar_enable ? "Y":"N"));
 
 	/* Does the FW support DMA'ing r/w indices */
 	if (sh->flags & PCIE_SHARED_DMA_INDEX) {
@@ -13818,7 +13881,7 @@ dhdpcie_readshared(dhd_bus_t *bus)
 
 	bus->dhd->debug_buf_dest_support =
 		(sh->flags2 & PCIE_SHARED2_DEBUG_BUF_DEST) ? TRUE : FALSE;
-	DHD_ERROR(("FW supports debug buf dest ? %s \n",
+	DHD_ERROR_MEM(("FW supports debug buf dest ? %s \n",
 		bus->dhd->debug_buf_dest_support ? "Y" : "N"));
 
 #ifdef DHD_HP2P

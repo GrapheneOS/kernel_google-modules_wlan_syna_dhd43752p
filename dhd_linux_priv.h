@@ -438,6 +438,9 @@ typedef struct dhd_info {
 #ifdef DHD_QOS_ON_SOCK_FLOW
 	struct dhd_sock_qos_info *psk_qos;
 #endif
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+	struct work_struct dhd_alert_process_work;
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 } dhd_info_t;
 
 #ifdef WL_MONITOR

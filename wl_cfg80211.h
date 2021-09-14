@@ -272,7 +272,6 @@ struct wl_ibss;
 extern void dhd_log_dump_write(int type, char *binary_data,
 		int binary_len, const char *fmt, ...);
 extern char *dhd_log_dump_get_timestamp(void);
-extern char *dhd_dbg_get_system_timestamp(void);
 #ifndef _DHD_LOG_DUMP_DEFINITIONS_
 #define DHD_LOG_DUMP_WRITE(fmt, ...) \
 	dhd_log_dump_write(DLD_BUF_TYPE_GENERAL, NULL, 0, fmt, ##__VA_ARGS__)
@@ -437,7 +436,7 @@ extern char *dhd_dbg_get_system_timestamp(void);
 
 #if defined(CUSTOMER_DBG_SYSTEM_TIME) && defined(DHD_DEBUGABILITY_LOG_DUMP_RING)
 #define WL_DBG_PRINT_SYSTEM_TIME \
-	pr_cont("[%s]", dhd_dbg_get_system_timestamp())
+	pr_cont("[%s]", OSL_GET_RTCTIME())
 #else
 #define WL_DBG_PRINT_SYSTEM_TIME
 #endif /* defined(CUSTOMER_DBG_SYSTEM_TIME) && defined(DHD_DEBUGABILITY_LOG_DUMP_RING) */
@@ -472,7 +471,9 @@ do {	\
 	if (wl_dbg_level & WL_DBG_ERR) {	\
 		WL_DBG_PRINT_SYSTEM_TIME;				\
 		pr_cont(CFG80211_ERROR_TEXT "%s : ", __func__);	\
-		pr_cont args;							\
+		pr_cont args;			\
+	}					\
+	if (wl_log_level & WL_DBG_ERR) {	\
 		DHD_LOG_DUMP_WRITE_TS_FN;	\
 		DHD_LOG_DUMP_WRITE args;	\
 	}	\
@@ -482,12 +483,16 @@ do {	\
 	if (wl_dbg_level & WL_DBG_ERR) {	\
 		WL_DBG_PRINT_SYSTEM_TIME;				\
 		pr_cont(CFG80211_ERROR_TEXT "%s : ", __func__);	\
-		pr_cont args;							\
-	}	\
+		pr_cont args;			\
+	}					\
+	if (wl_log_level & WL_DBG_ERR) {	\
+		DHD_LOG_DUMP_WRITE_TS_FN;	\
+		DHD_LOG_DUMP_WRITE args;	\
+	}					\
 } while (0)
 #define	WL_ERR_MEM(args)	\
 do {	\
-	if (wl_dbg_level & WL_DBG_ERR) {	\
+	if (wl_log_level & WL_DBG_ERR) {	\
 		DHD_LOG_DUMP_WRITE_TS_FN;	\
 		DHD_LOG_DUMP_WRITE args;	\
 	}	\
@@ -510,7 +515,9 @@ do {	\
 	if (wl_dbg_level & WL_DBG_INFO) {	\
 		WL_DBG_PRINT_SYSTEM_TIME;				\
 		pr_cont(CFG80211_INFO_TEXT "%s : ", __func__);	\
-		pr_cont args;						\
+		pr_cont args;			\
+	}					\
+	if (wl_log_level & WL_DBG_INFO) {	\
 		DHD_LOG_DUMP_WRITE_TS_FN;	\
 		DHD_LOG_DUMP_WRITE args;	\
 	}	\
@@ -520,15 +527,19 @@ do {	\
 	if (wl_dbg_level & WL_DBG_ERR) {	\
 		WL_DBG_PRINT_SYSTEM_TIME;				\
 		pr_cont(CFG80211_ERROR_TEXT "%s : ", __func__);	\
-		pr_cont args;							\
+		pr_cont args;			\
+	}					\
+	if (wl_log_level & WL_DBG_ERR) {	\
 		DHD_LOG_DUMP_WRITE_EX_TS_FN;	\
 		DHD_LOG_DUMP_WRITE_EX args;	\
 	}	\
 } while (0)
 #define	WL_MEM(args)	\
 do {	\
-	DHD_LOG_DUMP_WRITE_TS_FN;	\
-	DHD_LOG_DUMP_WRITE args;	\
+	if (wl_log_level & WL_DBG_ERR) {	\
+		DHD_LOG_DUMP_WRITE_TS_FN;	\
+		DHD_LOG_DUMP_WRITE args;	\
+	}					\
 } while (0)
 #else
 #define	WL_ERR(args)									\
@@ -1981,6 +1992,7 @@ struct bcm_cfg80211 {
 #ifdef WLFBT
 	struct ether_addr start_roam_addr;
 #endif
+	u8 country[WLC_CNTRY_BUF_SZ];
 };
 
 /* Max auth timeout allowed in case of EAP is 70sec, additional 5 sec for
@@ -2783,6 +2795,9 @@ void wl_cfg80211_generate_mac_addr(struct ether_addr *ea_addr);
 extern s32 wl_mode_to_nl80211_iftype(s32 mode);
 int wl_cfg80211_do_driver_init(struct net_device *net);
 void wl_cfg80211_enable_trace(bool set, u32 level);
+void wl_cfg80211_enable_log_trace(bool set, u32 level);
+extern uint32 wl_cfg80211_get_print_level(void);
+extern uint32 wl_cfg80211_get_log_level(void);
 extern s32 wl_update_wiphybands(struct bcm_cfg80211 *cfg, bool notify);
 extern s32 wl_cfg80211_if_is_group_owner(void);
 extern chanspec_t wl_chspec_host_to_driver(chanspec_t chanspec);
@@ -3066,6 +3081,7 @@ extern int wl_cfg80211_config_rsnxe_ie(struct bcm_cfg80211 *cfg, struct net_devi
 		const u8 *parse, u32 len);
 extern bool dhd_force_country_change(struct net_device *dev);
 extern u32 wl_dbg_level;
+extern u32 wl_log_level;
 extern u32 wl_cfg80211_debug_data_dump(struct net_device *dev, u8 *buf, u32 buf_len);
 extern void wl_cfg80211_concurrent_roam(struct bcm_cfg80211 *cfg, int enable);
 
@@ -3093,6 +3109,9 @@ extern s32 wl_handle_auth_event(struct bcm_cfg80211 *cfg, struct net_device *nde
 extern bool wl_customer6_legacy_chip_check(struct bcm_cfg80211 *cfg,
 	struct net_device *ndev);
 #endif /* CUSTOMER_HW6 */
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
+extern int wl_cfg80211_alert(struct net_device *dev);
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 
 #define BRCM_ROAMMING_EVENT_LENGTH 64
 #endif /* _wl_cfg80211_h_ */

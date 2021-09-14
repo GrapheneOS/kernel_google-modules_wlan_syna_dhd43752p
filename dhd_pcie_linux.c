@@ -2069,6 +2069,17 @@ int dhdpcie_init(struct pci_dev *pdev)
 		}
 #endif /* USE_SMMU_ARCH_MSM */
 
+#ifdef DHD_CUSTOMER_PCIE_DMA_MASK
+		/* S.SLSI PCIe DMA engine cannot support 64 bit bus address. Set specified bit */
+		if (pci_set_dma_mask(pdev, DMA_BIT_MASK(DHD_CUSTOMER_PCIE_DMA_MASK)) ||
+			pci_set_consistent_dma_mask(pdev,
+				DMA_BIT_MASK(DHD_CUSTOMER_PCIE_DMA_MASK))) {
+			DHD_ERROR(("%s: DMA set %d bit mask failed.\n",
+				__FUNCTION__, DHD_CUSTOMER_PCIE_DMA_MASK));
+			return -EINVAL;
+		}
+#endif /* DHD_CUSTOMER_PCIE_DMA_MASK */
+
 #ifdef DHD_WAKE_STATUS
 		/* Initialize pkt_wake_lock */
 		spin_lock_init(&dhdpcie_info->pkt_wake_lock);
