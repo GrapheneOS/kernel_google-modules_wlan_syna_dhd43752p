@@ -269,6 +269,8 @@ ifneq ($(CONFIG_BCMDHD_PCIE),)
 	DHDCFLAGS += -DWL_MONITOR
 # WLBR Regon coordinator
 	DHDCFLAGS += -DWBRC
+# Enable monitor chanspec setting from cfg80211 ops
+	DHDCFLAGS += -DWL_CFG80211_MONITOR
 endif
 
 ifneq ($(CONFIG_FIB_RULES),)

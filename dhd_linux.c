@@ -7771,6 +7771,7 @@ dhd_rx_mon_pkt(dhd_pub_t *dhdp, host_rxbuf_cmpl_t* msg, void *pkt, int ifidx)
 #endif
 
 typedef struct dhd_mon_dev_priv {
+	dhd_info_t *dhd;
 	struct net_device_stats stats;
 } dhd_mon_dev_priv_t;
 
@@ -7867,12 +7868,129 @@ done:
 }
 #endif
 
+#define DHD_MON_DEV_PRIV_SIZE		(sizeof(dhd_mon_dev_priv_t))
+#define DHD_MON_DEV_PRIV(dev)		((dhd_mon_dev_priv_t *)DEV_PRIV(dev))
+#define DHD_MON_DEV_INFO(dev)		(((dhd_mon_dev_priv_t *)DEV_PRIV(dev))->dhd)
+#define DHD_MON_DEV_STATS(dev)		(((dhd_mon_dev_priv_t *)DEV_PRIV(dev))->stats)
+
 static int
 dhd_monitor_start(struct sk_buff *skb, struct net_device *dev)
 {
 	PKTFREE(NULL, skb, FALSE);
 	return 0;
 }
+
+#ifdef WL_CFG80211_MONITOR
+static int
+dhd_set_monitor_ioctl(dhd_pub_t *dhdp, bool val)
+{
+	dhd_info_t *dhd = dhdp->info;
+	int ret = 0;
+	uint monitor = (uint)val;
+
+	DHD_TRACE(("%s: val %d\n", __FUNCTION__, val));
+
+	if ((ret = dhd_wl_ioctl_cmd(dhdp, WLC_SET_MONITOR, &monitor,
+			sizeof(monitor), TRUE, 0)) != 0) {
+		DHD_ERROR(("%s Failed to set monitor mode, err %d\n",
+			__FUNCTION__, ret));
+	} else {
+		dhd_net_if_lock_local(dhd);
+		dhd->monitor_type = monitor;
+		dhd_net_if_unlock_local(dhd);
+	}
+
+	return ret;
+}
+
+static int
+dhd_monitor_open(struct net_device *net)
+{
+	int ret = 0;
+	dhd_info_t *dhd = DHD_MON_DEV_INFO(net);
+	uint32 scan_suppress = FALSE;
+
+	if (!dhd) {
+		DHD_ERROR(("%s: dhd info not available \n", __FUNCTION__));
+		return BCME_ERROR;
+	}
+
+	if (!dhd->pub.monitor_enable) {
+		DHD_ERROR(("%s: Monitor mode is not enabled in FW cap\n",
+			__FUNCTION__));
+		return BCME_ERROR;
+	}
+
+	ret = dhd_set_monitor_ioctl(&dhd->pub, TRUE);
+	if (ret) {
+		DHD_ERROR(("%s: Set monitor mode IOCTL failed.\n", __FUNCTION__));
+		return ret;
+	}
+
+#ifndef WL_MON_OWN_PKT
+	if (FW_SUPPORTED((&dhd->pub), monitor)) {
+#ifdef DHD_PCIE_RUNTIMEPM
+		/* Disable RuntimePM in monitor mode */
+		DHD_DISABLE_RUNTIME_PM(&dhd->pub);
+		DHD_ERROR(("%s : disable runtime PM in monitor mode\n", __FUNCTION__));
+#endif /* DHD_PCIE_RUNTIME_PM */
+		scan_suppress = TRUE;
+		/* Set the SCAN SUPPRESS Flag in the firmware to disable scan in Monitor mode */
+		ret = dhd_iovar(&dhd->pub, 0, "scansuppress", (char *)&scan_suppress,
+			sizeof(scan_suppress), NULL, 0, TRUE);
+		if (ret < 0) {
+			DHD_ERROR(("%s: scansuppress set failed, ret=%d\n", __FUNCTION__, ret));
+		}
+	}
+#else
+	UNUSED_PARAMETER(scan_suppress);
+#endif
+
+	return ret;
+}
+
+static int
+dhd_monitor_stop(struct net_device *net)
+{
+	int ret = 0;
+	dhd_info_t *dhd = DHD_MON_DEV_INFO(net);
+	uint32 scan_suppress = FALSE;
+
+	if (!dhd) {
+		DHD_ERROR(("%s: dhd info not available \n", __FUNCTION__));
+		return BCME_ERROR;
+	}
+
+	if (!dhd->pub.monitor_enable) {
+		DHD_ERROR(("%s: Monitor mode is not enabled in FW cap\n",
+			__FUNCTION__));
+		return BCME_ERROR;
+	}
+
+	ret = dhd_set_monitor_ioctl(&dhd->pub, FALSE);
+	if (ret) {
+		DHD_ERROR(("%s: Set monitor mode IOCTL failed.\n", __FUNCTION__));
+		return ret;
+	}
+
+	if (FW_SUPPORTED((&dhd->pub), monitor)) {
+#ifdef DHD_PCIE_RUNTIMEPM
+		/* Enable RuntimePM */
+		DHD_ENABLE_RUNTIME_PM(&dhd->pub);
+		DHD_ERROR(("%s : enabled runtime PM\n", __FUNCTION__));
+#endif /* DHD_PCIE_RUNTIME_PM */
+		scan_suppress = FALSE;
+		/* Unset the SCAN SUPPRESS Flag in the firmware to enable scan */
+		ret = dhd_iovar(&dhd->pub, 0, "scansuppress", (char *)&scan_suppress,
+				sizeof(scan_suppress), NULL, 0, TRUE);
+		if (ret < 0) {
+			DHD_ERROR(("%s: scansuppress set failed, ret=%d\n", __FUNCTION__, ret));
+		}
+	}
+
+	return ret;
+}
+#endif /* WL_CFG80211_MONITOR */
 
 static int
 dhd_monitor_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
@@ -7890,6 +8008,10 @@ static const struct net_device_ops netdev_monitor_ops =
 {
 	.ndo_start_xmit = dhd_monitor_start,
 	.ndo_get_stats = dhd_monitor_get_stats,
+#ifdef WL_CFG80211_MONITOR
+	.ndo_open = dhd_monitor_open,
+	.ndo_stop = dhd_monitor_stop,
+#endif /* WL_CFG80211_MONITOR */
 	.ndo_do_ioctl = dhd_monitor_ioctl
 };
 
@@ -7901,8 +8023,13 @@ dhd_add_monitor_if(dhd_info_t *dhd)
 #ifdef HOST_RADIOTAP_CONV
 	dhd_pub_t *dhdp = (dhd_pub_t *)&dhd->pub;
 #endif /* HOST_RADIOTAP_CONV */
+#ifndef WL_CFG80211_MONITOR
 	uint32 scan_suppress = FALSE;
+#endif
 	int ret = BCME_OK;
+	dhd_mon_dev_priv_t *dev_priv;
+
+	BCM_REFERENCE(dev_priv);
 
 	if (!dhd) {
 		DHD_ERROR(("%s: dhd info not available \n", __FUNCTION__));
@@ -7953,6 +8080,7 @@ dhd_add_monitor_if(dhd_info_t *dhd)
 		return;
 	}
 
+#ifndef WL_CFG80211_MONITOR
 #ifndef WL_MON_OWN_PKT
 	if (FW_SUPPORTED((&dhd->pub), monitor)) {
 #ifdef DHD_PCIE_RUNTIMEPM
@@ -7972,6 +8100,7 @@ dhd_add_monitor_if(dhd_info_t *dhd)
 	UNUSED_PARAMETER(ret);
 	UNUSED_PARAMETER(scan_suppress);
 #endif
+#endif /* WL_CFG80211_MONITOR */
 
 #ifdef HOST_RADIOTAP_CONV
 	bcmwifi_monitor_create(&dhd->monitor_info);
@@ -7979,13 +8108,23 @@ dhd_add_monitor_if(dhd_info_t *dhd)
 	bcmwifi_set_corerev_minor(dhd->monitor_info, dhdpcie_get_corerev_minor(dhdp));
 #endif /* HOST_RADIOTAP_CONV */
 	dhd->monitor_dev = dev;
+#ifdef WL_CFG80211_MONITOR
+	dev_priv = DHD_MON_DEV_PRIV(dev);
+	dev_priv->dhd = dhd;
+	bzero(&dev_priv->stats, sizeof(dev_priv->stats));
+#endif /* WL_CFG80211_MONITOR */
 }
 
 static void
 dhd_del_monitor_if(dhd_info_t *dhd)
 {
+#ifndef WL_CFG80211_MONITOR
 	int ret = BCME_OK;
 	uint32 scan_suppress = FALSE;
+#endif
+	dhd_mon_dev_priv_t *dev_priv;
+
+	BCM_REFERENCE(dev_priv);
 
 	if (!dhd) {
 		DHD_ERROR(("%s: dhd info not available \n", __FUNCTION__));
@@ -7997,6 +8136,13 @@ dhd_del_monitor_if(dhd_info_t *dhd)
 		return;
 	}
 
+#ifdef WL_CFG80211_MONITOR
+	dev_priv = DHD_MON_DEV_PRIV(dhd->monitor_dev);
+	dev_priv->dhd = (dhd_info_t *)NULL;
+	bzero(&dev_priv->stats, sizeof(dev_priv->stats));
+#endif /* WL_CFG80211_MONITOR */
+
+#ifndef WL_CFG80211_MONITOR
 	if (FW_SUPPORTED((&dhd->pub), monitor)) {
 #ifdef DHD_PCIE_RUNTIMEPM
 		/* Enable RuntimePM */
@@ -8011,6 +8157,7 @@ dhd_del_monitor_if(dhd_info_t *dhd)
 			DHD_ERROR(("%s: scansuppress set failed, ret=%d\n", __FUNCTION__, ret));
 		}
 	}
+#endif /* WL_CFG80211_MONITOR */
 
 	if (dhd->monitor_dev) {
 		if (dhd->monitor_dev->reg_state == NETREG_UNINITIALIZED) {
@@ -8032,6 +8179,7 @@ dhd_del_monitor_if(dhd_info_t *dhd)
 #endif /* HOST_RADIOTAP_CONV */
 }
 
+#ifndef WL_CFG80211_MONITOR
 static void
 dhd_set_monitor(dhd_pub_t *pub, int ifidx, int val)
 {
@@ -8050,6 +8198,7 @@ dhd_set_monitor(dhd_pub_t *pub, int ifidx, int val)
 	dhd->monitor_type = val;
 	dhd_net_if_unlock_local(dhd);
 }
+#endif /* WL_CFG80211_MONITOR */
 #endif /* WL_MONITOR */
 
 #if defined(BT_OVER_SDIO)
@@ -8479,6 +8628,7 @@ int dhd_ioctl_process(dhd_pub_t *pub, int ifidx, dhd_ioctl_t *ioc, void *data_bu
 #endif  /* REPORT_FATAL_TIMEOUTS */
 
 #ifdef WL_MONITOR
+#ifndef WL_CFG80211_MONITOR
 	/* Intercept monitor ioctl here, add/del monitor if */
 	if (bcmerror == BCME_OK && ioc->cmd == WLC_SET_MONITOR) {
 		int val = 0;
@@ -8501,6 +8651,7 @@ int dhd_ioctl_process(dhd_pub_t *pub, int ifidx, dhd_ioctl_t *ioc, void *data_bu
 		*(int32*)data_buf &= ~(HOST_RADIOTAP_CONV_BIT);
 	}
 #endif /* HOST_RADIOTAP_CONV */
+#endif /* WL_CFG80211_MONITOR */
 #endif /* WL_MONITOR */
 
 done:
@@ -9703,12 +9854,22 @@ static int
 dhd_pri_open(struct net_device *net)
 {
 	s32 ret;
+	dhd_info_t *dhd = DHD_DEV_INFO(net);
+
+	BCM_REFERENCE(dhd);
 
 	ret = dhd_open(net);
 	if (unlikely(ret)) {
 		DHD_ERROR(("Failed to open primary dev ret %d\n", ret));
 		return ret;
 	}
+
+#ifdef WL_CFG80211_MONITOR
+	dhd_net_if_lock_local(dhd);
+	/* Add monitor */
+	dhd_add_monitor_if(dhd);
+	dhd_net_if_unlock_local(dhd);
+#endif /* WL_CFG80211_MONITOR */
 
 	/* Allow transmit calls */
 	dhd_tx_start_queues(net);
@@ -9723,10 +9884,20 @@ static int
 dhd_pri_stop(struct net_device *net)
 {
 	s32 ret;
+	dhd_info_t *dhd = DHD_DEV_INFO(net);
+
+	BCM_REFERENCE(dhd);
 
 	/* Set state and stop OS transmissions */
 	dhd_tx_stop_queues(net);
 	DHD_ERROR(("[%s] tx queue stopped\n", net->name));
+
+#ifdef WL_CFG80211_MONITOR
+	dhd_net_if_lock_local(dhd);
+	/* Del monitor */
+	dhd_del_monitor_if(dhd);
+	dhd_net_if_unlock_local(dhd);
+#endif /* WL_CFG80211_MONITOR */
 
 	ret = dhd_stop(net);
 	if (unlikely(ret)) {
