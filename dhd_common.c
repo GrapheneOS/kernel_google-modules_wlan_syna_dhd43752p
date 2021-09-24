@@ -323,7 +323,7 @@ bool ap_fw_loaded = FALSE;
 
 #define CHIPID_MISMATCH	8
 
-#define DHD_VERSION "\nDongle Host Driver, version " EPI_VERSION_STR EPI_COMMIT_ID "\n"
+#define DHD_VERSION "\nDongle Host Driver, version " EPI_VERSION_STR " " EPI_COMMIT_ID "\n"
 
 #if defined(DHD_DEBUG) && defined(DHD_COMPILED)
 const char dhd_version[] = DHD_VERSION DHD_COMPILED " compiled on "
