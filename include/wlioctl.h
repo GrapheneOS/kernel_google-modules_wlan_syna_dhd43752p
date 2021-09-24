@@ -149,14 +149,36 @@ typedef struct {
 
 #define ACTION_FRAME_SIZE 1800
 
-typedef struct wl_action_frame {
-	struct ether_addr 	da;
-	uint16 			len;
-	uint32 			packetId;
-	uint8			data[ACTION_FRAME_SIZE];
-} wl_action_frame_t;
+#define WL_RAND_GAS_MAC (0x01 << 0u)
+struct wl_action_frame {
+	struct ether_addr da;
+	uint16 len;
+	uint32 packetId;
+	uint8  data[ACTION_FRAME_SIZE];
+};
 
+typedef struct wl_action_frame_v2 {
+	uint16			version;
+	uint16			len_total;
+	uint16                  data_offset;
+	struct ether_addr       da;
+	uint32                  packetId;
+	struct ether_addr       rand_mac_addr;
+	struct ether_addr       rand_mac_mask;
+	uint16                  flags;
+	uint16                  len_data;
+	uint8                   data[];
+} wl_action_frame_v2_t;
+
+#ifndef WL_AF_PARAMS_VERSION_SUPPORT
+/* actframe params LEGACY structure. DONOT extend this structure unless
+ * there is a clear requirement. Use the versioned struct v2 onwards.
+ */
+typedef struct wl_action_frame wl_action_frame_t;
+typedef struct wl_af_params wl_af_params_t;
 #define WL_WIFI_ACTION_FRAME_SIZE sizeof(struct wl_action_frame)
+#define WL_WIFI_AF_PARAMS_SIZE sizeof(struct wl_af_params)
+#endif /* WL_AF_PARAMS_VERSION_SUPPORT */
 
 typedef struct ssid_info
 {
@@ -164,15 +186,40 @@ typedef struct ssid_info
 	uint8		ssid[32];	/**< SSID string */
 } ssid_info_t;
 
-typedef struct wl_af_params {
+struct wl_af_params {
 	uint32			channel;
 	int32			dwell_time;
 	struct ether_addr	BSSID;
 	uint8 PAD[2];
-	wl_action_frame_t	action_frame;
-} wl_af_params_t;
+	struct wl_action_frame action_frame;
+};
 
-#define WL_WIFI_AF_PARAMS_SIZE sizeof(struct wl_af_params)
+typedef struct wl_af_params_v2 {
+	uint16			version;
+	uint16			length;
+	uint32			channel;
+	int32			dwell_time;
+	struct ether_addr	BSSID;
+	uint8                   PAD[2];
+	wl_action_frame_v2_t	action_frame;
+} wl_af_params_v2_t;
+
+#define WL_WIFI_ACTION_FRAME_SIZE_V2 sizeof(wl_action_frame_v2_t)
+#define WL_WIFI_AF_PARAMS_SIZE_V2    sizeof(wl_af_params_v2_t)
+
+/* version of actframe iovar to be returned as part of wl_actframe_version structure */
+#define WL_ACTFRAME_VERSION_MAJOR_2        2u
+
+/**< current version of actframe_version structure */
+#define WL_ACTFRAME_VERSION_V1             1u
+
+/** actframe interface version */
+typedef struct wl_actframe_version_v1 {
+	uint16  version;                /**< version of the structure */
+	uint16  length;                 /**< length of the entire structure */
+	/* actframe interface version numbers */
+	uint16  actframe_ver_major;     /**< actframe interface major version number */
+} wl_actframe_version_v1_t;
 
 #define MFP_TEST_FLAG_NORMAL	0
 #define MFP_TEST_FLAG_ANY_KEY	1

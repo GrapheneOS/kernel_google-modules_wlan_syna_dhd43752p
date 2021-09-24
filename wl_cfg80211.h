@@ -107,6 +107,11 @@ struct wl_ibss;
 #define WL_SAE_FT
 #endif // WL_SAE_FT
 
+#ifdef OEM_ANDROID
+/* mandatory for Android 11 */
+#define WL_ACT_FRAME_MAC_RAND
+#endif
+
 #endif /* KERNEL >= 4.17 */
 
 #ifdef WL_CLIENT_SAE
@@ -1992,6 +1997,9 @@ struct bcm_cfg80211 {
 #ifdef WLFBT
 	struct ether_addr start_roam_addr;
 #endif
+	uint16  actframe_params_ver;
+	struct ether_addr af_randmac;
+	bool randomized_gas_tx;
 	u8 country[WLC_CNTRY_BUF_SZ];
 };
 
