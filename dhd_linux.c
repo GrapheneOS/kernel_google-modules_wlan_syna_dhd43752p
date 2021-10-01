@@ -18688,6 +18688,7 @@ int net_os_set_suspend_bcn_li_dtim(struct net_device *dev, int val)
 int net_os_set_max_dtim_enable(struct net_device *dev, int val)
 {
 	dhd_info_t *dhd = DHD_DEV_INFO(dev);
+	dhd_pub_t *dhdp = &dhd->pub;
 
 	if (dhd) {
 		DHD_ERROR(("%s: use MAX bcn_li_dtim in suspend %s\n",
@@ -18698,10 +18699,13 @@ int net_os_set_max_dtim_enable(struct net_device *dev, int val)
 			dhd->pub.max_dtim_enable = FALSE;
 		}
 	} else {
-		return -1;
+		return BCME_ERROR;
+	}
+	if (dhdp->in_suspend) {
+		dhd_set_suspend_bcn_li_dtim(dhdp, TRUE);
 	}
 
-	return 0;
+	return BCME_OK;
 }
 
 #ifdef DISABLE_DTIM_IN_SUSPEND
@@ -18724,6 +18728,80 @@ int net_os_set_disable_dtim_in_suspend(struct net_device *dev, int val)
 	return BCME_OK;
 }
 #endif /* DISABLE_DTIM_IN_SUSPEND */
+
+int
+dhd_set_suspend_bcn_li_dtim(dhd_pub_t *dhd, bool set_suspend)
+{
+	int ret = BCME_OK;
+	int bcn_li_dtim = 0; /* Default bcn_li_dtim in resume mode is 0 */
+#if defined(BCMPCIE)
+	int lpas = 0;
+	int dtim_period = 0;
+	int bcn_interval = 0;
+	int bcn_to_dly = 0;
+#endif /* OEM_ANDROID && BCMPCIE */
+#ifdef ENABLE_BCN_LI_BCN_WAKEUP
+	int bcn_li_bcn = 1;
+#endif /* ENABLE_BCN_LI_BCN_WAKEUP */
+
+	if (set_suspend) {
+#ifdef WLTDLS
+		/* Do not set bcn_li_ditm on WFD mode */
+		if (dhd->tdls_mode) {
+			return 0;
+		}
+#endif /* WLTDLS */
+#if defined(BCMPCIE)
+		bcn_li_dtim = dhd_get_suspend_bcn_li_dtim(dhd, &dtim_period, &bcn_interval);
+		if ((bcn_li_dtim * dtim_period * bcn_interval) >= MIN_DTIM_FOR_ROAM_THRES_EXTEND) {
+			/*
+			 * Increase max roaming threshold from 2 secs to 8 secs
+			 * the real roam threshold is MIN(max_roam_threshold,
+			 * bcn_timeout/2)
+			 */
+			lpas = 1;
+			bcn_to_dly = 1;
+			/*
+			 * if bcn_to_dly is 1, the real roam threshold is
+			 * MIN(max_roam_threshold, bcn_timeout -1);
+			 * notify link down event after roaming procedure complete
+			 * if we hit bcn_timeout while we are in roaming progress.
+			 */
+		}
+#else
+		bcn_li_dtim = dhd_get_suspend_bcn_li_dtim(dhd);
+#endif /* OEM_ANDROID && BCMPCIE */
+	}
+
+	ret = dhd_iovar(dhd, 0, "bcn_li_dtim", (char *)&bcn_li_dtim, sizeof(bcn_li_dtim),
+		NULL, 0, TRUE);
+	if (ret < 0) {
+		DHD_ERROR(("%s set bcn_li_ditm failed %d\n", __FUNCTION__, ret));
+	}
+#if defined(BCMPCIE)
+	ret = dhd_iovar(dhd, 0, "lpas", (char *)&lpas, sizeof(lpas), NULL, 0, TRUE);
+	if (ret < 0) {
+		DHD_ERROR(("%s set lpas failed %d\n", __FUNCTION__, ret));
+	}
+	ret = dhd_iovar(dhd, 0, "bcn_to_dly", (char *)&bcn_to_dly, sizeof(bcn_to_dly),
+		NULL, 0, TRUE);
+	if (ret < 0) {
+		DHD_ERROR(("%s set bcn_to_dly failed %d\n", __FUNCTION__, ret));
+	}
+#endif /* OEM_ANDROID && BCMPCIE */
+#ifdef ENABLE_BCN_LI_BCN_WAKEUP
+	if (bcn_li_dtim) {
+		bcn_li_bcn = 0;
+	}
+	ret = dhd_iovar(dhd, 0, "bcn_li_bcn", (char *)&bcn_li_bcn, sizeof(bcn_li_bcn),
+		NULL, 0, TRUE);
+	if (ret < 0) {
+		DHD_ERROR(("%s set bcn_li_bcn failed %d\n", __FUNCTION__, ret));
+	}
+#endif /* ENABLE_BCN_LI_BCN_WAKEUP */
+
+	return 0;
+}
 
 #ifdef PKT_FILTER_SUPPORT
 int net_os_rxfilter_add_remove(struct net_device *dev, int add_remove, int num)

@@ -10034,6 +10034,38 @@ exit:
 }
 #endif /* WL_SAR_TX_POWER */
 
+static int
+wl_cfgvendor_set_dtim_config(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int err = BCME_OK, rem, type;
+	const struct nlattr *iter;
+	uint32 dtim_multiplier;
+	int set = 0;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhdp = cfg->pub;
+	struct net_device *net = wdev->netdev;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case ANDR_WIFI_ATTRIBUTE_DTIM_MULTIPLIER:
+				dtim_multiplier = nla_get_u32(iter);
+				WL_INFORM_MEM(("dtim multiplier %d\n", dtim_multiplier));
+				set = (dtim_multiplier > 0) ? FALSE : TRUE;
+				dhdp->suspend_bcn_li_dtim = dtim_multiplier;
+				err = net_os_set_max_dtim_enable(net, set);
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				return err;
+		}
+	}
+
+	return err;
+
+}
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
 const struct nla_policy andr_wifi_attr_policy[ANDR_WIFI_ATTRIBUTE_MAX] = {
 	[ANDR_WIFI_ATTRIBUTE_NUM_FEATURE_SET] = { .type = NLA_U32 },
@@ -10894,6 +10926,18 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 #endif /* LINUX_VERSION >= 5.3.0 */
 	},
 #endif /* WL_SUPPORT_AUTO_CHANNEL */
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_SET_DTIM_CONFIG
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_set_dtim_config,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = andr_wifi_attr_policy,
+		.maxattr = ANDR_WIFI_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
 };
 
 static const struct  nl80211_vendor_cmd_info wl_vendor_events [] = {
