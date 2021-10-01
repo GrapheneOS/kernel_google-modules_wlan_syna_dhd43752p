@@ -618,6 +618,9 @@ DHDCFLAGS += -DWL_WPS_SYNC -DBCMCRYPTO_COMPONENT
 # TCP SYNC flood attack block
 DHDCFLAGS += -DDHDTCPSYNC_FLOOD_BLK -DTCP_SYNC_FLOOD_LIMIT=50
 
+# 11AX CAP
+DHDCFLAGS += -DWL_CAP_HE
+
 # Path name to store the FW Debug symbol files
 DHDCFLAGS += -DPLATFORM_PATH="\"/vendor/etc/wifi/\""
 
