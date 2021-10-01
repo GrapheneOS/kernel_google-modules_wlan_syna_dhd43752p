@@ -1290,6 +1290,24 @@ int wl_channel_to_frequency(u32 chan, chanspec_band_t band)
 	return 0; /* not supported */
 }
 
+u8 wl_chanspec_to_host_bw_map(chanspec_t cur_chanspec)
+{
+	u8 host_bw = WIFI_CHAN_WIDTH_INVALID;
+
+	if (CHSPEC_IS20(cur_chanspec)) {
+		host_bw = WIFI_CHAN_WIDTH_20;
+	} else if (CHSPEC_IS40(cur_chanspec)) {
+		host_bw = WIFI_CHAN_WIDTH_40;
+	} else if (CHSPEC_IS80(cur_chanspec)) {
+		host_bw = WIFI_CHAN_WIDTH_80;
+	} else if (CHSPEC_IS160(cur_chanspec)) {
+		host_bw = WIFI_CHAN_WIDTH_160;
+	} else if (CHSPEC_IS8080(cur_chanspec)) {
+		host_bw = WIFI_CHAN_WIDTH_80P80;
+	}
+	return host_bw;
+}
+
 static void wl_add_remove_pm_enable_work(struct bcm_cfg80211 *cfg,
 	enum wl_pm_workq_act_type type)
 {

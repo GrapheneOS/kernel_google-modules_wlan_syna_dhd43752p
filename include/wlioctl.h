@@ -12938,6 +12938,7 @@ typedef enum wl_nan_tlv {
 	WL_NAN_XTLV_OOB_AF		= NAN_CMD(WL_NAN_CMD_GENERIC_COMP_ID, 0x03),
 
 	WL_NAN_XTLV_SCHED_INFO		= NAN_CMD(WL_NAN_CMD_SCHED_COMP_ID, 0x01),
+	WL_NAN_XTLV_NDL_SCHED_INFO	= NAN_CMD(WL_NAN_CMD_SCHED_COMP_ID, 0x02),
 
 	/* Nan Save-Restore XTLVs */
 	WL_NAN_XTLV_NSR2_PEER		= NAN_CMD(WL_NAN_CMD_NSR_COMP_ID, 0x21),
@@ -15195,6 +15196,21 @@ typedef struct wl_nan_fastdisc_s {
 } wl_nan_fastdisc_t;
 
 #define WL_NAN_FASTDISC_CFG_SIZE	1024 /* arbitrary */
+
+/* NAN NDL schedule info for a particular negotiation.
+ * WL_NAN_XTLV_NDL_SCHED_INFO
+ */
+typedef struct wl_nan_ndl_slot_info {
+	uint16	  chanspec;
+	uint8	  nss;
+	uint8	  pad;
+} wl_nan_ndl_slot_info_t;
+
+typedef struct wl_nan_ndl_sched_info {
+	uint16	  num_slot;
+	uint16	  period;
+	wl_nan_ndl_slot_info_t	  slot[];
+} wl_nan_ndl_sched_info_t;
 
 #ifdef WL_NANHO
 /* ****************** NAN Host offload specific strucures ****************** */

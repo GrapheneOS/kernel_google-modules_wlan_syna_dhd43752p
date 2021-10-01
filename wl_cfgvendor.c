@@ -3507,6 +3507,10 @@ nan_attr_to_str(u16 cmd)
 		break;
 	C2S(NAN_ATTRIBUTE_DW_EARLY_TERM);
 		break;
+	C2S(NAN_ATTRIBUTE_CHANNEL_INFO);
+		break;
+	C2S(NAN_ATTRIBUTE_NUM_CHANNELS);
+		break;
 	default:
 		id2str = "NAN_ATTRIBUTE_UNKNOWN";
 	}
@@ -5287,6 +5291,8 @@ static int
 wl_cfgvendor_nan_dp_estb_event_data_filler(struct sk_buff *msg,
 	nan_event_data_t *event_data) {
 	int ret = BCME_OK;
+	nan_ndl_sched_info_t *nan_sched_info = &event_data->ndl_sched_info;
+
 	ret = nla_put_u32(msg, NAN_ATTRIBUTE_NDP_ID, event_data->ndp_id);
 	if (unlikely(ret)) {
 		WL_ERR(("Failed to put NDP ID, ret=%d\n", ret));
@@ -5322,6 +5328,27 @@ wl_cfgvendor_nan_dp_estb_event_data_filler(struct sk_buff *msg,
 		}
 	}
 
+	if (nan_sched_info->num_channels > 0) {
+		if (nan_sched_info->num_channels > NAN_MAX_CHANNEL_INFO_SUPPORTED) {
+			WL_ERR(("Failed to put more num channels: %d than supported\n",
+					nan_sched_info->num_channels));
+			ret = BCME_BADLEN;
+			goto fail;
+		}
+		ret = nla_put_u32(msg, NAN_ATTRIBUTE_NUM_CHANNELS, nan_sched_info->num_channels);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put num channels, ret=%d\n", ret));
+			goto fail;
+		}
+
+		ret = nla_put(msg, NAN_ATTRIBUTE_CHANNEL_INFO,
+				(nan_sched_info->num_channels * sizeof(nan_channel_info_t)),
+				&nan_sched_info->channel_info[0]);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put nan channel info, ret=%d\n", ret));
+			goto fail;
+		}
+	}
 fail:
 	return ret;
 }
