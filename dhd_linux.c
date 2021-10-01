@@ -3899,6 +3899,7 @@ dhd_handle_pktdata(dhd_pub_t *dhdp, int ifidx, void *pkt, uint8 *pktdata, uint32
 	bool verbose_logging = FALSE;
 	dhd_dbg_ring_t *ring;
 	ring = &dhdp->dbg->dbg_rings[PACKET_LOG_RING_ID];
+	UNUSED_PARAMETER(verbose_logging);
 #endif /* DHD_PKT_LOGGING_DBGRING */
 
 	if (!pktdata || pktlen < ETHER_HDR_LEN) {
