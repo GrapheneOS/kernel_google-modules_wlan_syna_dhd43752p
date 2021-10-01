@@ -593,7 +593,8 @@ typedef enum wl_vendor_event {
 	BRCM_VENDOR_EVENT_WIPS			= 39,
 	NAN_ASYNC_RESPONSE_DISABLED		= 40,
 	BRCM_VENDOR_EVENT_RCC_INFO		= 41,
-	BRCM_VENDOR_EVENT_ROAMING		= 42
+	BRCM_VENDOR_EVENT_ACS			= 42,
+	BRCM_VENDOR_EVENT_ROAMING		= 43
 } wl_vendor_event_t;
 
 enum andr_wifi_attr {

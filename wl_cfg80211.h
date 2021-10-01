@@ -147,7 +147,7 @@ struct wl_ibss;
 #define CHAN2G(_channel, _freq, _flags) {			\
 	.band			= IEEE80211_BAND_2GHZ,		\
 	.center_freq		= (_freq),			\
-	.hw_value		= CH_TO_CHSPC(WL_CHANSPEC_BAND_2G, _channel),			\
+	.hw_value		= _channel,			\
 	.flags			= (_flags),			\
 	.max_antenna_gain	= 0,				\
 	.max_power		= 30,				\
@@ -156,7 +156,7 @@ struct wl_ibss;
 #define CHAN5G(_channel, _flags) {				\
 	.band			= IEEE80211_BAND_5GHZ,		\
 	.center_freq		= 5000 + (5 * (_channel)),	\
-	.hw_value		= CH_TO_CHSPC(WL_CHANSPEC_BAND_5G, _channel),			\
+	.hw_value		= _channel,			\
 	.flags			= (_flags),			\
 	.max_antenna_gain	= 0,				\
 	.max_power		= 30,				\
@@ -166,7 +166,7 @@ struct wl_ibss;
 #define CHAN6G(_channel, _flags) {				\
 	.band			= IEEE80211_BAND_6GHZ,		\
 	.center_freq		= 5950 + (5 * (_channel)),	\
-	.hw_value		= CH_TO_CHSPC(WL_CHANSPEC_BAND_6G, _channel),			\
+	.hw_value		= _channel,			\
 	.flags			= (_flags),			\
 	.max_antenna_gain	= 0,				\
 	.max_power		= 30,				\
@@ -184,7 +184,7 @@ struct wl_ibss;
 #define CHAN6G(_channel, _flags) {				\
 	.band			= IEEE80211_BAND_5GHZ,		\
 	.center_freq		= 5950 + (5 * (_channel)),	\
-	.hw_value		= CH_TO_CHSPC(WL_CHANSPEC_BAND_6G, _channel),			\
+	.hw_value		= _channel,			\
 	.flags			= (_flags),			\
 	.max_antenna_gain	= 0,				\
 	.max_power		= 30,				\
@@ -3111,6 +3111,8 @@ static inline s32 wl_rssi_offset(s32 rssi)
 #endif
 extern u8 wl_chanspec_to_host_bw_map(chanspec_t cur_chanspec);
 extern int wl_channel_to_frequency(u32 chan, chanspec_band_t band);
+extern chanspec_t
+wl_channel_to_chanspec(struct wiphy *wiphy, struct net_device *dev, u32 channel, u32 bw_cap);
 extern int wl_cfg80211_config_rsnxe_ie(struct bcm_cfg80211 *cfg, struct net_device *dev,
 		const u8 *parse, u32 len);
 extern bool dhd_force_country_change(struct net_device *dev);

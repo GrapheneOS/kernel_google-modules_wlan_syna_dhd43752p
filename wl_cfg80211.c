@@ -16694,7 +16694,7 @@ static int wl_construct_reginfo(struct bcm_cfg80211 *cfg, s32 bw_cap_2g, s32 bw_
 		if (!ht40_allowed && CHSPEC_IS40(chspec))
 			continue;
 		for (j = 0; j < array_size; j++) {
-			if (band_chan_arr[j].hw_value == chspec) {
+			if (band_chan_arr[j].hw_value == channel) {
 				break;
 			}
 		}
@@ -16707,7 +16707,7 @@ static int wl_construct_reginfo(struct bcm_cfg80211 *cfg, s32 bw_cap_2g, s32 bw_
 			band_chan_arr[index].center_freq =
 				wl_channel_to_frequency(channel, CHSPEC_BAND(chspec));
 #endif
-			band_chan_arr[index].hw_value = chspec;
+			band_chan_arr[index].hw_value = channel;
 			band_chan_arr[index].beacon_found = false;
 			band_chan_arr[index].flags &= ~IEEE80211_CHAN_DISABLED;
 
