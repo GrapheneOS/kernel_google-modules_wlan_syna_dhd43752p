@@ -10084,6 +10084,15 @@ const struct nla_policy andr_wifi_attr_policy[ANDR_WIFI_ATTRIBUTE_MAX] = {
 	[ANDR_WIFI_ATTRIBUTE_DTIM_MULTIPLIER] = { .type = NLA_U32, .len = sizeof(uint32) },
 };
 
+const struct nla_policy brcm_drv_attr_policy[BRCM_ATTR_DRIVER_MAX] = {
+	[BRCM_ATTR_DRIVER_CMD] = { .type = NLA_NUL_STRING },
+	[BRCM_ATTR_DRIVER_KEY_PMK] = { .type = NLA_BINARY, .len = WSEC_MAX_PASSPHRASE_LEN },
+	[BRCM_ATTR_DRIVER_FEATURE_FLAGS] = { .type = NLA_BINARY, .len =
+	((BRCM_WLAN_VENDOR_FEATURES_MAX / 8) + 1) },
+	[BRCM_ATTR_DRIVER_RAND_MAC] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[BRCM_ATTR_SAE_PWE] = { .type = NLA_U32 },
+};
+
 const struct nla_policy wake_stat_attr_policy[WAKE_STAT_ATTRIBUTE_MAX] = {
 	[WAKE_STAT_ATTRIBUTE_TOTAL_CMD_EVENT] = { .type = NLA_U32 },
 #ifdef CUSTOM_WAKE_REASON_STATS
@@ -10178,7 +10187,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = BRCM_VENDOR_SCMD_PRIV_STR
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_priv_string_handler
+		.doit = wl_cfgvendor_priv_string_handler,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = brcm_drv_attr_policy,
+		.maxattr = BRCM_ATTR_DRIVER_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #ifdef BCM_PRIV_CMD_SUPPORT
 	{
@@ -10187,7 +10200,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = BRCM_VENDOR_SCMD_BCM_STR
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_priv_bcm_handler
+		.doit = wl_cfgvendor_priv_bcm_handler,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = brcm_drv_attr_policy,
+		.maxattr = BRCM_ATTR_DRIVER_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* BCM_PRIV_CMD_SUPPORT */
 #if defined(WL_SAE) || defined(WL_CLIENT_SAE)
@@ -10206,7 +10223,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = BRCM_VENDOR_SCMD_SET_CONNECT_PARAMS
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_connect_params_handler
+		.doit = wl_cfgvendor_connect_params_handler,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = brcm_drv_attr_policy,
+		.maxattr = BRCM_ATTR_DRIVER_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10214,7 +10235,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = BRCM_VENDOR_SCMD_SET_START_AP_PARAMS
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_start_ap_params_handler
+		.doit = wl_cfgvendor_start_ap_params_handler,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = brcm_drv_attr_policy,
+		.maxattr = BRCM_ATTR_DRIVER_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #ifdef GSCAN_SUPPORT
 	{
@@ -10830,7 +10855,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = BRCM_VENDOR_SCMD_SET_PMK
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_set_pmk
+		.doit = wl_cfgvendor_set_pmk,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = brcm_drv_attr_policy,
+		.maxattr = BRCM_ATTR_DRIVER_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* !BCMSUP_4WAY_HANDSHAKE || LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0) */
 	{
@@ -10839,7 +10868,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = BRCM_VENDOR_SCMD_GET_FEATURES
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_get_driver_feature
+		.doit = wl_cfgvendor_get_driver_feature,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = brcm_drv_attr_policy,
+		.maxattr = BRCM_ATTR_DRIVER_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #if defined(WL_CFG80211) && defined(DHD_FILE_DUMP_EVENT)
 	{
@@ -10898,7 +10931,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = BRCM_VENDOR_SCMD_SET_MAC
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV,
-		.doit = wl_cfgvendor_set_p2p_rand_mac
+		.doit = wl_cfgvendor_set_p2p_rand_mac,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = brcm_drv_attr_policy,
+		.maxattr = BRCM_ATTR_DRIVER_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* WL_P2P_RAND */
 #ifdef WL_SAR_TX_POWER
