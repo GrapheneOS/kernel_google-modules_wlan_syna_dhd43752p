@@ -3604,7 +3604,8 @@ wl_cfgvendor_nan_cmd_reply(struct wiphy *wiphy, int nan_cmd,
 	nan_req_resp->value = ret;
 	err = wl_cfgvendor_send_cmd_reply(wiphy, nan_req_resp,
 		sizeof(*nan_req_resp));
-	return err;
+	/* giving more prio to ret than err */
+	return (ret == 0) ? err : ret;
 }
 
 static void
@@ -3687,7 +3688,7 @@ wl_cfgvendor_nan_parse_dp_sec_info_args(struct wiphy *wiphy,
 			}
 			break;
 		case NAN_ATTRIBUTE_PUBLISH_ID:
-			cmd_data->pub_id = nla_get_u16(iter);
+			cmd_data->pub_id = nla_get_u32(iter);
 			break;
 		case NAN_ATTRIBUTE_NDP_ID:
 			cmd_data->ndp_instance_id = nla_get_u32(iter);
@@ -4063,11 +4064,11 @@ wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy,
 
 		/* Nan Publish/Subscribe request Attributes */
 		case NAN_ATTRIBUTE_PUBLISH_ID:
-			if (nla_len(iter) != sizeof(uint16)) {
+			if (nla_len(iter) != sizeof(uint32)) {
 				ret = -EINVAL;
 				goto exit;
 			}
-			cmd_data->pub_id = nla_get_u16(iter);
+			cmd_data->pub_id = nla_get_u32(iter);
 			cmd_data->local_id = cmd_data->pub_id;
 			break;
 		case NAN_ATTRIBUTE_MAC_ADDR:
@@ -5357,7 +5358,7 @@ wl_cfgvendor_nan_dp_ind_event_data_filler(struct sk_buff *msg,
 		nan_event_data_t *event_data) {
 	int ret = BCME_OK;
 
-	ret = nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID,
+	ret = nla_put_u32(msg, NAN_ATTRIBUTE_PUBLISH_ID,
 			event_data->pub_id);
 	if (unlikely(ret)) {
 		WL_ERR(("Failed to put pub ID, ret=%d\n", ret));
@@ -5455,7 +5456,7 @@ wl_cfgvendor_nan_svc_terminate_event_filler(struct sk_buff *msg,
 			goto fail;
 		}
 	} else {
-		ret = nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID,
+		ret = nla_put_u32(msg, NAN_ATTRIBUTE_PUBLISH_ID,
 				event_data->local_inst_id);
 		if (unlikely(ret)) {
 			WL_ERR(("Failed to put local inst id, ret=%d\n", ret));
@@ -5606,7 +5607,7 @@ wl_cfgvendor_nan_sub_match_event_filler(struct sk_buff *msg,
 		WL_ERR(("Failed to put handle, ret=%d\n", ret));
 		goto fail;
 	}
-	ret = nla_put_u16(msg, NAN_ATTRIBUTE_PUBLISH_ID, event_data->pub_id);
+	ret = nla_put_u32(msg, NAN_ATTRIBUTE_PUBLISH_ID, event_data->pub_id);
 	if (unlikely(ret)) {
 		WL_ERR(("Failed to put pub id, ret=%d\n", ret));
 		goto fail;
@@ -5804,11 +5805,13 @@ wl_cfgvendor_send_nan_async_resp(struct wiphy *wiphy, struct wireless_dev *wdev,
 	int ret = BCME_OK;
 	int buf_len = NAN_EVENT_BUFFER_SIZE_LARGE;
 	gfp_t kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
+	struct bcm_cfg80211 *cfg = (struct bcm_cfg80211 *)wiphy_priv(wiphy);
 
 	struct sk_buff *msg;
 
 	NAN_DBG_ENTER();
 
+	wdev = bcmcfg_to_nmi_wdev(cfg);
 	/* Allocate the skb for vendor event */
 	msg = CFG80211_VENDOR_EVENT_ALLOC(wiphy, wdev, buf_len,
 		event_id, kflags);
@@ -5832,8 +5835,8 @@ wl_cfgvendor_send_nan_async_resp(struct wiphy *wiphy, struct wireless_dev *wdev,
 
 fail:
 	dev_kfree_skb_any(msg);
-	WL_ERR(("Event not implemented or unknown -- Free skb, event_id = %d, ret = %d\n",
-		event_id, ret));
+	WL_ERR(("%s: Event not implemented or unknown -- Free skb, event_id = %d, ret = %d\n",
+		__func__, event_id, ret));
 	NAN_DBG_EXIT();
 	return ret;
 }
@@ -5869,6 +5872,7 @@ wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
 
 	NAN_DBG_ENTER();
 
+	dev = bcmcfg_to_nmi_ndev(cfg);
 	/* Allocate the skb for vendor event */
 	msg = CFG80211_VENDOR_EVENT_ALLOC(wiphy, ndev_to_wdev(dev), buf_len,
 		event_id, kflags);
@@ -5902,7 +5906,7 @@ wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
 			WL_DBG(("GOOGLE_NAN_EVENT_FOLLOWUP\n"));
 			ret = wl_cfgvendor_nan_tx_followup_event_filler(msg, event_data);
 			if (unlikely(ret)) {
-				WL_ERR(("Failed to fill sub match event data, ret=%d\n", ret));
+				WL_ERR(("Failed to fill tx follow up event data, ret=%d\n", ret));
 				goto fail;
 			}
 		}
@@ -6004,8 +6008,8 @@ wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
 
 fail:
 	dev_kfree_skb_any(msg);
-	WL_ERR(("Event not implemented or unknown -- Free skb, event_id = %d, ret = %d\n",
-			event_id, ret));
+	WL_ERR(("%s: Event not implemented or unknown -- Free skb, event_id = %d, ret = %d\n",
+			__func__, event_id, ret));
 	NAN_DBG_EXIT();
 	return ret;
 }
@@ -6020,6 +6024,7 @@ wl_cfgvendor_nan_req_subscribe(struct wiphy *wiphy,
 	nan_hal_resp_t nan_req_resp;
 
 	NAN_DBG_ENTER();
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	/* Blocking Subscribe if NAN is not enable */
 	if (!cfg->nancfg->nan_enable) {
 		WL_ERR(("nan is not enabled, subscribe blocked\n"));
@@ -6083,6 +6088,7 @@ wl_cfgvendor_nan_req_publish(struct wiphy *wiphy,
 	nan_hal_resp_t nan_req_resp;
 	NAN_DBG_ENTER();
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	/* Blocking Publish if NAN is not enable */
 	if (!cfg->nancfg->nan_enable) {
 		WL_ERR(("nan is not enabled publish blocked\n"));
@@ -6146,6 +6152,7 @@ wl_cfgvendor_nan_start_handler(struct wiphy *wiphy,
 	nan_hal_resp_t nan_req_resp;
 	uint32 nan_attr_mask = 0;
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	cmd_data = (nan_config_cmd_data_t *)MALLOCZ(cfg->osh, sizeof(*cmd_data));
 	if (!cmd_data) {
 		WL_ERR(("%s: memory allocation failed\n", __func__));
@@ -6214,6 +6221,7 @@ wl_cfgvendor_terminate_dp_rng_sessions(struct bcm_cfg80211 *cfg,
 	nan_ranging_inst_t *ranging_inst = NULL;
 #endif /* RTT_SUPPORT */
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	*ssn_exists = false;
 	dhdp = wl_cfg80211_get_dhdp(wdev->netdev);
 	/* Cleanup active Data Paths If any */
@@ -6264,6 +6272,7 @@ wl_cfgvendor_nan_stop_handler(struct wiphy *wiphy,
 	NAN_DBG_ENTER();
 	mutex_lock(&cfg->if_sync);
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	if (nancfg->nan_init_state == false) {
 		WL_INFORM_MEM(("nan is not initialized/nmi doesnt exists\n"));
 		goto exit;
@@ -6313,6 +6322,7 @@ wl_cfgvendor_nan_config_handler(struct wiphy *wiphy,
 	}
 	NAN_DBG_ENTER();
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	bzero(&nan_req_resp, sizeof(nan_req_resp));
 
 	cmd_data->avail_params.duration = NAN_BAND_INVALID;  /* Setting to some default */
@@ -6357,6 +6367,7 @@ wl_cfgvendor_nan_cancel_publish(struct wiphy *wiphy,
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	nan_hal_resp_t nan_req_resp;
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	/* Blocking Cancel_Publish if NAN is not enable */
 	if (!cfg->nancfg->nan_enable) {
 		WL_ERR(("nan is not enabled, cancel publish blocked\n"));
@@ -6404,6 +6415,7 @@ wl_cfgvendor_nan_cancel_subscribe(struct wiphy *wiphy,
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	nan_hal_resp_t nan_req_resp;
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	/* Blocking Cancel_Subscribe if NAN is not enableb */
 	if (!cfg->nancfg->nan_enable) {
 		WL_ERR(("nan is not enabled, cancel subscribe blocked\n"));
@@ -6451,6 +6463,7 @@ wl_cfgvendor_nan_transmit(struct wiphy *wiphy,
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	nan_hal_resp_t nan_req_resp;
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	/* Blocking Transmit if NAN is not enable */
 	if (!cfg->nancfg->nan_enable) {
 		WL_ERR(("nan is not enabled, transmit blocked\n"));
@@ -6496,6 +6509,7 @@ wl_cfgvendor_nan_get_capablities(struct wiphy *wiphy,
 
 	NAN_DBG_ENTER();
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	bzero(&nan_req_resp, sizeof(nan_req_resp));
 	ret = wl_cfgnan_get_capablities_handler(wdev->netdev, cfg, &nan_req_resp.capabilities);
 	if (ret) {
@@ -6520,6 +6534,7 @@ wl_cfgvendor_nan_data_path_iface_create(struct wiphy *wiphy,
 	nan_hal_resp_t nan_req_resp;
 	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(wdev->netdev);
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	if (!cfg->nancfg->nan_init_state) {
 		WL_ERR(("%s: NAN is not inited or Device doesn't support NAN \n", __func__));
 		ret = -ENODEV;
@@ -6577,6 +6592,7 @@ wl_cfgvendor_nan_data_path_iface_delete(struct wiphy *wiphy,
 	}
 
 	NAN_DBG_ENTER();
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	cmd_data = (nan_datapath_cmd_data_t *)MALLOCZ(cfg->osh, sizeof(*cmd_data));
 	if (!cmd_data) {
 		WL_ERR(("%s: memory allocation failed\n", __func__));
@@ -6621,6 +6637,7 @@ wl_cfgvendor_nan_data_path_request(struct wiphy *wiphy,
 		goto exit;
 	}
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	NAN_DBG_ENTER();
 	cmd_data = (nan_datapath_cmd_data_t *)MALLOCZ(cfg->osh, sizeof(*cmd_data));
 	if (!cmd_data) {
@@ -6671,6 +6688,7 @@ wl_cfgvendor_nan_data_path_response(struct wiphy *wiphy,
 		goto exit;
 	}
 	NAN_DBG_ENTER();
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	cmd_data = (nan_datapath_cmd_data_t *)MALLOCZ(cfg->osh, sizeof(*cmd_data));
 	if (!cmd_data) {
 		WL_ERR(("%s: memory allocation failed\n", __func__));
@@ -6708,6 +6726,7 @@ wl_cfgvendor_nan_data_path_end(struct wiphy *wiphy,
 	int status = BCME_ERROR;
 
 	NAN_DBG_ENTER();
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	if (!cfg->nancfg->nan_enable) {
 		WL_ERR(("nan is not enabled, nan data path end blocked\n"));
 		ret = BCME_OK;
@@ -6752,6 +6771,7 @@ wl_cfgvendor_nan_data_path_sec_info(struct wiphy *wiphy,
 	dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(wdev->netdev);
 
 	NAN_DBG_ENTER();
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	if (!cfg->nancfg->nan_enable) {
 		WL_ERR(("nan is not enabled\n"));
 		ret = BCME_UNSUPPORTED;
@@ -6820,6 +6840,7 @@ wl_cfgvendor_nan_enable_merge(struct wiphy *wiphy,
 		goto exit;
 	}
 
+	wdev = bcmcfg_to_prmry_wdev(cfg);
 	ret = wl_cfgvendor_nan_parse_args(wiphy, data, len, cmd_data, &nan_attr_mask);
 	if (ret) {
 		WL_ERR((" Enable merge: failed to parse nan config vendor args, ret = %d\n", ret));
@@ -8635,12 +8656,12 @@ static int wl_cfgvendor_dbg_get_rx_pkt_fates(struct wiphy *wiphy,
 #endif /* DBG_PKT_MON */
 
 #ifdef KEEP_ALIVE
+/* max size of IP packet for keep alive */
+#define MKEEP_ALIVE_IP_PKT_MAX 256
+
 static int wl_cfgvendor_start_mkeep_alive(struct wiphy *wiphy, struct wireless_dev *wdev,
 	const void *data, int len)
 {
-	/* max size of IP packet for keep alive */
-	const int MKEEP_ALIVE_IP_PKT_MAX = 256;
-
 	int ret = BCME_OK, rem, type;
 	uint8 mkeep_alive_id = 0;
 	uint8 *ip_pkt = NULL;
@@ -8759,7 +8780,16 @@ static int wl_cfgvendor_stop_mkeep_alive(struct wiphy *wiphy, struct wireless_de
 }
 #endif /* KEEP_ALIVE */
 
-#if defined(PKT_FILTER_SUPPORT) && defined(APF)
+#if defined(APF)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+const struct nla_policy apf_atrribute_policy[APF_ATTRIBUTE_MAX] = {
+	[APF_ATTRIBUTE_VERSION] = { .type = NLA_U32 },
+	[APF_ATTRIBUTE_MAX_LEN] = { .type = NLA_U32 },
+	[APF_ATTRIBUTE_PROGRAM] = { .type = NLA_BINARY },
+	[APF_ATTRIBUTE_PROGRAM_LEN] = { .type = NLA_U32 },
+};
+#endif /* LINUX_VERSION >= 5.3 */
+
 static int
 wl_cfgvendor_apf_get_capabilities(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void *data, int len)
@@ -8773,7 +8803,7 @@ wl_cfgvendor_apf_get_capabilities(struct wiphy *wiphy,
 	ret = dhd_dev_apf_get_version(ndev, &ver);
 	if (unlikely(ret)) {
 		WL_ERR(("APF get version failed, ret=%d\n", ret));
-		return ret;
+		goto fail;
 	}
 
 	/* APF memory size limit */
@@ -8781,7 +8811,7 @@ wl_cfgvendor_apf_get_capabilities(struct wiphy *wiphy,
 	ret = dhd_dev_apf_get_max_len(ndev, &max_len);
 	if (unlikely(ret)) {
 		WL_ERR(("APF get maximum length failed, ret=%d\n", ret));
-		return ret;
+		goto fail;
 	}
 
 	mem_needed = VENDOR_REPLY_OVERHEAD + (ATTRIBUTE_U32_LEN * 2);
@@ -8789,28 +8819,34 @@ wl_cfgvendor_apf_get_capabilities(struct wiphy *wiphy,
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
 	if (unlikely(!skb)) {
 		WL_ERR(("%s: can't allocate %d bytes\n", __FUNCTION__, mem_needed));
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto fail;
 	}
 
 	ret = nla_put_u32(skb, APF_ATTRIBUTE_VERSION, ver);
 	if (ret < 0) {
 		WL_ERR(("Failed to put APF_ATTRIBUTE_VERSION, ret:%d\n", ret));
-		goto exit;
+		goto fail;
 	}
 	ret = nla_put_u32(skb, APF_ATTRIBUTE_MAX_LEN, max_len);
 	if (ret < 0) {
 		WL_ERR(("Failed to put APF_ATTRIBUTE_MAX_LEN, ret:%d\n", ret));
-		goto exit;
+		goto fail;
 	}
 
 	ret = cfg80211_vendor_cmd_reply(skb);
 	if (unlikely(ret)) {
 		WL_ERR(("vendor command reply failed, ret=%d\n", ret));
 	}
+
 	return ret;
-exit:
-	/* Free skb memory */
-	kfree_skb(skb);
+
+fail:
+	if (skb) {
+		/* Free skb memory */
+		kfree_skb(skb);
+	}
+
 	return ret;
 }
 
@@ -8822,7 +8858,7 @@ wl_cfgvendor_apf_set_filter(struct wiphy *wiphy,
 	const struct nlattr *iter;
 	u8 *program = NULL;
 	u32 program_len = 0;
-	int ret, tmp, type;
+	int ret, tmp, type, max_len;
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 
 	if (len <= 0) {
@@ -8830,6 +8866,15 @@ wl_cfgvendor_apf_set_filter(struct wiphy *wiphy,
 		ret = -EINVAL;
 		goto exit;
 	}
+
+	/* APF memory size limit */
+	max_len = 0;
+	ret = dhd_dev_apf_get_max_len(ndev, &max_len);
+	if (unlikely(ret)) {
+		WL_ERR(("APF get maximum length failed, ret=%d\n", ret));
+		return ret;
+	}
+
 	nla_for_each_attr(iter, data, len, tmp) {
 		type = nla_type(iter);
 		switch (type) {
@@ -8844,7 +8889,7 @@ wl_cfgvendor_apf_set_filter(struct wiphy *wiphy,
 					goto exit;
 				}
 
-				if (program_len > WL_APF_PROGRAM_MAX_SIZE) {
+				if (program_len > max_len) {
 					WL_ERR(("program len is more than expected len\n"));
 					ret = -EINVAL;
 					goto exit;
@@ -8896,7 +8941,7 @@ exit:
 	}
 	return ret;
 }
-#endif /* PKT_FILTER_SUPPORT && APF */
+#endif /* APF */
 
 #ifdef NDO_CONFIG_SUPPORT
 static int wl_cfgvendor_configure_nd_offload(struct wiphy *wiphy,
@@ -10084,6 +10129,36 @@ const struct nla_policy andr_wifi_attr_policy[ANDR_WIFI_ATTRIBUTE_MAX] = {
 	[ANDR_WIFI_ATTRIBUTE_DTIM_MULTIPLIER] = { .type = NLA_U32, .len = sizeof(uint32) },
 };
 
+const struct nla_policy dump_buf_policy[DUMP_BUF_ATTR_MAX] = {
+	[DUMP_BUF_ATTR_MEMDUMP] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_SSSR_C0_D11_BEFORE] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_SSSR_C0_D11_AFTER] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_SSSR_C1_D11_BEFORE] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_SSSR_C1_D11_AFTER] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_SSSR_C2_D11_BEFORE] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_SSSR_C2_D11_AFTER] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_SSSR_DIG_BEFORE] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_SSSR_DIG_AFTER] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_TIMESTAMP] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_GENERAL_LOG] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_ECNTRS] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_SPECIAL_LOG] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_DHD_DUMP] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_EXT_TRAP] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_HEALTH_CHK] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_PRESERVE_LOG] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_COOKIE] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_FLOWRING_DUMP] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_PKTLOG] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_PKTLOG_DEBUG] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_STATUS_LOG] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_AXI_ERROR] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_RTT_LOG] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_SDTC_ETB_DUMP] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_PKTID_MAP_LOG] = { .type = NLA_BINARY },
+	[DUMP_BUF_ATTR_PKTID_UNMAP_LOG] = { .type = NLA_BINARY },
+};
+
 const struct nla_policy brcm_drv_attr_policy[BRCM_ATTR_DRIVER_MAX] = {
 	[BRCM_ATTR_DRIVER_CMD] = { .type = NLA_NUL_STRING },
 	[BRCM_ATTR_DRIVER_KEY_PMK] = { .type = NLA_BINARY, .len = WSEC_MAX_PASSPHRASE_LEN },
@@ -10093,6 +10168,179 @@ const struct nla_policy brcm_drv_attr_policy[BRCM_ATTR_DRIVER_MAX] = {
 	[BRCM_ATTR_SAE_PWE] = { .type = NLA_U32 },
 };
 
+const struct nla_policy rtt_attr_policy[RTT_ATTRIBUTE_MAX] = {
+	[RTT_ATTRIBUTE_TARGET_CNT] = { .type = NLA_U8 },
+	[RTT_ATTRIBUTE_TARGET_INFO] = { .type = NLA_NESTED },
+	[RTT_ATTRIBUTE_TARGET_MAC] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[RTT_ATTRIBUTE_TARGET_TYPE] = { .type = NLA_U8 },
+	[RTT_ATTRIBUTE_TARGET_PEER] = { .type = NLA_U8 },
+	[RTT_ATTRIBUTE_TARGET_CHAN] = { .type = NLA_BINARY },
+	[RTT_ATTRIBUTE_TARGET_PERIOD] = { .type = NLA_U32 },
+	[RTT_ATTRIBUTE_TARGET_NUM_BURST] = { .type = NLA_U32 },
+	[RTT_ATTRIBUTE_TARGET_NUM_FTM_BURST] = { .type = NLA_U32 },
+	[RTT_ATTRIBUTE_TARGET_NUM_RETRY_FTM] = { .type = NLA_U32 },
+	[RTT_ATTRIBUTE_TARGET_NUM_RETRY_FTMR] = { .type = NLA_U32 },
+	[RTT_ATTRIBUTE_TARGET_LCI] = { .type = NLA_U8 },
+	[RTT_ATTRIBUTE_TARGET_LCR] = { .type = NLA_U8 },
+	[RTT_ATTRIBUTE_TARGET_BURST_DURATION] = { .type = NLA_U32 },
+	[RTT_ATTRIBUTE_TARGET_PREAMBLE] = { .type = NLA_U8 },
+	[RTT_ATTRIBUTE_TARGET_BW] = { .type = NLA_U8 },
+	[RTT_ATTRIBUTE_RESULTS_COMPLETE] = { .type = NLA_U32 },
+	[RTT_ATTRIBUTE_RESULTS_PER_TARGET] = { .type = NLA_NESTED },
+	[RTT_ATTRIBUTE_RESULT_CNT] = { .type = NLA_U32 },
+	[RTT_ATTRIBUTE_RESULT] = { .type = NLA_BINARY, .len = sizeof(rtt_result_t) },
+	[RTT_ATTRIBUTE_RESULT_DETAIL] = { .type = NLA_BINARY,
+	.len = sizeof(struct rtt_result_detail) },
+};
+
+#ifdef KEEP_ALIVE
+const struct nla_policy mkeep_alive_attr_policy[MKEEP_ALIVE_ATTRIBUTE_MAX] = {
+	[MKEEP_ALIVE_ATTRIBUTE_ID] = { .type = NLA_U8 },
+	[MKEEP_ALIVE_ATTRIBUTE_IP_PKT] = { .type = NLA_BINARY, .len = MKEEP_ALIVE_IP_PKT_MAX },
+	[MKEEP_ALIVE_ATTRIBUTE_IP_PKT_LEN] = { .type = NLA_U16 },
+	[MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC] = { .type = NLA_U32 },
+	[MKEEP_ALIVE_ATTRIBUTE_ETHER_TYPE] = { .type = NLA_U16 }
+};
+#endif /* KEEP_ALIVE */
+#ifdef WL_NAN
+const struct nla_policy nan_attr_policy[NAN_ATTRIBUTE_MAX] = {
+	[NAN_ATTRIBUTE_2G_SUPPORT] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_5G_SUPPORT] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_CLUSTER_LOW] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_CLUSTER_HIGH] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_SID_BEACON] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SUB_SID_BEACON] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SYNC_DISC_2G_BEACON] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SYNC_DISC_5G_BEACON] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SDF_2G_SUPPORT] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SDF_5G_SUPPORT] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_HOP_COUNT_LIMIT] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RANDOM_TIME] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_MASTER_PREF] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_OUI] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_WARMUP_TIME] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_CHANNEL] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_24G_CHANNEL] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_5G_CHANNEL] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_CONF_CLUSTER_VAL] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_DWELL_TIME] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SCAN_PERIOD] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_DWELL_TIME_5G] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SCAN_PERIOD_5G] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_AVAIL_BIT_MAP] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_ENTRY_CONTROL] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RSSI_CLOSE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RSSI_MIDDLE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RSSI_PROXIMITY] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RSSI_CLOSE_5G] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RSSI_MIDDLE_5G] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RSSI_PROXIMITY_5G] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RSSI_WINDOW_SIZE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_CIPHER_SUITE_TYPE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SCID_LEN] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_SCID] = { .type = NLA_BINARY, .len = MAX_SCID_LEN },
+	[NAN_ATTRIBUTE_2G_AWAKE_DW] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_5G_AWAKE_DW] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_DISC_IND_CFG] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_MAC_ADDR] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[NAN_ATTRIBUTE_RANDOMIZATION_INTERVAL] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_CMD_USE_NDPE] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_ENABLE_MERGE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_DISCOVERY_BEACON_INTERVAL] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_NSS] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_ENABLE_RANGING] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_DW_EARLY_TERM] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_TRANSAC_ID] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_PUBLISH_ID] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO] = { .type = NLA_BINARY, .len =
+	NAN_MAX_SERVICE_SPECIFIC_INFO_LEN },
+	[NAN_ATTRIBUTE_SUBSCRIBE_ID] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_SUBSCRIBE_TYPE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_PUBLISH_COUNT] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_PUBLISH_TYPE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_PERIOD] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_TTL] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_SERVICE_NAME_LEN] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_SERVICE_NAME] = { .type = NLA_BINARY, .len = WL_NAN_SVC_HASH_LEN },
+	[NAN_ATTRIBUTE_PEER_ID] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_INST_ID] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_SUBSCRIBE_COUNT] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SSIREQUIREDFORMATCHINDICATION] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SUBSCRIBE_MATCH] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_PUBLISH_MATCH] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SERVICERESPONSEFILTER] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SERVICERESPONSEINCLUDE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_USESERVICERESPONSEFILTER] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RX_MATCH_FILTER_LEN] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_RX_MATCH_FILTER] = { .type = NLA_BINARY, .len = MAX_MATCH_FILTER_LEN },
+	[NAN_ATTRIBUTE_TX_MATCH_FILTER_LEN] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_TX_MATCH_FILTER] = { .type = NLA_BINARY, .len = MAX_MATCH_FILTER_LEN },
+	[NAN_ATTRIBUTE_MAC_ADDR_LIST_NUM_ENTRIES] = { .type = NLA_U16, .len = sizeof(uint16) },
+	[NAN_ATTRIBUTE_MAC_ADDR_LIST] = { .type = NLA_BINARY, .len =
+	(NAN_SRF_MAX_MAC*ETHER_ADDR_LEN) },
+	[NAN_ATTRIBUTE_TX_TYPE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SDE_CONTROL_CONFIG_DP] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SDE_CONTROL_RANGE_SUPPORT] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SDE_CONTROL_DP_TYPE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SDE_CONTROL_SECURITY] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RECV_IND_CFG] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_KEY_TYPE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_KEY_LEN] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_KEY_DATA] = { .type = NLA_BINARY, .len = NAN_MAX_PMK_LEN },
+	[NAN_ATTRIBUTE_RSSI_THRESHOLD_FLAG] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO_LEN] = { .type = NLA_U16, .len =
+	sizeof(uint16) },
+	[NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO] = { .type = NLA_BINARY, .len =
+	MAX_SDEA_SVC_INFO_LEN },
+	[NAN_ATTRIBUTE_SECURITY] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RANGING_INTERVAL] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_RANGING_INGRESS_LIMIT] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_RANGING_EGRESS_LIMIT] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_RANGING_INDICATION] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_SVC_RESPONDER_POLICY] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_NDP_ID] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_IFACE] = { .type = NLA_BINARY, .len = IFNAMSIZ+1 },
+	[NAN_ATTRIBUTE_QOS] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_RSP_CODE] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_INST_COUNT] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_PEER_DISC_MAC_ADDR] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[NAN_ATTRIBUTE_PEER_NDI_MAC_ADDR] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[NAN_ATTRIBUTE_IF_ADDR] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[NAN_ATTRIBUTE_ENTRY_CONTROL] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_AVAIL_BIT_MAP] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_CHANNEL] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_NO_CONFIG_AVAIL] = { .type = NLA_U8, .len = sizeof(uint8) },
+	[NAN_ATTRIBUTE_CHANNEL_INFO] = { .type = NLA_BINARY, .len =
+	sizeof(nan_channel_info_t) * NAN_MAX_CHANNEL_INFO_SUPPORTED },
+	[NAN_ATTRIBUTE_NUM_CHANNELS] = { .type = NLA_U32, .len = sizeof(uint32) },
+};
+#endif /* WL_NAN */
+
+const struct nla_policy gscan_attr_policy[GSCAN_ATTRIBUTE_MAX] = {
+	[GSCAN_ATTRIBUTE_BAND] = { .type = NLA_U32 },
+	[GSCAN_ATTRIBUTE_NUM_CHANNELS] = { .type = NLA_U32 },
+	[GSCAN_ATTRIBUTE_CHANNEL_LIST] = { .type = NLA_BINARY },
+	[GSCAN_ATTRIBUTE_WHITELIST_SSID] = { .type = NLA_BINARY, .len = IEEE80211_MAX_SSID_LEN },
+	[GSCAN_ATTRIBUTE_NUM_WL_SSID] = { .type = NLA_U32 },
+	[GSCAN_ATTRIBUTE_WL_SSID_LEN] = { .type = NLA_U32 },
+	[GSCAN_ATTRIBUTE_WL_SSID_FLUSH] = { .type = NLA_U32 },
+	[GSCAN_ATTRIBUTE_WHITELIST_SSID_ELEM] = { .type = NLA_NESTED },
+	/* length is sizeof(wl_ssid_whitelist_t) * MAX_SSID_WHITELIST_NUM */
+	[GSCAN_ATTRIBUTE_NUM_BSSID] = { .type = NLA_U32 },
+	[GSCAN_ATTRIBUTE_BSSID_PREF_LIST] = { .type = NLA_NESTED },
+	/* length is sizeof(wl_bssid_pref_list_t) * MAX_BSSID_PREF_LIST_NUM */
+	[GSCAN_ATTRIBUTE_BSSID_PREF_FLUSH] = { .type = NLA_U32 },
+	[GSCAN_ATTRIBUTE_BSSID_PREF] = { .type = NLA_BINARY, .len = ETH_ALEN },
+	[GSCAN_ATTRIBUTE_RSSI_MODIFIER] = { .type = NLA_U32 },
+	[GSCAN_ATTRIBUTE_BSSID_BLACKLIST_FLUSH] = { .type = NLA_U32 },
+	[GSCAN_ATTRIBUTE_BLACKLIST_BSSID] = { .type = NLA_BINARY, .len = ETH_ALEN },
+	[GSCAN_ATTRIBUTE_ROAM_STATE_SET] = { .type = NLA_U32 },
+};
+
+#ifdef DHD_WAKE_STATUS
 const struct nla_policy wake_stat_attr_policy[WAKE_STAT_ATTRIBUTE_MAX] = {
 	[WAKE_STAT_ATTRIBUTE_TOTAL_CMD_EVENT] = { .type = NLA_U32 },
 #ifdef CUSTOM_WAKE_REASON_STATS
@@ -10121,6 +10369,7 @@ const struct nla_policy wake_stat_attr_policy[WAKE_STAT_ATTRIBUTE_MAX] = {
 	[WAKE_STAT_ATTRIBUTE_IPV6_RX_MULTICAST_ADD_CNT] = { .type = NLA_U32 },
 	[WAKE_STAT_ATTRIBUTE_OTHER_RX_MULTICAST_ADD_CNT] = { .type = NLA_U32 },
 };
+#endif
 
 #ifdef RSSI_MONITOR_SUPPORT
 const struct nla_policy rssi_monitor_attr_policy[RSSI_MONITOR_ATTRIBUTE_MAX] = {
@@ -10306,7 +10555,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = GSCAN_SUBCMD_GET_CHANNEL_LIST
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_gscan_get_channel_list
+		.doit = wl_cfgvendor_gscan_get_channel_list,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = gscan_attr_policy,
+		.maxattr = GSCAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* GSCAN_SUPPORT || DHD_GET_VALID_CHANNELS */
 #ifdef RTT_SUPPORT
@@ -10316,7 +10569,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = RTT_SUBCMD_SET_CONFIG
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_rtt_set_config
+		.doit = wl_cfgvendor_rtt_set_config,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = rtt_attr_policy,
+		.maxattr = RTT_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10324,7 +10581,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = RTT_SUBCMD_CANCEL_CONFIG
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_rtt_cancel_config
+		.doit = wl_cfgvendor_rtt_cancel_config,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = rtt_attr_policy,
+		.maxattr = RTT_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10332,7 +10593,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = RTT_SUBCMD_GETCAPABILITY
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_rtt_get_capability
+		.doit = wl_cfgvendor_rtt_get_capability,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = rtt_attr_policy,
+		.maxattr = RTT_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10340,7 +10605,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = RTT_SUBCMD_GETAVAILCHANNEL
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_rtt_get_responder_info
+		.doit = wl_cfgvendor_rtt_get_responder_info,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = rtt_attr_policy,
+		.maxattr = RTT_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10348,7 +10617,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = RTT_SUBCMD_SET_RESPONDER
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_rtt_set_responder
+		.doit = wl_cfgvendor_rtt_set_responder,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = rtt_attr_policy,
+		.maxattr = RTT_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10356,7 +10629,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = RTT_SUBCMD_CANCEL_RESPONDER
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_rtt_cancel_responder
+		.doit = wl_cfgvendor_rtt_cancel_responder,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = rtt_attr_policy,
+		.maxattr = RTT_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* RTT_SUPPORT */
 	{
@@ -10477,7 +10754,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = WIFI_SUBCMD_SET_SSID_WHITELIST
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_set_ssid_whitelist
+		.doit = wl_cfgvendor_set_ssid_whitelist,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = gscan_attr_policy,
+		.maxattr = GSCAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 
 	},
 	{
@@ -10486,7 +10767,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = WIFI_SUBCMD_SET_BSSID_BLACKLIST
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_set_bssid_blacklist
+		.doit = wl_cfgvendor_set_bssid_blacklist,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = gscan_attr_policy,
+		.maxattr = GSCAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* GSCAN_SUPPORT || ROAMEXP_SUPPORT */
 #ifdef ROAMEXP_SUPPORT
@@ -10496,7 +10781,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = WIFI_SUBCMD_FW_ROAM_POLICY
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_set_fw_roaming_state
+		.doit = wl_cfgvendor_set_fw_roaming_state,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = gscan_attr_policy,
+		.maxattr = GSCAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10526,7 +10815,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_GET_FILE_DUMP_BUF
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_dbg_file_dump
+		.doit = wl_cfgvendor_dbg_file_dump,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = dump_buf_policy,
+		.maxattr = DUMP_BUF_ATTR_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* DHD_LOG_DUMP */
 
@@ -10645,7 +10938,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = WIFI_OFFLOAD_SUBCMD_START_MKEEP_ALIVE
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_start_mkeep_alive
+		.doit = wl_cfgvendor_start_mkeep_alive,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = mkeep_alive_attr_policy,
+		.maxattr = MKEEP_ALIVE_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10653,7 +10950,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = WIFI_OFFLOAD_SUBCMD_STOP_MKEEP_ALIVE
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_stop_mkeep_alive
+		.doit = wl_cfgvendor_stop_mkeep_alive,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = mkeep_alive_attr_policy,
+		.maxattr = MKEEP_ALIVE_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* KEEP_ALIVE */
 #ifdef WL_NAN
@@ -10663,7 +10964,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_ENABLE
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_start_handler
+		.doit = wl_cfgvendor_nan_start_handler,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10671,7 +10976,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_DISABLE
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_stop_handler
+		.doit = wl_cfgvendor_nan_stop_handler,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10679,7 +10988,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_CONFIG
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_config_handler
+		.doit = wl_cfgvendor_nan_config_handler,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10687,7 +11000,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_REQUEST_PUBLISH
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_req_publish
+		.doit = wl_cfgvendor_nan_req_publish,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10695,7 +11012,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_REQUEST_SUBSCRIBE
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_req_subscribe
+		.doit = wl_cfgvendor_nan_req_subscribe,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10703,7 +11024,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_CANCEL_PUBLISH
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_cancel_publish
+		.doit = wl_cfgvendor_nan_cancel_publish,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10711,7 +11036,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_CANCEL_SUBSCRIBE
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_cancel_subscribe
+		.doit = wl_cfgvendor_nan_cancel_subscribe,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10719,7 +11048,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_TRANSMIT
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_transmit
+		.doit = wl_cfgvendor_nan_transmit,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10736,7 +11069,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_IFACE_CREATE
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_data_path_iface_create
+		.doit = wl_cfgvendor_nan_data_path_iface_create,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10744,7 +11081,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_IFACE_DELETE
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_data_path_iface_delete
+		.doit = wl_cfgvendor_nan_data_path_iface_delete,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10752,7 +11093,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_REQUEST
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_data_path_request
+		.doit = wl_cfgvendor_nan_data_path_request,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10760,7 +11105,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_RESPONSE
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_data_path_response
+		.doit = wl_cfgvendor_nan_data_path_response,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{
@@ -10768,7 +11117,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_END
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_data_path_end
+		.doit = wl_cfgvendor_nan_data_path_end,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #ifdef WL_NAN_DISC_CACHE
 	{
@@ -10777,7 +11130,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_SEC_INFO
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_data_path_sec_info
+		.doit = wl_cfgvendor_nan_data_path_sec_info,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* WL_NAN_DISC_CACHE */
 	{
@@ -10794,28 +11151,39 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = NAN_WIFI_SUBCMD_ENABLE_MERGE
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_nan_enable_merge
+		.doit = wl_cfgvendor_nan_enable_merge,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* WL_NAN */
-#if defined(PKT_FILTER_SUPPORT) && defined(APF)
+#if defined(APF)
 	{
 		{
 			.vendor_id = OUI_GOOGLE,
 			.subcmd = APF_SUBCMD_GET_CAPABILITIES
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_apf_get_capabilities
+		.doit = wl_cfgvendor_apf_get_capabilities,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = apf_atrribute_policy,
+		.maxattr = APF_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
-
 	{
 		{
 			.vendor_id = OUI_GOOGLE,
 			.subcmd = APF_SUBCMD_SET_FILTER
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_apf_set_filter
+		.doit = wl_cfgvendor_apf_set_filter,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = apf_atrribute_policy,
+		.maxattr = APF_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
-#endif /* PKT_FILTER_SUPPORT && APF */
+#endif /* APF */
 #ifdef NDO_CONFIG_SUPPORT
 	{
 		{
@@ -10915,7 +11283,11 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 			.subcmd = DEBUG_SET_HAL_START
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = wl_cfgvendor_set_hal_started
+		.doit = wl_cfgvendor_set_hal_started,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = hal_start_attr_policy,
+		.maxattr = SET_HAL_START_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
 	},
 	{
 		{

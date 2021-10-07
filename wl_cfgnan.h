@@ -836,6 +836,7 @@ bool wl_cfgnan_ranging_is_in_prog_for_peer(struct bcm_cfg80211 *cfg,
 #endif /* RTT_SUPPORT */
 
 typedef enum {
+	NAN_ATTRIBUTE_INVALID                           = 0,
 	NAN_ATTRIBUTE_HEADER                            = 100,
 	NAN_ATTRIBUTE_HANDLE                            = 101,
 	NAN_ATTRIBUTE_TRANSAC_ID                        = 102,
