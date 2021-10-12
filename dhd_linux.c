@@ -857,8 +857,8 @@ module_param(tpoweron_scale, uint, 0644);
 #ifdef SHOW_LOGTRACE
 #ifdef DHD_LINUX_STD_FW_API
 static char *logstrs_path = "logstrs.bin";
-char *st_str_file_path = "rtecdc.bin";
-static char *map_file_path = "rtecdc.map";
+char *st_str_file_path = DHD_FW_NAME;
+static char *map_file_path = DHD_MAP_NAME;
 static char *rom_st_str_file_path = "roml.bin";
 static char *rom_map_file_path = "roml.map";
 #elif defined(CUSTOMER_HW4_DEBUG)
