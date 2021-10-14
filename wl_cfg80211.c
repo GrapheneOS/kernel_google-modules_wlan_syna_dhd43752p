@@ -19378,6 +19378,14 @@ wl_cfg80211_filter_vndr_ext_id(const vndr_ie_t *vndrie)
 		 */
 		WL_DBG(("%s:SKIP ADDING FILS HLP EXTN ID\n", __func__));
 		return true;
+	} else if (vndrie->oui[0] == EXT_MNG_HE_CAP_ID) {
+		/* Skip adding HE_CAP IE. FW will add it by FW caps */
+		WL_DBG(("%s:SKIP ADDING HE_CAP EXTN ID\n", __func__));
+		return true;
+	} else if (vndrie->oui[0] == EXT_MNG_HE_OP_ID) {
+		/* Skip adding HE_OP IE. FW will add it by FW caps */
+		WL_DBG(("%s:SKIP ADDING HE_OP EXTN ID\n", __func__));
+		return true;
 	}
 	return false;
 }
