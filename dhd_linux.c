@@ -9512,8 +9512,10 @@ dhd_open(struct net_device *net)
 			if (ret == BCME_OK) {
 				dhd_init_static_strs_array(dhd->pub.osh, &dhd->event_data,
 					st_str_file_path, map_file_path);
+#ifdef DHD_LOAD_ROML_FILES
 				dhd_init_static_strs_array(dhd->pub.osh, &dhd->event_data,
 					rom_st_str_file_path, rom_map_file_path);
+#endif /* DHD_LOAD_ROML_FILES */
 				dhd->dhd_state |= DHD_ATTACH_LOGTRACE_INIT;
 			}
 		}
@@ -11760,8 +11762,10 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	ret = dhd_init_logstrs_array(osh, &dhd->event_data);
 	if (ret == BCME_OK) {
 		dhd_init_static_strs_array(osh, &dhd->event_data, st_str_file_path, map_file_path);
+#ifdef DHD_LOAD_ROML_FILES
 		dhd_init_static_strs_array(osh, &dhd->event_data, rom_st_str_file_path,
 			rom_map_file_path);
+#endif /* DHD_LOAD_ROML_FILES */
 		dhd_state |= DHD_ATTACH_LOGTRACE_INIT;
 	}
 #endif /* SHOW_LOGTRACE */
