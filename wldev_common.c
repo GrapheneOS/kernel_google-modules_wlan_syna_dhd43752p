@@ -204,10 +204,9 @@ s32 wldev_iovar_setbuf(
 		goto exit;
 	}
 	iovar_len = wldev_mkiovar(iovar_name, param, paramlen, buf, buflen);
-	if (iovar_len > 0) {
+	if (iovar_len > 0)
 		ret = wldev_ioctl_set(dev, WLC_SET_VAR, buf, iovar_len);
-		bzero(buf, buflen);
-	} else
+	else
 		ret = BCME_BUFTOOSHORT;
 
 exit:
