@@ -138,12 +138,16 @@ struct wl_ibss;
 #define WL_SELF_MANAGED_REGDOM
 #endif /* KERNEL >= 4.0 */
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0) && !defined(WL_NMI_IF))
+#define WL_NMI_IF
+#endif /* LINUX_VERSION_CODE >= (4, 17, 0) && !(WL_NMI_IF) */
+
 #define CH_TO_CHSPC(band, _channel) \
 	((_channel | band) | WL_CHANSPEC_BW_20 | WL_CHANSPEC_CTL_SB_NONE)
 #define CHAN2G(_channel, _freq, _flags) {			\
 	.band			= IEEE80211_BAND_2GHZ,		\
 	.center_freq		= (_freq),			\
-	.hw_value		= CH_TO_CHSPC(WL_CHANSPEC_BAND_2G, _channel),			\
+	.hw_value		= _channel,			\
 	.flags			= (_flags),			\
 	.max_antenna_gain	= 0,				\
 	.max_power		= 30,				\
@@ -152,7 +156,7 @@ struct wl_ibss;
 #define CHAN5G(_channel, _flags) {				\
 	.band			= IEEE80211_BAND_5GHZ,		\
 	.center_freq		= 5000 + (5 * (_channel)),	\
-	.hw_value		= CH_TO_CHSPC(WL_CHANSPEC_BAND_5G, _channel),			\
+	.hw_value		= _channel,			\
 	.flags			= (_flags),			\
 	.max_antenna_gain	= 0,				\
 	.max_power		= 30,				\
@@ -162,7 +166,7 @@ struct wl_ibss;
 #define CHAN6G(_channel, _flags) {				\
 	.band			= IEEE80211_BAND_6GHZ,		\
 	.center_freq		= 5950 + (5 * (_channel)),	\
-	.hw_value		= CH_TO_CHSPC(WL_CHANSPEC_BAND_6G, _channel),			\
+	.hw_value		= _channel,			\
 	.flags			= (_flags),			\
 	.max_antenna_gain	= 0,				\
 	.max_power		= 30,				\
@@ -180,7 +184,7 @@ struct wl_ibss;
 #define CHAN6G(_channel, _flags) {				\
 	.band			= IEEE80211_BAND_5GHZ,		\
 	.center_freq		= 5950 + (5 * (_channel)),	\
-	.hw_value		= CH_TO_CHSPC(WL_CHANSPEC_BAND_6G, _channel),			\
+	.hw_value		= _channel,			\
 	.flags			= (_flags),			\
 	.max_antenna_gain	= 0,				\
 	.max_power		= 30,				\
@@ -2012,6 +2016,8 @@ struct bcm_cfg80211 {
 	struct ether_addr af_randmac;
 	bool randomized_gas_tx;
 	u8 country[WLC_CNTRY_BUF_SZ];
+	struct wireless_dev *nmi_wdev;	/* representing cfg cfg80211 device for NAN NMI */
+	struct net_device *nmi_ndev;    /* reference to NAN NMI interface */
 };
 
 /* Max auth timeout allowed in case of EAP is 70sec, additional 5 sec for
@@ -2580,6 +2586,14 @@ wl_iftype_to_str(int wl_iftype)
 #define ndev_to_wdev(ndev) (ndev->ieee80211_ptr)
 #define wdev_to_ndev(wdev) (wdev->netdev)
 
+#ifdef WL_NMI_IF
+#define bcmcfg_to_nmi_ndev(cfg) (cfg->nmi_ndev)
+#define bcmcfg_to_nmi_wdev(cfg) (cfg->nmi_wdev)
+#else
+#define bcmcfg_to_nmi_ndev(cfg) bcmcfg_to_prmry_ndev(cfg)
+#define bcmcfg_to_nmi_wdev(cfg) bcmcfg_to_prmry_wdev(cfg)
+#endif /* WL_NMI_IF */
+
 #ifdef WL_BLOCK_P2P_SCAN_ON_STA
 #define IS_P2P_IFACE(wdev) (wdev && \
 		((wdev->iftype == NL80211_IFTYPE_P2P_DEVICE) || \
@@ -3095,7 +3109,10 @@ static inline s32 wl_rssi_offset(s32 rssi)
 #else
 #define wl_rssi_offset(x)	x
 #endif
+extern u8 wl_chanspec_to_host_bw_map(chanspec_t cur_chanspec);
 extern int wl_channel_to_frequency(u32 chan, chanspec_band_t band);
+extern chanspec_t
+wl_channel_to_chanspec(struct wiphy *wiphy, struct net_device *dev, u32 channel, u32 bw_cap);
 extern int wl_cfg80211_config_rsnxe_ie(struct bcm_cfg80211 *cfg, struct net_device *dev,
 		const u8 *parse, u32 len);
 extern bool dhd_force_country_change(struct net_device *dev);

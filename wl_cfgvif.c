@@ -161,10 +161,8 @@ wl_cfgoce_has_ie(const u8 *ie, const u8 **tlvs, u32 *tlvs_len, const u8 *oui, u3
 
 static bool check_dev_role_integrity(struct bcm_cfg80211 *cfg, u32 dev_role);
 
-#ifdef SUPPORT_AP_BWCTRL
 static int bw2cap[] = { 0, 0, WLC_BW_CAP_20MHZ, WLC_BW_CAP_40MHZ, WLC_BW_CAP_80MHZ,
 	WLC_BW_CAP_160MHZ, WLC_BW_CAP_160MHZ };
-#endif /* SUPPORT_AP_BWCTRL */
 
 #if !defined(BCMDONGLEHOST)
 /* Wake lock are used in Android only, which is dongle based as of now */
@@ -1337,8 +1335,7 @@ fail:
 	return err;
 }
 
-#ifdef SUPPORT_AP_BWCTRL
-static chanspec_t
+chanspec_t
 wl_channel_to_chanspec(struct wiphy *wiphy, struct net_device *dev, u32 channel, u32 bw_cap)
 {
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
@@ -1396,7 +1393,6 @@ exit:
 	WL_DBG(("return chanspec %x %d\n", ret_c, bw));
 	return ret_c;
 }
-#endif /* SUPPORT_AP_BWCTRL */
 
 void
 wl_cfg80211_cleanup_virtual_ifaces(struct bcm_cfg80211 *cfg, bool rtnl_lock_reqd)

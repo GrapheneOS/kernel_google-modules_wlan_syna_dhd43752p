@@ -1365,6 +1365,24 @@ int wl_channel_to_frequency(u32 chan, chanspec_band_t band)
 	return 0; /* not supported */
 }
 
+u8 wl_chanspec_to_host_bw_map(chanspec_t cur_chanspec)
+{
+	u8 host_bw = WIFI_CHAN_WIDTH_INVALID;
+
+	if (CHSPEC_IS20(cur_chanspec)) {
+		host_bw = WIFI_CHAN_WIDTH_20;
+	} else if (CHSPEC_IS40(cur_chanspec)) {
+		host_bw = WIFI_CHAN_WIDTH_40;
+	} else if (CHSPEC_IS80(cur_chanspec)) {
+		host_bw = WIFI_CHAN_WIDTH_80;
+	} else if (CHSPEC_IS160(cur_chanspec)) {
+		host_bw = WIFI_CHAN_WIDTH_160;
+	} else if (CHSPEC_IS8080(cur_chanspec)) {
+		host_bw = WIFI_CHAN_WIDTH_80P80;
+	}
+	return host_bw;
+}
+
 static void wl_add_remove_pm_enable_work(struct bcm_cfg80211 *cfg,
 	enum wl_pm_workq_act_type type)
 {
@@ -16751,7 +16769,7 @@ static int wl_construct_reginfo(struct bcm_cfg80211 *cfg, s32 bw_cap_2g, s32 bw_
 		if (!ht40_allowed && CHSPEC_IS40(chspec))
 			continue;
 		for (j = 0; j < array_size; j++) {
-			if (band_chan_arr[j].hw_value == chspec) {
+			if (band_chan_arr[j].hw_value == channel) {
 				break;
 			}
 		}
@@ -16764,7 +16782,7 @@ static int wl_construct_reginfo(struct bcm_cfg80211 *cfg, s32 bw_cap_2g, s32 bw_
 			band_chan_arr[index].center_freq =
 				wl_channel_to_frequency(channel, CHSPEC_BAND(chspec));
 #endif
-			band_chan_arr[index].hw_value = chspec;
+			band_chan_arr[index].hw_value = channel;
 			band_chan_arr[index].beacon_found = false;
 			band_chan_arr[index].flags &= ~IEEE80211_CHAN_DISABLED;
 
