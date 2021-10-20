@@ -9844,6 +9844,11 @@ exit:
 	mutex_unlock(&_dhd_sdio_mutex_lock_);
 #endif /* BCMSDIO */
 #endif /* MULTIPLE_SUPPLICANT */
+#if defined(SUPPORT_OTA_UPDATE) && defined(WLAN_ACCEL_BOOT)
+	if (ret == BCME_OK) {
+		(void)dhd_ota_buf_clean(&dhd->pub);
+	}
+#endif /* SUPPORT_OTA_UPDATE  && WLAN_ACCEL_BOOT */
 
 	DHD_ERROR(("%s: EXIT\n", __FUNCTION__));
 	return ret;
@@ -17376,6 +17381,9 @@ dhd_free(dhd_pub_t *dhdp)
 			MFREE(dhdp->osh, dhdp->cached_nvram, MAX_NVRAMBUF_SIZE);
 		}
 #endif
+#ifdef SUPPORT_OTA_UPDATE
+		(void)dhd_ota_buf_clean(dhdp);
+#endif /* SUPPORT_OTA_UPDATE */
 		if (dhd != NULL) {
 #ifdef REPORT_FATAL_TIMEOUTS
 			deinit_dhd_timeouts(&dhd->pub);
@@ -21804,7 +21812,7 @@ void dhd_set_version_info(dhd_pub_t *dhdp, char *fw)
 	if (!dhdp)
 		return;
 
-	i = snprintf(&info_string[i], sizeof(info_string) - i,
+	i += snprintf(&info_string[i], sizeof(info_string) - i,
 		"\n  Chip: %x Rev %x Pkg %x", dhd_bus_chip_id(dhdp),
 		dhd_bus_chiprev_id(dhdp), dhd_bus_chippkg_id(dhdp));
 }

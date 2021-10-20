@@ -4287,6 +4287,9 @@ dhdpcie_download_nvram(struct dhd_bus *bus)
 	bool nvram_file_exists;
 	bool nvram_uefi_exists = FALSE;
 	bool local_alloc = FALSE;
+#ifdef SUPPORT_OTA_UPDATE
+	ota_update_info_t *ota_info = &bus->dhd->ota_update_info;
+#endif /* SUPPORT_OTA_UPDATE */
 	pnv_path = bus->nv_path;
 
 	nvram_file_exists = ((pnv_path != NULL) && (pnv_path[0] != '\0'));
@@ -4390,10 +4393,19 @@ dhdpcie_download_nvram(struct dhd_bus *bus)
 
 err:
 	if (memblock) {
-		if (local_alloc) {
-			MFREE(bus->dhd->osh, memblock, MAX_NVRAMBUF_SIZE);
-		} else {
-			dhd_free_download_buffer(bus->dhd, memblock, memblock_len);
+#ifdef SUPPORT_OTA_UPDATE
+		if (ota_info->nvram_len) {
+			MFREE(bus->dhd->osh, ota_info->nvram_buf, ota_info->nvram_len);
+			ota_info->nvram_len = 0;
+		}
+		else
+#endif /* SUPPORT_OTA_UPDATE */
+		{
+			if (local_alloc) {
+				MFREE(bus->dhd->osh, memblock, MAX_NVRAMBUF_SIZE);
+			} else {
+				dhd_free_download_buffer(bus->dhd, memblock, memblock_len);
+			}
 		}
 	}
 

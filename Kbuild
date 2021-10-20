@@ -642,6 +642,9 @@ DHDCFLAGS += -DWL_CAP_HE
 # Path name to store the FW Debug symbol files
 DHDCFLAGS += -DPLATFORM_PATH="\"/vendor/etc/wifi/\""
 
+# Support to update clm/nvram through downloading OTA
+DHDCFLAGS += -DSUPPORT_OTA_UPDATE
+
 ##########################
 # driver type
 # m: module type driver

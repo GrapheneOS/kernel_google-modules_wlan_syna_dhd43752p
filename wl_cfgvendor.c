@@ -10442,6 +10442,172 @@ wl_cfgvendor_custom_mapping_of_dscp_reset(struct wiphy *wiphy,
 #endif /* WL_CUSTOM_MAPPING_OF_DSCP */
 #endif /* WL_SAR_TX_POWER */
 
+#ifdef SUPPORT_OTA_UPDATE
+static void
+wl_set_ota_nvram_ext(dhd_pub_t *dhd)
+{
+#if defined(USE_CID_CHECK)
+	naming_info_t *info = NULL;
+	bool is_murata_fem = FALSE;
+	ota_update_info_t *ota_info = &dhd->ota_update_info;
+
+	info = dhd_find_naming_info_by_chip_rev(dhd, &is_murata_fem);
+	if (info) {
+		WL_INFORM(("Nvram extension prefix is [%s].\n", info->nvram_ext));
+		strlcpy(ota_info->nvram_ext, info->nvram_ext, MAX_EXT_INFO_LEN);
+	}
+	else {
+		WL_ERR(("info is null\n"));
+	}
+#endif /* USE_CID_CHECK */
+	return;
+}
+
+static int
+wl_cfgvendor_get_ota_current_info(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret, mem_needed;
+	struct sk_buff *skb = NULL;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+	ota_update_info_t *ota_info = &dhd_pub->ota_update_info;
+
+	WL_DBG(("Recv get ota current info cmd.\n"));
+
+	mem_needed =  VENDOR_REPLY_OVERHEAD + MAX_EXT_INFO_LEN;
+
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
+	if (unlikely(!skb)) {
+		WL_ERR(("%s: can't allocate %d bytes\n", __FUNCTION__, mem_needed));
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	ret = nla_put_string(skb, OTA_CUR_NVRAM_EXT_ATTR, ota_info->nvram_ext);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put ota_nvram_ext string, ret=%d\n", ret));
+		goto exit;
+	}
+
+	ret = cfg80211_vendor_cmd_reply(skb);
+	if (unlikely(ret)) {
+		WL_ERR(("Vendor cmd reply for -get wake status failed:%d \n", ret));
+	}
+	/* On cfg80211_vendor_cmd_reply() skb is consumed and freed in case of success or failure */
+	return ret;
+
+exit:
+	/* Free skb memory */
+	if (skb) {
+		kfree_skb(skb);
+	}
+	return ret;
+
+}
+
+static int
+wl_cfgvendor_ota_download(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int err = BCME_OK;
+	int rem, type;
+	const struct nlattr *iter;
+	char* buf[1];
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhdp = cfg->pub;
+#if defined(WLAN_ACCEL_BOOT)
+	struct net_device *net = wdev->netdev;
+#endif /* WLAN_ACCEL_BOOT */
+	ota_update_info_t *ota_info = &dhdp->ota_update_info;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case OTA_DOWNLOAD_CLM_LENGTH_ATTR:
+				ota_info->clm_len = nla_get_u32(iter);
+				WL_INFORM_MEM(("Set to OTA clm length to [%d].\n",
+					ota_info->clm_len));
+				break;
+			case OTA_DOWNLOAD_CLM_ATTR:
+				if (!ota_info->clm_len) {
+					err = -EINVAL;
+					WL_ERR(("clm length is invalid\n"));
+					goto exit;
+				}
+				memcpy_s(buf, sizeof(*buf),
+						(void *)nla_data(iter), nla_len(iter));
+				ota_info->clm_buf = MALLOCZ(cfg->osh, ota_info->clm_len);
+				if (ota_info->clm_buf == NULL) {
+					err = -ENOMEM;
+					WL_ERR(("Allocte fail size [%d]\n", ota_info->clm_len));
+					goto exit;
+				}
+				err = copy_from_user(ota_info->clm_buf, buf[0],
+						ota_info->clm_len);
+				if (err) {
+					WL_ERR(("Failed copy_from_user for ota_clm_buf.\n"));
+					goto exit;
+				}
+				break;
+			case OTA_DOWNLOAD_NVRAM_LENGTH_ATTR:
+				ota_info->nvram_len = nla_get_u32(iter);
+				WL_INFORM_MEM(("Set the OTA nvram length to [%d]\n",
+					ota_info->nvram_len));
+				break;
+			case OTA_DOWNLOAD_NVRAM_ATTR:
+				if (!ota_info->nvram_len) {
+					err = -EINVAL;
+					WL_ERR(("clm length is invalid\n"));
+					goto exit;
+				}
+				memcpy_s(buf, sizeof(*buf),
+						(void *)nla_data(iter), nla_len(iter));
+				ota_info->nvram_buf = MALLOCZ(cfg->osh, ota_info->nvram_len);
+				if (ota_info->nvram_buf  == NULL) {
+					err = -ENOMEM;
+					WL_ERR(("Allocte fail size [%d]\n", ota_info->nvram_len));
+					goto exit;
+				}
+				err = copy_from_user(ota_info->nvram_buf, buf[0],
+						ota_info->nvram_len);
+				if (err) {
+					WL_ERR(("Failed copy_from_user for ota_nvram_buf.\n"));
+					goto exit;
+				}
+				break;
+			case OTA_SET_FORCE_REG_ON:
+				{
+					uint force_reg_on = nla_get_u32(iter);
+					UNUSED_PARAMETER(force_reg_on);
+#if defined(WLAN_ACCEL_BOOT)
+					if (force_reg_on == TRUE) {
+						dhd_dev_set_accel_force_reg_on(net);
+					}
+#endif /* WLAN_ACCEL_BOOT */
+				}
+				break;
+			default:
+				WL_ERR(("Unknown attr type: %d\n", type));
+				err = -EINVAL;
+				goto exit;
+				break;
+		}
+	}
+	return err;
+exit:
+	if (ota_info->clm_buf) {
+		MFREE(cfg->osh, ota_info->clm_buf, ota_info->clm_len);
+	}
+	if (ota_info->nvram_buf) {
+		MFREE(cfg->osh, ota_info->nvram_buf, ota_info->nvram_len);
+	}
+	ota_info->clm_len = 0;
+	ota_info->nvram_len = 0;
+	return err;
+}
+#endif /* SUPPORT_OTA_UPDATE */
+
 static int
 wl_cfgvendor_set_dtim_config(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void  *data, int len)
@@ -11602,7 +11768,18 @@ const struct nla_policy wake_stat_attr_policy[WAKE_STAT_ATTRIBUTE_MAX] = {
 	[WAKE_STAT_ATTRIBUTE_IPV6_RX_MULTICAST_ADD_CNT] = { .type = NLA_U32 },
 	[WAKE_STAT_ATTRIBUTE_OTHER_RX_MULTICAST_ADD_CNT] = { .type = NLA_U32 },
 };
-#endif
+#endif /* DHD_WAKE_STATUS */
+
+#ifdef SUPPORT_OTA_UPDATE
+const struct nla_policy ota_update_attr_policy[OTA_UPDATE_ATTRIBUTE_MAX] = {
+	[OTA_DOWNLOAD_CLM_LENGTH_ATTR ] = { .type = NLA_U32 },
+	[OTA_DOWNLOAD_CLM_ATTR ] = { .type = NLA_BINARY },
+	[OTA_DOWNLOAD_NVRAM_LENGTH_ATTR ] = { .type = NLA_U32 },
+	[OTA_DOWNLOAD_NVRAM_ATTR ] = { .type = NLA_BINARY },
+	[OTA_SET_FORCE_REG_ON ] = { .type = NLA_U32 },
+	[OTA_CUR_NVRAM_EXT_ATTR] = { .type = NLA_NUL_STRING },
+};
+#endif /* SUPPORT_OTA_UPDATE */
 
 #ifdef RSSI_MONITOR_SUPPORT
 const struct nla_policy rssi_monitor_attr_policy[RSSI_MONITOR_ATTRIBUTE_MAX] = {
@@ -12693,6 +12870,32 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 #endif /* LINUX_VERSION >= 5.3 */
 	},
 #endif /* WL_CUSTOM_MAPPING_OF_DSCP */
+#ifdef SUPPORT_OTA_UPDATE
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_GET_OTA_CURRUNT_INFO
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_get_ota_current_info,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = ota_update_attr_policy,
+		.maxattr = OTA_UPDATE_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_OTA_UPDATE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_ota_download,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = ota_update_attr_policy,
+		.maxattr = OTA_UPDATE_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+#endif /* SUPPORT_OTA_UPDATE */
 	{
 		{
 			.vendor_id = OUI_GOOGLE,
@@ -12959,6 +13162,10 @@ int wl_cfgvendor_attach(struct wiphy *wiphy, dhd_pub_t *dhd)
 #ifdef WL_CUSTOM_MAPPING_OF_DSCP
 	(void)wl_set_dscp_deafult_priority(custom_dscp2priomap);
 #endif
+#ifdef SUPPORT_OTA_UPDATE
+	(void)wl_set_ota_nvram_ext(dhd);
+#endif /* SUPPORT_OTA_UPDATE */
+
 	return 0;
 }
 

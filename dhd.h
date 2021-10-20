@@ -1262,6 +1262,17 @@ struct dhd_logtrace_thr_ts {
 	uint64 complete_time;
 };
 #endif /* SHOW_LOGTRACE && DHD_USE_KTHREAD_FOR_LOGTRACE */
+
+#ifdef SUPPORT_OTA_UPDATE
+#define MAX_EXT_INFO_LEN	10u
+typedef struct ota_update_info {
+	uint32 clm_len;
+	uint8 *clm_buf;
+	uint32 nvram_len;
+	uint8 *nvram_buf;
+	uint8 nvram_ext[MAX_EXT_INFO_LEN];
+} ota_update_info_t;
+#endif /* SUPPORT_OTA_UPDATE */
 /**
  * Common structure for module and instance linkage.
  * Instantiated once per hardware (dongle) instance that this DHD manages.
@@ -1964,6 +1975,9 @@ typedef struct dhd_pub {
 #ifdef READ_CONFIG_FROM_FILE
 	struct dhd_config *conf;
 #endif /* READ_CONFIG_FROM_FILE */
+#ifdef SUPPORT_OTA_UPDATE
+	ota_update_info_t ota_update_info;
+#endif /* SUPPORT_OTA_UPDATE */
 } dhd_pub_t;
 
 #if defined(__linux__)

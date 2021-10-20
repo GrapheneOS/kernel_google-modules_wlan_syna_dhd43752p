@@ -7956,34 +7956,61 @@ int dhd_get_download_buffer(dhd_pub_t	*dhd, char *file_path, download_type_t com
 {
 	int ret = BCME_ERROR;
 	const struct firmware *fw = NULL;
+#ifdef SUPPORT_OTA_UPDATE
+	uint8 *buf = NULL;
+	int len = 0;
+	ota_update_info_t *ota_info = &dhd->ota_update_info;
 
-	if (file_path) {
-		ret = dhd_os_get_img_fwreq(&fw, file_path);
-		if (ret < 0) {
-			DHD_ERROR(("dhd_os_get_img(Request Firmware API) error : %d\n",
-				ret));
-			goto err;
-		} else {
-			DHD_ERROR(("dhd_os_get_img(Request Firmware API) success\n"));
-			if ((fw->size <= 0 || fw->size > *length)) {
+	if (component == CLM_BLOB) {
+		if (ota_info->clm_len) {
+			DHD_ERROR(("Using OTA CLM_BLOB\n"));
+			buf = ota_info->clm_buf;
+			len = ota_info->clm_len;
+		}
+	}
+	else if (component == NVRAM) {
+		if (ota_info->nvram_len) {
+			DHD_ERROR(("Using OTA NVRAM.\n"));
+			buf = ota_info->nvram_buf;
+			len = ota_info->nvram_len;
+		}
+	}
+
+	if (len) {
+		*buffer = (char *)buf;
+		*length = len;
+	}
+	else
+#endif /* SUPPORT_OTA_UPDATE */
+	{
+		if (file_path) {
+			ret = dhd_os_get_img_fwreq(&fw, file_path);
+			if (ret < 0) {
+				DHD_ERROR(("dhd_os_get_img(Request Firmware API) error : %d\n",
+					ret));
+				goto err;
+			} else {
+				DHD_ERROR(("dhd_os_get_img(Request Firmware API) success\n"));
+				if ((fw->size <= 0 || fw->size > *length)) {
+					*length = fw->size;
+					goto err;
+				}
+				*buffer = VMALLOCZ(dhd->osh, fw->size);
+				if (*buffer == NULL) {
+					DHD_ERROR(("%s: Failed to allocate memory %d bytes\n",
+						__FUNCTION__, (int)fw->size));
+					ret = BCME_NOMEM;
+					goto err;
+				}
 				*length = fw->size;
-				goto err;
+				ret = memcpy_s(*buffer, fw->size, fw->data, fw->size);
+				if (ret != BCME_OK) {
+					DHD_ERROR(("%s: memcpy_s failed, err : %d\n",
+							__FUNCTION__, ret));
+					goto err;
+				}
+				ret = BCME_OK;
 			}
-			*buffer = VMALLOCZ(dhd->osh, fw->size);
-			if (*buffer == NULL) {
-				DHD_ERROR(("%s: Failed to allocate memory %d bytes\n",
-					__FUNCTION__, (int)fw->size));
-				ret = BCME_NOMEM;
-				goto err;
-			}
-			*length = fw->size;
-			ret = memcpy_s(*buffer, fw->size, fw->data, fw->size);
-			if (ret != BCME_OK) {
-				DHD_ERROR(("%s: memcpy_s failed, err : %d\n",
-						__FUNCTION__, ret));
-				goto err;
-			}
-			ret = BCME_OK;
 		}
 	}
 err:
@@ -8464,6 +8491,9 @@ dhd_apply_default_clm(dhd_pub_t *dhd, char *clm_path)
 	int err = BCME_OK;
 	char iovbuf[WLC_IOCTL_SMLEN];
 	int status = FALSE;
+#ifdef SUPPORT_OTA_UPDATE
+	ota_update_info_t *ota_info = &dhd->ota_update_info;
+#endif /* SUPPORT_OTA_UPDATE */
 
 	if (clm_path[0] != '\0') {
 		if (strlen(clm_path) > MOD_PARAM_PATHLEN) {
@@ -8579,11 +8609,20 @@ dhd_apply_default_clm(dhd_pub_t *dhd, char *clm_path)
 exit:
 
 	if (memblock) {
+#ifdef SUPPORT_OTA_UPDATE
+		if (ota_info->clm_len) {
+			MFREE(dhd->osh, ota_info->clm_buf, ota_info->clm_len);
+			ota_info->clm_len = 0;
+		}
+		else
+#endif /* SUPPORT_OTA_UPDATE */
+		{
 #if (defined(LINUX) || defined(linux)) && !defined(DHD_LINUX_STD_FW_API)
-		dhd_os_close_image1(dhd, memblock);
+			dhd_os_close_image1(dhd, memblock);
 #else
-		dhd_free_download_buffer(dhd, memblock, memblock_len);
+			dhd_free_download_buffer(dhd, memblock, memblock_len);
 #endif /* LINUX || linux */
+		}
 	}
 
 	return err;
@@ -12091,3 +12130,21 @@ dhd_dump_wake_status(dhd_pub_t *dhdp, wake_counts_t *wcp, struct ether_header *e
 	return;
 }
 #endif /* DHD_WAKE_STATUS_PRINT && DHD_WAKE_RX_STATUS && DHD_WAKE_STATUS */
+
+#ifdef SUPPORT_OTA_UPDATE
+void
+dhd_ota_buf_clean(dhd_pub_t *dhdp)
+{
+	ota_update_info_t *ota_info = &dhdp->ota_update_info;
+
+	if (ota_info->clm_buf) {
+		MFREE(dhdp->osh, ota_info->clm_buf, ota_info->clm_len);
+	}
+	if (ota_info->nvram_buf) {
+		MFREE(dhdp->osh, ota_info->nvram_buf, ota_info->nvram_len);
+	}
+	ota_info->nvram_len = 0;
+	ota_info->clm_len = 0;
+	return;
+}
+#endif /* SUPPORT_OTA_UPDATE */
