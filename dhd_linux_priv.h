@@ -143,9 +143,9 @@ typedef struct dhd_info {
 	 */
 	struct mutex dhd_net_if_mutex;
 	struct mutex dhd_suspend_mutex;
-#if defined(PKT_FILTER_SUPPORT) && defined(APF)
+#if defined(APF)
 	struct mutex dhd_apf_mutex;
-#endif /* PKT_FILTER_SUPPORT && APF */
+#endif /* APF */
 #endif /* OEM_ANDROID */
 	spinlock_t wakelock_spinlock;
 	spinlock_t wakelock_evt_spinlock;

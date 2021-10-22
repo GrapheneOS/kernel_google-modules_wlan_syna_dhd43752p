@@ -1358,9 +1358,9 @@ typedef struct dhd_pub {
 	/* DTIM skip value, default 0(or 1) means wake each DTIM
 	 * 3 means skip 2 DTIMs and wake up 3rd DTIM(9th beacon when AP DTIM is 3)
 	 */
-	int suspend_bcn_li_dtim;         /* bcn_li_dtim value in suspend mode */
+	int suspend_bcn_li_dtim;		/* bcn_li_dtim value in suspend mode */
+	int early_suspended;			/* Early suspend status */
 #ifdef PKT_FILTER_SUPPORT
-	int early_suspended;	/* Early suspend status */
 	int dhcp_in_progress;	/* DHCP period */
 #endif
 
@@ -1649,9 +1649,9 @@ typedef struct dhd_pub {
 #ifdef GSCAN_SUPPORT
 	bool lazy_roam_enable;
 #endif
-#if defined(PKT_FILTER_SUPPORT) && defined(APF)
+#if defined(APF)
 	bool apf_set;
-#endif /* PKT_FILTER_SUPPORT && APF */
+#endif /* APF */
 	void *macdbg_info;
 #ifdef DHD_WET
 	void *wet_info;
@@ -2835,7 +2835,7 @@ typedef struct {
 } dhd_event_log_t;
 #endif // defined(SHOW_LOGTRACE) || defined(DHD_COREDUMP)
 
-#if defined(PKT_FILTER_SUPPORT) && defined(APF)
+#if defined(APF)
 /*
  * As per Google's current implementation, there will be only one APF filter.
  * Therefore, userspace doesn't bother about filter id and because of that
@@ -2849,12 +2849,12 @@ extern void dhd_apf_lock(struct net_device *dev);
 extern void dhd_apf_unlock(struct net_device *dev);
 extern int dhd_dev_apf_get_version(struct net_device *ndev, uint32 *version);
 extern int dhd_dev_apf_get_max_len(struct net_device *ndev, uint32 *max_len);
-extern int dhd_dev_apf_add_filter(struct net_device *ndev, u8* program,
-	uint32 program_len);
+extern int dhd_dev_apf_add_filter(struct net_device *ndev, u8* program, uint32 program_len);
 extern int dhd_dev_apf_enable_filter(struct net_device *ndev);
 extern int dhd_dev_apf_disable_filter(struct net_device *ndev);
 extern int dhd_dev_apf_delete_filter(struct net_device *ndev);
-#endif /* PKT_FILTER_SUPPORT && APF */
+extern int dhd_dev_apf_read_filter_data(struct net_device *ndev, u8* buf, uint32 buf_len);
+#endif /* APF */
 
 extern void dhd_timeout_start(dhd_timeout_t *tmo, uint usec);
 extern int dhd_timeout_expired(dhd_timeout_t *tmo);

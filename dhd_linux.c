@@ -433,13 +433,15 @@ extern int dhdsdio_func_blocksize(dhd_pub_t *dhd, int function_num, int block_si
 #include <linux/nl80211.h>
 #endif /* OEM_ANDROID */
 
-#if defined(PKT_FILTER_SUPPORT) && defined(APF)
-static int __dhd_apf_add_filter(struct net_device *ndev, uint32 filter_id,
-	u8* program, uint32 program_len);
-static int __dhd_apf_config_filter(struct net_device *ndev, uint32 filter_id,
-	uint32 mode, uint32 enable);
-static int __dhd_apf_delete_filter(struct net_device *ndev, uint32 filter_id);
-#endif /* PKT_FILTER_SUPPORT && APF */
+#if defined(APF)
+static int _dhd_apf_add_filter(struct net_device *ndev, uint32 filter_id, u8* program,
+	uint32 program_len);
+static int _dhd_apf_config_filter(struct net_device *ndev, uint32 filter_id, uint32 mode,
+	uint32 enable);
+static int _dhd_apf_delete_filter(struct net_device *ndev, uint32 filter_id);
+static int _dhd_apf_read_filter_data(struct net_device *ndev, uint32 filter_id, u8* buf,
+	uint32 buf_len);
+#endif /* APF */
 
 #ifdef DHD_FW_COREDUMP
 static void dhd_mem_dump(void *dhd_info, void *event_info, u8 event);
@@ -2235,9 +2237,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 #endif /* CUSTOM_SET_CPUCORE */
 	if (dhd->up) {
 		if (value && dhd->in_suspend) {
-#ifdef PKT_FILTER_SUPPORT
 				dhd->early_suspended = 1;
-#endif
 				/* Kernel suspended */
 				DHD_ERROR(("%s: force extra Suspend setting \n", __FUNCTION__));
 
@@ -2251,10 +2251,10 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 				 * only allow unicast packet to send up
 				 */
 				dhd_enable_packet_filter(1, dhd);
+#endif /* PKT_FILTER_SUPPORT */
 #ifdef APF
 				dhd_dev_apf_enable_filter(dhd_linux_get_primary_netdev(dhd));
 #endif /* APF */
-#endif /* PKT_FILTER_SUPPORT */
 #ifdef ARP_OFFLOAD_SUPPORT
 				if (dhd->arpoe_enable) {
 					dhd_arp_offload_enable(dhd, TRUE);
@@ -2465,9 +2465,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 #endif /* CONFIG_SILENT_ROAM */
 #endif /* DHD_USE_EARLYSUSPEND */
 			} else {
-#ifdef PKT_FILTER_SUPPORT
 				dhd->early_suspended = 0;
-#endif
 				/* Kernel resumed  */
 				DHD_ERROR(("%s: Remove extra suspend setting \n", __FUNCTION__));
 #ifdef DYNAMIC_SWOOB_DURATION
@@ -2498,10 +2496,10 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 #ifdef PKT_FILTER_SUPPORT
 				/* disable pkt filter */
 				dhd_enable_packet_filter(0, dhd);
+#endif /* PKT_FILTER_SUPPORT */
 #ifdef APF
 				dhd_dev_apf_disable_filter(dhd_linux_get_primary_netdev(dhd));
 #endif /* APF */
-#endif /* PKT_FILTER_SUPPORT */
 #ifdef PASS_ALL_MCAST_PKTS
 				allmulti = 1;
 				for (i = 0; i < DHD_MAX_IFS; i++) {
@@ -3139,9 +3137,7 @@ _dhd_set_multicast_list(dhd_info_t *dhd, int ifidx)
 #endif /* MCAST_LIST_ACCUMULATION */
 
 #ifdef PASS_ALL_MCAST_PKTS
-#ifdef PKT_FILTER_SUPPORT
 	if (!dhd->pub.early_suspended)
-#endif /* PKT_FILTER_SUPPORT */
 		allmulti = TRUE;
 #endif /* PASS_ALL_MCAST_PKTS */
 
@@ -11724,9 +11720,9 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 #if defined(OEM_ANDROID)
 	mutex_init(&dhd->dhd_net_if_mutex);
 	mutex_init(&dhd->dhd_suspend_mutex);
-#if defined(PKT_FILTER_SUPPORT) && defined(APF)
+#if defined(APF)
 	mutex_init(&dhd->dhd_apf_mutex);
-#endif /* PKT_FILTER_SUPPORT && APF */
+#endif /* APF */
 #endif /* defined(OEM_ANDROID) */
 	dhd_state |= DHD_ATTACH_STATE_WAKELOCKS_INIT;
 
@@ -13502,10 +13498,10 @@ dhd_optimised_preinit_ioctls(dhd_pub_t * dhd)
 #endif /* WBTEXT && RRM_BCNREQ_MAX_CHAN_TIME */
 #ifdef PKT_FILTER_SUPPORT
 	dhd_pkt_filter_enable = TRUE;
+#endif /* PKT_FILTER_SUPPORT */
 #ifdef APF
 	dhd->apf_set = FALSE;
 #endif /* APF */
-#endif /* PKT_FILTER_SUPPORT */
 	dhd->suspend_bcn_li_dtim = CUSTOM_SUSPEND_BCN_LI_DTIM;
 #ifdef ENABLE_MAX_DTIM_IN_SUSPEND
 	dhd->max_dtim_enable = TRUE;
@@ -14479,10 +14475,10 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef OEM_ANDROID
 #ifdef PKT_FILTER_SUPPORT
 	dhd_pkt_filter_enable = TRUE;
+#endif /* PKT_FILTER_SUPPORT */
 #ifdef APF
 	dhd->apf_set = FALSE;
 #endif /* APF */
-#endif /* PKT_FILTER_SUPPORT */
 	dhd->suspend_bcn_li_dtim = CUSTOM_SUSPEND_BCN_LI_DTIM;
 #ifdef ENABLE_MAX_DTIM_IN_SUSPEND
 	dhd->max_dtim_enable = TRUE;
@@ -19808,7 +19804,7 @@ int dhd_dev_rtt_cancel_responder(struct net_device *dev)
 }
 
 #endif /* RTT_SUPPORT */
-#if defined(PKT_FILTER_SUPPORT) && defined(APF)
+#if defined(APF)
 static void _dhd_apf_lock_local(dhd_info_t *dhd)
 {
 	if (dhd) {
@@ -19824,44 +19820,54 @@ static void _dhd_apf_unlock_local(dhd_info_t *dhd)
 }
 
 static int
-__dhd_apf_add_filter(struct net_device *ndev, uint32 filter_id,
-	u8* program, uint32 program_len)
+_dhd_apf_add_filter(struct net_device *ndev, uint32 filter_id, u8* program, uint32 program_len)
 {
 	dhd_info_t *dhd = DHD_DEV_INFO(ndev);
 	dhd_pub_t *dhdp = &dhd->pub;
 	wl_pkt_filter_t * pkt_filterp;
 	wl_apf_program_t *apf_program;
-	char *buf;
-	u32 cmd_len, buf_len;
-	int ifidx, ret;
+	char *buf = NULL;
+	u32 cmd_len, buf_len, max_len;
+	int ifidx, ret = BCME_OK;
 	char cmd[] = "pkt_filter_add";
 
 	ifidx = dhd_net2idx(dhd, ndev);
 	if (ifidx == DHD_BAD_IF) {
 		DHD_ERROR(("%s: bad ifidx\n", __FUNCTION__));
-		return -ENODEV;
+		ret = -ENODEV;
+		goto exit;
 	}
 
 	cmd_len = sizeof(cmd);
 
-	/* Check if the program_len is more than the expected len
-	 * and if the program is NULL return from here.
+	/* Check if the program_len is more than the expected len or if the program is NULL,
+	 * then return from here.
 	 */
-	if ((program_len > WL_APF_PROGRAM_MAX_SIZE) || (program == NULL)) {
-		DHD_ERROR(("%s Invalid program_len: %d, program: %pK\n",
-				__FUNCTION__, program_len, program));
-		return -EINVAL;
+	ret = dhd_wl_ioctl_get_intiovar(dhdp, "apf_size_limit", &max_len, WLC_GET_VAR,
+		FALSE, ifidx);
+	if (unlikely(ret)) {
+		DHD_ERROR(("%s: failed to get APF size limit, ret=%d\n", __FUNCTION__, ret));
+		goto exit;
 	}
-	buf_len = cmd_len + WL_PKT_FILTER_FIXED_LEN +
-		WL_APF_PROGRAM_FIXED_LEN + program_len;
+	if ((program_len > max_len) || (program == NULL)) {
+		DHD_ERROR(("%s Invalid program_len: %d, program: %pK\n", __FUNCTION__,
+			program_len, program));
+		ret = -EINVAL;
+		goto exit;
+	}
 
+	buf_len = cmd_len + WL_PKT_FILTER_FIXED_LEN + WL_APF_PROGRAM_FIXED_LEN + program_len;
 	buf = MALLOCZ(dhdp->osh, buf_len);
 	if (unlikely(!buf)) {
 		DHD_ERROR(("%s: MALLOC failure, %d bytes\n", __FUNCTION__, buf_len));
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto exit;
 	}
 
-	memcpy(buf, cmd, cmd_len);
+	ret = memcpy_s(buf, buf_len, cmd, cmd_len);
+	if (unlikely(ret)) {
+		goto exit;
+	}
 
 	pkt_filterp = (wl_pkt_filter_t *) (buf + cmd_len);
 	pkt_filterp->id = htod32(filter_id);
@@ -19871,65 +19877,16 @@ __dhd_apf_add_filter(struct net_device *ndev, uint32 filter_id,
 	apf_program = &pkt_filterp->u.apf_program;
 	apf_program->version = htod16(WL_APF_INTERNAL_VERSION);
 	apf_program->instr_len = htod16(program_len);
-	memcpy(apf_program->instrs, program, program_len);
-
-	ret = dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, buf, buf_len, TRUE, ifidx);
+	ret = memcpy_s(apf_program->instrs, program_len, program, program_len);
 	if (unlikely(ret)) {
-		DHD_ERROR(("%s: failed to add APF filter, id=%d, ret=%d\n",
-			__FUNCTION__, filter_id, ret));
-	}
-
-	if (buf) {
-		MFREE(dhdp->osh, buf, buf_len);
-	}
-	return ret;
-}
-
-static int
-__dhd_apf_config_filter(struct net_device *ndev, uint32 filter_id,
-	uint32 mode, uint32 enable)
-{
-	dhd_info_t *dhd = DHD_DEV_INFO(ndev);
-	dhd_pub_t *dhdp = &dhd->pub;
-	wl_pkt_filter_enable_t * pkt_filterp;
-	char *buf;
-	u32 cmd_len, buf_len;
-	int ifidx, ret;
-	char cmd[] = "pkt_filter_enable";
-
-	ifidx = dhd_net2idx(dhd, ndev);
-	if (ifidx == DHD_BAD_IF) {
-		DHD_ERROR(("%s: bad ifidx\n", __FUNCTION__));
-		return -ENODEV;
-	}
-
-	cmd_len = sizeof(cmd);
-	buf_len = cmd_len + sizeof(*pkt_filterp);
-
-	buf = MALLOCZ(dhdp->osh, buf_len);
-	if (unlikely(!buf)) {
-		DHD_ERROR(("%s: MALLOC failure, %d bytes\n", __FUNCTION__, buf_len));
-		return -ENOMEM;
-	}
-
-	memcpy(buf, cmd, cmd_len);
-
-	pkt_filterp = (wl_pkt_filter_enable_t *) (buf + cmd_len);
-	pkt_filterp->id = htod32(filter_id);
-	pkt_filterp->enable = htod32(enable);
-
-	ret = dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, buf, buf_len, TRUE, ifidx);
-	if (unlikely(ret)) {
-		DHD_ERROR(("%s: failed to enable APF filter, id=%d, ret=%d\n",
-			__FUNCTION__, filter_id, ret));
 		goto exit;
 	}
 
-	ret = dhd_wl_ioctl_set_intiovar(dhdp, "pkt_filter_mode", dhd_master_mode,
-		WLC_SET_VAR, TRUE, ifidx);
+	ret = dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, buf, buf_len, TRUE, ifidx);
 	if (unlikely(ret)) {
-		DHD_ERROR(("%s: failed to set APF filter mode, id=%d, ret=%d\n",
-			__FUNCTION__, filter_id, ret));
+		DHD_ERROR(("%s: failed to add APF filter, id=%d, ret=%d\n", __FUNCTION__,
+			filter_id, ret));
+		goto exit;
 	}
 
 exit:
@@ -19940,7 +19897,66 @@ exit:
 }
 
 static int
-__dhd_apf_delete_filter(struct net_device *ndev, uint32 filter_id)
+_dhd_apf_config_filter(struct net_device *ndev, uint32 filter_id, uint32 mode, uint32 enable)
+{
+	dhd_info_t *dhd = DHD_DEV_INFO(ndev);
+	dhd_pub_t *dhdp = &dhd->pub;
+	wl_pkt_filter_enable_t * pkt_filterp;
+	char *buf = NULL;
+	u32 cmd_len, buf_len;
+	int ifidx, ret;
+	char cmd[] = "pkt_filter_enable";
+
+	ifidx = dhd_net2idx(dhd, ndev);
+	if (ifidx == DHD_BAD_IF) {
+		DHD_ERROR(("%s: bad ifidx\n", __FUNCTION__));
+		ret = -ENODEV;
+		goto exit;
+	}
+
+	cmd_len = sizeof(cmd);
+	buf_len = cmd_len + (u32)sizeof(*pkt_filterp);
+
+	buf = MALLOCZ(dhdp->osh, buf_len);
+	if (unlikely(!buf)) {
+		DHD_ERROR(("%s: MALLOC failure, %d bytes\n", __FUNCTION__, buf_len));
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	ret = memcpy_s(buf, buf_len, cmd, cmd_len);
+	if (unlikely(ret)) {
+		goto exit;
+	}
+
+	pkt_filterp = (wl_pkt_filter_enable_t *) (buf + cmd_len);
+	pkt_filterp->id = htod32(filter_id);
+	pkt_filterp->enable = htod32(enable);
+
+	ret = dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, buf, buf_len, TRUE, ifidx);
+	if (unlikely(ret)) {
+		DHD_ERROR(("%s: failed to enable APF filter, id=%d, ret=%d\n", __FUNCTION__,
+			filter_id, ret));
+		goto exit;
+	}
+
+	ret = dhd_wl_ioctl_set_intiovar(dhdp, "pkt_filter_mode", dhd_master_mode, WLC_SET_VAR,
+		TRUE, ifidx);
+	if (unlikely(ret)) {
+		DHD_ERROR(("%s: failed to set APF filter mode, id=%d, ret=%d\n", __FUNCTION__,
+			filter_id, ret));
+		goto exit;
+	}
+
+exit:
+	if (buf) {
+		MFREE(dhdp->osh, buf, buf_len);
+	}
+	return ret;
+}
+
+static int
+_dhd_apf_delete_filter(struct net_device *ndev, uint32 filter_id)
 {
 	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(ndev);
 	dhd_pub_t *dhdp = &dhd->pub;
@@ -19952,11 +19968,68 @@ __dhd_apf_delete_filter(struct net_device *ndev, uint32 filter_id)
 		return -ENODEV;
 	}
 
-	ret = dhd_wl_ioctl_set_intiovar(dhdp, "pkt_filter_delete",
-		htod32(filter_id), WLC_SET_VAR, TRUE, ifidx);
+	ret = dhd_wl_ioctl_set_intiovar(dhdp, "pkt_filter_delete", htod32(filter_id),
+		WLC_SET_VAR, TRUE, ifidx);
 	if (unlikely(ret)) {
-		DHD_ERROR(("%s: failed to delete APF filter, id=%d, ret=%d\n",
-			__FUNCTION__, filter_id, ret));
+		DHD_ERROR(("%s: failed to delete APF filter, id=%d, ret=%d\n", __FUNCTION__,
+			filter_id, ret));
+		return ret;
+	}
+
+	return ret;
+}
+
+static int
+_dhd_apf_read_filter_data(struct net_device *ndev, uint32 filter_id, u8* buf, uint32 buf_len)
+{
+	dhd_info_t *dhd = DHD_DEV_INFO(ndev);
+	dhd_pub_t *dhdp = &dhd->pub;
+	wl_apf_program_t *apf_program;
+	u32 cmd_len, max_len;
+	int ifidx, ret;
+	char cmd[] = "apf_buf_get";
+
+	ifidx = dhd_net2idx(dhd, ndev);
+	if (ifidx == DHD_BAD_IF) {
+		DHD_ERROR(("%s: bad ifidx\n", __FUNCTION__));
+		return -ENODEV;
+	}
+
+	/* Check if the provided buffer is large enough to store the filter data or
+	 * if the buffer is NULL, then return from here.
+	 */
+	ret = dhd_wl_ioctl_get_intiovar(dhdp, "apf_size_limit", &max_len,
+		WLC_GET_VAR, FALSE, ifidx);
+	if (unlikely(ret)) {
+		DHD_ERROR(("%s: failed to get APF size limit, ret=%d\n",
+			__FUNCTION__, ret));
+		return ret;
+	}
+	if ((buf_len < (WL_APF_PROGRAM_FIXED_LEN + max_len)) || (buf == NULL)) {
+		DHD_ERROR(("%s: Invalid buf_len=%d or buf=%pK\n", __FUNCTION__, buf_len, buf));
+		return -EINVAL;
+	}
+
+	/* Get APF filter data from the dongle */
+	cmd_len = sizeof(cmd);
+	ret = memcpy_s(buf, buf_len, cmd, cmd_len);
+	if (unlikely(ret)) {
+		return ret;
+	}
+	*(buf + cmd_len) = htod32(filter_id);
+	ret = dhd_wl_ioctl_cmd(dhdp, WLC_GET_VAR, buf, buf_len, FALSE, ifidx);
+	if (unlikely(ret)) {
+		DHD_ERROR(("%s: failed to read APF filter data, id=%d, ret=%d\n", __FUNCTION__,
+			filter_id, ret));
+		return ret;
+	}
+
+	/* Validate structure version */
+	apf_program = (wl_apf_program_t *)buf;
+	if (apf_program->version != WL_APF_INTERNAL_VERSION) {
+		DHD_ERROR(("%s: incorrect version, version=%d, expected version=%d\n",
+			__FUNCTION__, apf_program->version, WL_APF_INTERNAL_VERSION));
+		return BCME_VERSION;
 	}
 
 	return ret;
@@ -19983,11 +20056,7 @@ dhd_dev_apf_get_version(struct net_device *ndev, uint32 *version)
 
 	if (!FW_SUPPORTED(dhdp, apf)) {
 		DHD_ERROR(("%s: firmware doesn't support APF\n", __FUNCTION__));
-
-		/*
-		 * Notify Android framework that APF is not supported by setting
-		 * version as zero.
-		 */
+		/* Notify Android framework that APF is not supported by setting version as zero. */
 		*version = 0;
 		return BCME_OK;
 	}
@@ -19998,11 +20067,10 @@ dhd_dev_apf_get_version(struct net_device *ndev, uint32 *version)
 		return -ENODEV;
 	}
 
-	ret = dhd_wl_ioctl_get_intiovar(dhdp, "apf_ver", version,
-		WLC_GET_VAR, FALSE, ifidx);
+	ret = dhd_wl_ioctl_get_intiovar(dhdp, "apf_ver", version, WLC_GET_VAR, FALSE, ifidx);
 	if (unlikely(ret)) {
-		DHD_ERROR(("%s: failed to get APF version, ret=%d\n",
-			__FUNCTION__, ret));
+		DHD_ERROR(("%s: failed to get APF version, ret=%d\n", __FUNCTION__, ret));
+		return ret;
 	}
 
 	return ret;
@@ -20027,11 +20095,10 @@ dhd_dev_apf_get_max_len(struct net_device *ndev, uint32 *max_len)
 		return -ENODEV;
 	}
 
-	ret = dhd_wl_ioctl_get_intiovar(dhdp, "apf_size_limit", max_len,
-		WLC_GET_VAR, FALSE, ifidx);
+	ret = dhd_wl_ioctl_get_intiovar(dhdp, "apf_size_limit", max_len, WLC_GET_VAR, FALSE, ifidx);
 	if (unlikely(ret)) {
-		DHD_ERROR(("%s: failed to get APF size limit, ret=%d\n",
-			__FUNCTION__, ret));
+		DHD_ERROR(("%s: failed to get APF size limit, ret=%d\n", __FUNCTION__, ret));
+		return ret;
 	}
 
 	return ret;
@@ -20049,23 +20116,30 @@ dhd_dev_apf_add_filter(struct net_device *ndev, u8* program,
 
 	/* delete, if filter already exists */
 	if (dhdp->apf_set) {
-		ret = __dhd_apf_delete_filter(ndev, PKT_FILTER_APF_ID);
+		ret = _dhd_apf_delete_filter(ndev, PKT_FILTER_APF_ID);
 		if (unlikely(ret)) {
 			goto exit;
 		}
 		dhdp->apf_set = FALSE;
 	}
 
-	ret = __dhd_apf_add_filter(ndev, PKT_FILTER_APF_ID, program, program_len);
+	ret = _dhd_apf_add_filter(ndev, PKT_FILTER_APF_ID, program, program_len);
 	if (ret) {
 		goto exit;
 	}
 	dhdp->apf_set = TRUE;
 
 	if (dhdp->in_suspend && dhdp->apf_set && !(dhdp->op_mode & DHD_FLAG_HOSTAP_MODE)) {
-		/* Driver is still in (early) suspend state, enable APF filter back */
-		ret = __dhd_apf_config_filter(ndev, PKT_FILTER_APF_ID,
+		/* Driver is still in (early) suspend state and during this time Android
+		 * framework updated the filter program. As there will not be another
+		 * early suspend notification, enable back the APF filter with the new
+		 * filter program to avoid unnecessary host wake-ups.
+		 */
+		ret = _dhd_apf_config_filter(ndev, PKT_FILTER_APF_ID,
 			PKT_FILTER_MODE_FORWARD_ON_MATCH, TRUE);
+		if (ret) {
+			goto exit;
+		}
 	}
 exit:
 	DHD_APF_UNLOCK(ndev);
@@ -20085,9 +20159,9 @@ dhd_dev_apf_enable_filter(struct net_device *ndev)
 #ifdef WL_NAN
 	nan_dp_active = wl_cfgnan_is_dp_active(ndev);
 #endif /* WL_NAN */
-	if (dhdp->apf_set && (!(dhdp->op_mode & DHD_FLAG_HOSTAP_MODE) &&
-		!nan_dp_active)) {
-		ret = __dhd_apf_config_filter(ndev, PKT_FILTER_APF_ID,
+
+	if (dhdp->apf_set && (!(dhdp->op_mode & DHD_FLAG_HOSTAP_MODE) && !nan_dp_active)) {
+		ret = _dhd_apf_config_filter(ndev, PKT_FILTER_APF_ID,
 			PKT_FILTER_MODE_FORWARD_ON_MATCH, TRUE);
 	}
 
@@ -20106,7 +20180,7 @@ dhd_dev_apf_disable_filter(struct net_device *ndev)
 	DHD_APF_LOCK(ndev);
 
 	if (dhdp->apf_set) {
-		ret = __dhd_apf_config_filter(ndev, PKT_FILTER_APF_ID,
+		ret = _dhd_apf_config_filter(ndev, PKT_FILTER_APF_ID,
 			PKT_FILTER_MODE_FORWARD_ON_MATCH, FALSE);
 	}
 
@@ -20125,7 +20199,7 @@ dhd_dev_apf_delete_filter(struct net_device *ndev)
 	DHD_APF_LOCK(ndev);
 
 	if (dhdp->apf_set) {
-		ret = __dhd_apf_delete_filter(ndev, PKT_FILTER_APF_ID);
+		ret = _dhd_apf_delete_filter(ndev, PKT_FILTER_APF_ID);
 		if (!ret) {
 			dhdp->apf_set = FALSE;
 		}
@@ -20135,7 +20209,53 @@ dhd_dev_apf_delete_filter(struct net_device *ndev)
 
 	return ret;
 }
-#endif /* PKT_FILTER_SUPPORT && APF */
+int
+dhd_dev_apf_read_filter_data(struct net_device *ndev, u8* buf, uint32 buf_len)
+{
+	dhd_info_t *dhd = DHD_DEV_INFO(ndev);
+	dhd_pub_t *dhdp = &dhd->pub;
+	int ret = 0;
+	bool apf_disabled = FALSE;
+
+	DHD_APF_LOCK(ndev);
+
+	if (!dhdp->apf_set) {
+		DHD_ERROR(("%s: APF filter is not programmed\n", __FUNCTION__));
+		goto exit;
+	}
+
+	/* As per the requirement, APF filter needs to be stopped while reading the filter data.
+	 * Otherwise the APF counters could be wrong. Therefore disable the APF filter, if driver
+	 * is in (early) suspend state.
+	 */
+	if (dhdp->in_suspend) {
+		ret = _dhd_apf_config_filter(ndev, PKT_FILTER_APF_ID,
+			PKT_FILTER_MODE_FORWARD_ON_MATCH, FALSE);
+		if (unlikely(ret)) {
+			DHD_ERROR(("%s: failed to disable APF filter, ret=%d\n",
+				__FUNCTION__, ret));
+			goto exit;
+		}
+		apf_disabled = TRUE;
+	}
+
+	ret = _dhd_apf_read_filter_data(ndev, PKT_FILTER_APF_ID, buf, buf_len);
+	if (unlikely(ret)) {
+		goto exit;
+	}
+
+exit:
+	/* Re-enable the filter if got disabled above */
+	if (apf_disabled && _dhd_apf_config_filter(ndev, PKT_FILTER_APF_ID,
+			PKT_FILTER_MODE_FORWARD_ON_MATCH, TRUE)) {
+		DHD_ERROR(("%s: failed to enable APF filter, ret=%d\n", __FUNCTION__, ret));
+	}
+
+	DHD_APF_UNLOCK(ndev);
+
+	return ret;
+}
+#endif /* APF */
 
 #if defined(OEM_ANDROID)
 static void dhd_hang_process(struct work_struct *work_data)
