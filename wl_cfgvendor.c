@@ -10004,6 +10004,82 @@ exit:
 }
 #endif /* WL_P2P_RAND */
 
+#ifdef WL_THERMAL_MITIGATION
+static int
+wl_cfgvendor_thermal_mitigation(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int err = BCME_ERROR, rem, type;
+	wifi_thermal_mode set_thermal_mode = WIFI_MITIGATION_NONE;
+	struct bcm_cfg80211 *cfg = wl_get_cfg(wdev_to_ndev(wdev));
+	const struct nlattr *iter;
+	u32 duty_cycle = 100;
+	/* delay_win
+	 * Deadline (in milliseconds) to complete this request, value 0 implies apply
+	 * immediately. Deadline is basically a relaxed limit and allows
+	 * vendors to apply the mitigation within the window (if it cannot
+	 * apply immediately)
+	 * current chip can apply immediately, so will not use this value currently
+	 */
+	u32 delay_win = 0;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		if (type == ANDR_WIFI_ATTRIBUTE_THERMAL_MITIGATION) {
+			set_thermal_mode = nla_get_s8(iter);
+			WL_INFORM_MEM(("got thermal mode = %d\n", set_thermal_mode));
+		} else if (type == ANDR_WIFI_ATTRIBUTE_THERMAL_COMPLETION_WINDOW) {
+			delay_win = nla_get_u32(iter);
+			WL_INFORM_MEM(("got delay_win = %d\n", delay_win));
+		} else {
+			WL_ERR(("Unknown attr type: %d\n", type));
+			err = -EINVAL;
+			goto exit;
+		}
+	}
+	/* If thermal mode is already configured, no need to set it again */
+	if (cfg->thermal_mode == set_thermal_mode) {
+		WL_INFORM_MEM(("%s, thermal_mode %d is already set\n",
+			__FUNCTION__, set_thermal_mode));
+		err = BCME_OK;
+		goto exit;
+	}
+
+	/* Map Android TX power modes to Brcm power mode */
+	switch (set_thermal_mode) {
+		case WIFI_MITIGATION_LIGHT:
+			duty_cycle = DUTY_CYCLE_LIGHT;
+			break;
+		case WIFI_MITIGATION_MODERATE:
+			duty_cycle = DUTY_CYCLE_MODERATE;
+			break;
+		case WIFI_MITIGATION_SEVERE:
+			duty_cycle = DUTY_CYCLE_SEVERE;
+			break;
+		case WIFI_MITIGATION_CRITICAL:
+			duty_cycle = DUTY_CYCLE_CRITICAL;
+			break;
+		case WIFI_MITIGATION_EMERGENCY:
+			duty_cycle = DUTY_CYCLE_EMERGENCY;
+			break;
+		case WIFI_MITIGATION_NONE:
+		default:
+			duty_cycle = DUTY_CYCLE_NONE;
+	}
+	WL_DBG(("%s, duty_cycle %d thermal_mode %d\n", __FUNCTION__,
+			duty_cycle, set_thermal_mode));
+	err = wldev_iovar_setint(wdev_to_ndev(wdev), "dutycycle_thermal", duty_cycle);
+	if (unlikely(err)) {
+		WL_ERR(("%s: Failed to set dutycycle - error (%d)\n", __FUNCTION__, err));
+		goto exit;
+	}
+	/* Cache the thermal mode sent by the hal */
+	cfg->thermal_mode = set_thermal_mode;
+exit:
+	return err;
+}
+#endif /* WL_THERMAL_MITIGATION */
+
 #ifdef WL_SAR_TX_POWER
 static int
 wl_cfgvendor_tx_power_scenario(struct wiphy *wiphy,
@@ -11348,6 +11424,20 @@ static struct wiphy_vendor_command wl_vendor_cmds [] = {
 	},
 #endif /* WL_SAR_TX_POWER */
 
+#ifdef WL_THERMAL_MITIGATION
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_THERMAL_MITIGATION
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_thermal_mitigation,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = andr_wifi_attr_policy,
+		.maxattr = ANDR_WIFI_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+#endif /* WL_THERMAL_MITIGATION */
 #if defined(WL_SUPPORT_AUTO_CHANNEL)
 	{
 		{

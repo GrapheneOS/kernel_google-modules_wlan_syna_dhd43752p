@@ -1697,6 +1697,27 @@ typedef enum {
 	WIFI_POWER_SCENARIO_ON_BODY_BT = 5
 } wifi_power_scenario;
 
+#ifdef WL_THERMAL_MITIGATION
+/* Wifi Thermal mitigation modes */
+typedef enum {
+  WIFI_MITIGATION_NONE      = 0,
+  WIFI_MITIGATION_LIGHT     = 1,
+  WIFI_MITIGATION_MODERATE  = 2,
+  WIFI_MITIGATION_SEVERE    = 3,
+  WIFI_MITIGATION_CRITICAL  = 4,
+  WIFI_MITIGATION_EMERGENCY = 5,
+} wifi_thermal_mode;
+
+/* Mitigation mode convert table */
+#define DUTY_CYCLE_NONE 100
+#define DUTY_CYCLE_LIGHT 90
+#define DUTY_CYCLE_MODERATE 70
+#define DUTY_CYCLE_SEVERE 50
+#define DUTY_CYCLE_CRITICAL 30
+#define DUTY_CYCLE_EMERGENCY 10
+
+#endif /* WL_THERMAL_MITIGATION*/
+
 /* Log timestamp */
 #define LOG_TS(cfg, ts)	cfg->tsinfo.ts = OSL_LOCALTIME_NS();
 #define CLR_TS(cfg, ts)	cfg->tsinfo.ts = 0;
@@ -2018,6 +2039,9 @@ struct bcm_cfg80211 {
 	u8 country[WLC_CNTRY_BUF_SZ];
 	struct wireless_dev *nmi_wdev;	/* representing cfg cfg80211 device for NAN NMI */
 	struct net_device *nmi_ndev;    /* reference to NAN NMI interface */
+#ifdef WL_THERMAL_MITIGATION
+	wifi_thermal_mode thermal_mode;
+#endif /* WL_THERMAL_MITIGATION */
 };
 
 /* Max auth timeout allowed in case of EAP is 70sec, additional 5 sec for
