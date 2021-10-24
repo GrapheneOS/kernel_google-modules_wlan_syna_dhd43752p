@@ -1028,7 +1028,8 @@ show_pwrstats_path(struct dhd_info *dev, char *buf)
 
 done:
 	if (p_query) {
-		MFREE(g_dhd_pub->osh, p_query, len);
+		MFREE(g_dhd_pub->osh, p_query, (OFFSETOF(wl_pwrstats_query_t, type) +
+			PWRSTATS_REQ_TYPE_NUM * sizeof(uint16)));
 	}
 	if (iovar_buf) {
 		MFREE(g_dhd_pub->osh, iovar_buf, PWRSTATS_IOV_BUF_LEN);
@@ -1124,7 +1125,7 @@ static struct dhd_attr dhd_attr_nvram_path =
 
 #ifdef PWRSTATS_SYSFS
 static struct dhd_attr dhd_attr_pwrstats_path =
-	__ATTR(power_stats, 0660, show_pwrstats_path, NULL);
+	__ATTR(power_stats, 0664, show_pwrstats_path, NULL);
 #endif /* PWRSTATS_SYSFS */
 
 #define to_dhd(k) container_of(k, struct dhd_info, dhd_kobj)
