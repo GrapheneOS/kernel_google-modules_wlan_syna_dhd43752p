@@ -10086,65 +10086,103 @@ wl_cfgvendor_tx_power_scenario(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void  *data, int len)
 {
 	int err = BCME_ERROR, rem, type;
+	int8 wifi_tx_power_mode = WIFI_POWER_SCENARIO_INVALID;
 	struct bcm_cfg80211 *cfg = wl_get_cfg(wdev_to_ndev(wdev));
 	const struct nlattr *iter;
-	wifi_power_scenario sar_tx_power_val = WIFI_POWER_SCENARIO_INVALID;
-	wl_sar_modes_t wifi_tx_power_mode = 0;
+	sar_advance_modes sar_tx_power_val = SAR_DISABLE;
+	int airplane_mode = 0;
+#if defined(WL_SAR_TX_POWER_CONFIG)
+	int i = 0;
+	bool found = FALSE;
+#endif /* WL_SAR_TX_POWER_CONFIG */
 
 	nla_for_each_attr(iter, data, len, rem) {
 		type = nla_type(iter);
 		if (type == ANDR_WIFI_ATTRIBUTE_TX_POWER_SCENARIO) {
-			sar_tx_power_val = nla_get_s8(iter);
+			wifi_tx_power_mode = nla_get_s8(iter);
 		} else {
-			WL_ERR(("Unknown attr type: %d\n", type));
+			WL_ERR(("SAR: Unknown attr type: %d\n", type));
 			err = -EINVAL;
 			goto exit;
 		}
 	}
 	/* If sar tx power is already configured, no need to set it again */
-	if (cfg->wifi_tx_power_mode == sar_tx_power_val) {
-		WL_INFORM_MEM(("%s, tx_power_mode %d is already set\n",
-			__FUNCTION__, sar_tx_power_val));
+	if (cfg->wifi_tx_power_mode == wifi_tx_power_mode) {
+		WL_INFORM_MEM(("SAR: tx_power_mode %d is already set\n",
+			wifi_tx_power_mode));
 		err = BCME_OK;
 		goto exit;
 	}
 
-	/* Map Android TX power modes to Brcm power mode */
-	switch (sar_tx_power_val) {
-		case WIFI_POWER_SCENARIO_VOICE_CALL:
-		case WIFI_POWER_SCENARIO_DEFAULT:
-			wifi_tx_power_mode = HEAD_SAR_BACKOFF_ENABLE;
+#if defined(WL_SAR_TX_POWER_CONFIG)
+	for (i = 0; i < cfg->sar_config_info_cnt; i++) {
+		if ((wifi_tx_power_mode != WIFI_POWER_SCENARIO_INVALID) &&
+				(cfg->sar_config_info[i].scenario == wifi_tx_power_mode)) {
+			found = TRUE;
+			sar_tx_power_val = cfg->sar_config_info[i].sar_tx_power_val;
+			airplane_mode = cfg->sar_config_info[i].airplane_mode;
+			WL_DBG(("found scenario with new config\n"));
 			break;
-		case WIFI_POWER_SCENARIO_ON_HEAD_CELL_OFF:
-			wifi_tx_power_mode = GRIP_SAR_BACKOFF_DISABLE;
-			break;
-		case WIFI_POWER_SCENARIO_ON_BODY_CELL_OFF:
-			wifi_tx_power_mode = GRIP_SAR_BACKOFF_ENABLE;
-			break;
-		case WIFI_POWER_SCENARIO_ON_BODY_BT:
-			wifi_tx_power_mode = NR_mmWave_SAR_BACKOFF_ENABLE;
-			break;
-		case WIFI_POWER_SCENARIO_ON_HEAD_CELL_ON:
-			wifi_tx_power_mode = NR_Sub6_SAR_BACKOFF_DISABLE;
-			break;
-		case WIFI_POWER_SCENARIO_ON_BODY_CELL_ON:
-			wifi_tx_power_mode = NR_Sub6_SAR_BACKOFF_ENABLE;
-			break;
-		default:
-			WL_ERR(("invalid wifi tx power scenario = %d\n",
-				sar_tx_power_val));
-			err = -EINVAL;
-			goto exit;
+		}
 	}
 
-	WL_DBG(("%s, tx_power_mode %d\n", __FUNCTION__, wifi_tx_power_mode));
-	err = wldev_iovar_setint(wdev_to_ndev(wdev), "sar_enable", wifi_tx_power_mode);
+	if (!found)
+#endif /* WL_SAR_TX_POWER_CONFIG */
+	{
+		/* Map Android TX power modes to Brcm power mode */
+		switch (wifi_tx_power_mode) {
+			case WIFI_POWER_SCENARIO_VOICE_CALL:
+			case WIFI_POWER_SCENARIO_DEFAULT:
+				/* SAR disabled */
+				sar_tx_power_val = SAR_DISABLE;
+				airplane_mode = 0;
+				break;
+			case WIFI_POWER_SCENARIO_ON_HEAD_CELL_OFF:
+				/* HEAD mode, Airplane */
+				sar_tx_power_val = SAR_HEAD;
+				airplane_mode = 1;
+				break;
+			case WIFI_POWER_SCENARIO_ON_BODY_CELL_OFF:
+				/* GRIP mode, Airplane */
+				sar_tx_power_val = SAR_GRIP;
+				airplane_mode = 1;
+				break;
+			case WIFI_POWER_SCENARIO_ON_BODY_BT:
+				/* BT mode, Airplane */
+				sar_tx_power_val = SAR_BT;
+				airplane_mode = 1;
+				break;
+			case WIFI_POWER_SCENARIO_ON_HEAD_CELL_ON:
+				/* HEAD mode, Normal */
+				sar_tx_power_val = SAR_HEAD;
+				airplane_mode = 0;
+				break;
+			case WIFI_POWER_SCENARIO_ON_BODY_CELL_ON:
+				/* GRIP mode, Normal */
+				sar_tx_power_val = SAR_GRIP;
+				airplane_mode = 0;
+				break;
+			default:
+				WL_ERR(("SAR: invalid wifi tx power scenario = %d\n",
+					sar_tx_power_val));
+				err = -EINVAL;
+				goto exit;
+		}
+	}
+	WL_DBG(("SAR: sar_mode %d airplane_mode %d\n", sar_tx_power_val, airplane_mode));
+	err = wldev_iovar_setint(wdev_to_ndev(wdev), "fccpwrlimit2g", airplane_mode);
 	if (unlikely(err)) {
-		WL_ERR(("%s: Failed to set sar_enable - error (%d)\n", __FUNCTION__, err));
+		WL_ERR(("SAR: Failed to set airplane_mode - error (%d)\n", err));
+		goto exit;
+	}
+	err = wldev_iovar_setint(wdev_to_ndev(wdev), "sar_enable", sar_tx_power_val);
+	if (unlikely(err)) {
+		WL_ERR(("SAR: Failed to set sar_enable - error (%d)\n", err));
 		goto exit;
 	}
 	/* Cache the tx power mode sent by the hal */
-	cfg->wifi_tx_power_mode = sar_tx_power_val;
+	cfg->wifi_tx_power_mode = wifi_tx_power_mode;
+	WL_INFORM_MEM(("SAR: tx_power_mode %d SUCCESS\n", wifi_tx_power_mode));
 exit:
 	return err;
 }

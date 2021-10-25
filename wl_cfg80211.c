@@ -689,6 +689,10 @@ wl_cfg80211_mgmt_auth_tx(struct net_device *dev, bcm_struct_cfgdev *cfgdev,
 	struct bcm_cfg80211 *cfg, const u8 *buf, size_t len, s32 bssidx, u64 *cookie);
 #endif /* WL_CLIENT_SAE */
 
+#if defined(WL_SAR_TX_POWER) && defined(WL_SAR_TX_POWER_CONFIG)
+static void wl_get_sar_config_info(struct bcm_cfg80211 *cfg);
+#endif /* WL_SAR_TX_POWER && WL_SAR_TX_POWER_CONFIG */
+
 #ifdef WL_MON_OWN_PKT
 static s32
 wl_cfg80211_event_roaming_priv(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
@@ -16080,6 +16084,13 @@ s32 wl_cfg80211_attach(struct net_device *ndev, void *context)
 		goto cfg80211_attach_out;
 #endif /* WL_ENABLE_P2P_IF || WL_NEWCFG_PRIVCMD_SUPPORT */
 
+#ifdef WL_SAR_TX_POWER
+	cfg->wifi_tx_power_mode = WIFI_POWER_SCENARIO_INVALID;
+#if defined(WL_SAR_TX_POWER_CONFIG)
+	wl_get_sar_config_info(cfg);
+#endif /* WL_SAR_TX_POWER_CONFIG */
+#endif /* WL_SAR_TX_POWER */
+
 #if defined(OEM_ANDROID) && defined(DHCP_SCAN_SUPPRESS)
 	/* wlan scan_supp timer and work thread info */
 	init_timer_compat(&cfg->scan_supp_timer, wl_cfg80211_scan_supp_timerfunc, cfg);
@@ -17730,6 +17741,13 @@ static s32 __wl_cfg80211_down(struct bcm_cfg80211 *cfg)
 
 #ifdef WL_SAR_TX_POWER
 	cfg->wifi_tx_power_mode = WIFI_POWER_SCENARIO_INVALID;
+#if defined(WL_SAR_TX_POWER_CONFIG)
+	if (cfg->sar_config_info != NULL) {
+		MFREE(cfg->osh, cfg->sar_config_info,
+		sizeof(wl_sar_config_info_t) * cfg->sar_config_info_cnt);
+		cfg->sar_config_info_cnt = 0;
+	}
+#endif /* WL_SAR_TX_POWER_CONFIG */
 #endif /* WL_SAR_TX_POWER */
 	if (!dhd_download_fw_on_driverload) {
 		/* For built-in drivers/other drivers that do reset on
@@ -23336,6 +23354,151 @@ wl_cfg80211_external_auth(struct wiphy *wiphy,
 	return err;
 }
 #endif /* WL_CLIENT_SAE */
+
+#if defined(WL_SAR_TX_POWER) && defined(WL_SAR_TX_POWER_CONFIG)
+#ifdef DHD_LINUX_STD_FW_API
+#define CONFIG_SAR_CONFIG_INFO_PATH "sarconfig.info"
+#else
+#define CONFIG_SAR_CONFIG_INFO_PATH PLATFORM_PATH"sarconfig.info"
+#endif /* DHD_LINUX_STD_FW_API */
+static void wl_get_sar_config_info(struct bcm_cfg80211 *cfg)
+{
+#ifdef DHD_LINUX_STD_FW_API
+	const struct firmware *fw = NULL;
+#else
+	struct file *fp = NULL;
+#endif /* DHD_LINUX_STD_FW_API */
+	char *filepath = CONFIG_SAR_CONFIG_INFO_PATH;
+	int ret = BCME_OK;
+	char *buf = NULL, *ptr = NULL, *cptr = NULL;
+	int filelen = 0, buflen = 0, offset = 0, num, len, i;
+	int8 scenario, sarmode, airplanemode;
+
+	if (cfg == NULL) {
+		WL_ERR(("cfg is null\n"));
+		return;
+	}
+
+	if (cfg->sar_config_info) {
+		MFREE(cfg->osh, cfg->sar_config_info,
+			sizeof(wl_sar_config_info_t) * cfg->sar_config_info_cnt);
+		cfg->sar_config_info_cnt = 0;
+	}
+
+#ifdef DHD_LINUX_STD_FW_API
+	ret = dhd_os_get_img_fwreq(&fw, filepath);
+	if (ret < 0 || fw == NULL) {
+		WL_DBG(("file [%s] doesn't exist\n", filepath));
+		return;
+	} else {
+		filelen = fw->size;
+		buflen = filelen + 1;
+		if ((buf = (char *)MALLOCZ(cfg->osh, buflen)) == NULL) {
+			WL_ERR(("fail to malloc buffer\n"));
+			goto exit;
+		}
+	}
+
+	if ((ret = memcpy_s(buf, buflen, fw->data, fw->size)) < 0) {
+		WL_ERR((" memcpy error, err %d\n", ret));
+		goto exit;
+	}
+#else
+	fp = filp_open(filepath, O_RDONLY, 0);
+	if (IS_ERR(fp) || (fp == NULL)) {
+		WL_DBG(("file [%s] doesn't exist\n", filepath));
+		return;
+	}
+
+	if ((filelen = i_size_read(file_inode(fp))) <= 0) {
+		WL_ERR(("abnormal file size\n"));
+		goto exit;
+	} else {
+		buflen = filelen + 1;
+		if ((buf = (char *)MALLOCZ(cfg->osh, buflen)) == NULL) {
+			WL_ERR(("fail to malloc buffer\n"));
+			goto exit;
+		}
+	}
+
+	/* read file to check line count */
+	if ((ret = kernel_read_compat(fp, 0, (char *)buf, filelen)) < 0) {
+		WL_ERR((" file read error, err %d\n", ret));
+		goto exit;
+	}
+#endif /* DHD_LINUX_STD_FW_API */
+
+	/* get the line count */
+	for (cfg->sar_config_info_cnt = 0, ptr = buf; offset < filelen; offset += (len + 1)) {
+		if ((cptr = bcmstrtok(&ptr, "\n", NULL)) == NULL) {
+			break;
+		}
+		len = strlen(cptr);
+		cfg->sar_config_info_cnt++;
+	}
+	if (cfg->sar_config_info_cnt <= 0) {
+		WL_ERR(("no data in the config file\n"));
+		goto exit;
+	}
+
+	/* make buffer again becuase bcmstrtok removes the delimiter in it */
+#ifdef DHD_LINUX_STD_FW_API
+	if ((ret = memcpy_s(buf, buflen, fw->data, fw->size)) < 0) {
+		WL_ERR((" memcpy error, err %d\n", ret));
+		goto exit;
+	}
+#else
+	if ((ret = kernel_read_compat(fp, 0, (char *)buf, filelen)) < 0) {
+		WL_ERR((" file read error, err %d\n", ret));
+		goto exit;
+	}
+#endif /* DHD_LINUX_STD_FW_API */
+
+	/* allocate the buffer */
+	if ((cfg->sar_config_info = (wl_sar_config_info_t *)MALLOCZ(cfg->osh,
+			sizeof(wl_sar_config_info_t) * cfg->sar_config_info_cnt)) == NULL) {
+		WL_ERR(("malloc failure\n"));
+		goto exit;
+	}
+
+	for (i = 0, ptr = buf; i < cfg->sar_config_info_cnt; i++) {
+		cptr = bcmstrtok(&ptr, "\n", NULL);
+		if (cptr) {
+			num = sscanf(cptr, "%hhd,%hhd,%hhd",
+				&scenario, &sarmode, &airplanemode);
+			if ((num != 3) || (scenario < 0) ||
+					(scenario >= SAR_CONFIG_SCENARIO_COUNT)) {
+				cfg->sar_config_info[i].scenario = WIFI_POWER_SCENARIO_INVALID;
+				WL_ERR(("format should be [scenario (0-%d)], [sar], [airplane]\n",
+					(SAR_CONFIG_SCENARIO_COUNT-1)));
+			} else {
+				WL_DBG(("scenario=%d, sar=%d, airplane=%d\n",
+					scenario, sarmode, airplanemode));
+				cfg->sar_config_info[i].scenario = scenario;
+				cfg->sar_config_info[i].sar_tx_power_val = sarmode;
+				cfg->sar_config_info[i].airplane_mode = airplanemode;
+			}
+		} else {
+			cfg->sar_config_info[i].scenario = WIFI_POWER_SCENARIO_INVALID;
+		}
+	}
+
+exit:
+#ifdef DHD_LINUX_STD_FW_API
+	if (fw) {
+		dhd_os_close_img_fwreq(fw);
+	}
+#else
+	if (fp) {
+		filp_close(fp, NULL);
+	}
+#endif /* DHD_LINUX_STD_FW_API */
+	if (buf) {
+		MFREE(cfg->osh, buf, buflen);
+	}
+	return;
+}
+#endif /* WL_SAR_TX_POWER && WL_SAR_TX_POWER_CONFIG */
 
 #ifdef WL_MON_OWN_PKT
 static s32

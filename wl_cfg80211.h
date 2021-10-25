@@ -1673,17 +1673,37 @@ typedef struct wl_loc_info {
 	struct wireless_dev *wdev;    /* interface on which listen is requested */
 } wl_loc_info_t;
 
-typedef enum wl_sar_modes {
-	HEAD_SAR_BACKOFF_DISABLE = -1,
-	HEAD_SAR_BACKOFF_ENABLE = 0,
-	GRIP_SAR_BACKOFF_DISABLE,
-	GRIP_SAR_BACKOFF_ENABLE,
-	NR_mmWave_SAR_BACKOFF_DISABLE,
-	NR_mmWave_SAR_BACKOFF_ENABLE,
-	NR_Sub6_SAR_BACKOFF_DISABLE,
-	NR_Sub6_SAR_BACKOFF_ENABLE,
-	SAR_BACKOFF_DISABLE_ALL
-} wl_sar_modes_t;
+typedef enum
+{
+	SAR_DISABLE = 0,
+	SAR_HEAD,
+	SAR_GRIP,
+	SAR_HEAD_GRIP,
+	SAR_NR_mW_ONLY,
+	SAR_NR_mW_HEAD,
+	SAR_NR_mW_GRIP,
+	SAR_NR_mW_HEAD_GRIP,
+	SAR_NR_SUB6_ONLY,
+	SAR_NR_SUB6_HEAD,
+	SAR_NR_SUB6_GRIP,
+	SAR_NR_SUB6_HEAD_GRIP,
+	SAR_NR_SUB6_mW_INVALID1,
+	SAR_NR_SUB6_mW_INVALID2,
+	SAR_NR_SUB6_mW_INVALID3,
+	SAR_NR_SUB6_mW_INVALID4,
+	SAR_BT = 16,
+	SAR_HOTSPOT = 32,
+} sar_advance_modes;
+
+typedef enum wl_sar_sub6_bandinfo {
+	SAR_NR_SUB6_BANDINFO_DISABLE = -1,
+	SAR_NR_SUB6_BANDINFO_BAND2 = 2,
+	SAR_NR_SUB6_BANDINFO_BAND25 = 25,
+	SAR_NR_SUB6_BANDINFO_BAND41 = 41,
+	SAR_NR_SUB6_BANDINFO_BAND48 = 48,
+	SAR_NR_SUB6_BANDINFO_BAND66 = 66,
+	SAR_NR_SUB6_BANDINFO_BAND77 = 77
+} wl_sar_sub6_bandinfo_t;
 
 /* Pre selected Power scenarios to be applied from BDF file */
 typedef enum {
@@ -1694,7 +1714,14 @@ typedef enum {
 	WIFI_POWER_SCENARIO_ON_HEAD_CELL_ON = 2,
 	WIFI_POWER_SCENARIO_ON_BODY_CELL_OFF = 3,
 	WIFI_POWER_SCENARIO_ON_BODY_CELL_ON = 4,
-	WIFI_POWER_SCENARIO_ON_BODY_BT = 5
+	WIFI_POWER_SCENARIO_ON_BODY_BT = 5,
+	WIFI_POWER_SCENARIO_ON_HEAD_HOTSPOT  = 6,
+	WIFI_POWER_SCENARIO_ON_HEAD_HOTSPOT_MMW = 7,
+	WIFI_POWER_SCENARIO_ON_BODY_CELL_ON_BT = 8,
+	WIFI_POWER_SCENARIO_ON_BODY_HOTSPOT = 9,
+	WIFI_POWER_SCENARIO_ON_BODY_HOTSPOT_BT = 10,
+	WIFI_POWER_SCENARIO_ON_BODY_HOTSPOT_MMW = 11,
+	WIFI_POWER_SCENARIO_ON_BODY_HOTSPOT_BT_MMW = 12,
 } wifi_power_scenario;
 
 #ifdef WL_THERMAL_MITIGATION
@@ -1717,6 +1744,15 @@ typedef enum {
 #define DUTY_CYCLE_EMERGENCY 10
 
 #endif /* WL_THERMAL_MITIGATION*/
+
+#if defined(WL_SAR_TX_POWER) && defined(WL_SAR_TX_POWER_CONFIG)
+#define SAR_CONFIG_SCENARIO_COUNT	100
+typedef struct wl_sar_config_info {
+	int8 scenario;
+	int8 sar_tx_power_val;
+	int8 airplane_mode;
+} wl_sar_config_info_t;
+#endif /* WL_SAR_TX_POWER && WL_SAR_TX_POWER_CONFIG */
 
 /* Log timestamp */
 #define LOG_TS(cfg, ts)	cfg->tsinfo.ts = OSL_LOCALTIME_NS();
@@ -2016,7 +2052,11 @@ struct bcm_cfg80211 {
 	int ncho_mode;
 	int ncho_band;
 #ifdef WL_SAR_TX_POWER
-	wifi_power_scenario wifi_tx_power_mode;
+	int8 wifi_tx_power_mode;
+#if defined(WL_SAR_TX_POWER_CONFIG)
+	wl_sar_config_info_t *sar_config_info;
+	int sar_config_info_cnt;
+#endif /* WL_SAR_TX_POWER_CONFIG */
 #endif /* WL_SAR_TX_POWER */
 	struct mutex connect_sync;  /* For assoc/resssoc state sync */
 	wl_ctx_tsinfo_t tsinfo;
