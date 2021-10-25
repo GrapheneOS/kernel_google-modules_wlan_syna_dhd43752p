@@ -15511,6 +15511,10 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 #if defined(CUSTOMER_HW6) || defined (WIPHY_DYNAMIC_UPDATE)
 	setbit(mask, WLC_E_COUNTRY_CODE_CHANGED);
 #endif /* CUSTOMER_HW6 || WIPHY_DYNAMIC_UPDATE */
+#ifdef WL_TWT_HAL_IF
+	setbit(mask, WLC_E_TWT);
+#endif /* WL_TWT_HAL_IF */
+
 
 	/* Write updated Event mask */
 	eventmask_msg->ver = EVENTMSGS_VER;

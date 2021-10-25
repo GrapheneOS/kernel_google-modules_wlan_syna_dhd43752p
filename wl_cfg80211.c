@@ -14958,9 +14958,11 @@ static void wl_init_event_handler(struct bcm_cfg80211 *cfg)
 	cfg->evt_handler[WLC_E_BSS_LOAD] = wl_cfg80211_bssload_report_event_handler;
 #endif /* WL_CHAN_UTIL */
 #ifdef WL_TWT
-	cfg->evt_handler[WLC_E_TWT_SETUP] = wl_notify_twt_event;
-	cfg->evt_handler[WLC_E_TWT_TEARDOWN] = wl_notify_twt_event;
-	cfg->evt_handler[WLC_E_TWT_INFO_FRM] = wl_notify_twt_event;
+	cfg->evt_handler[WLC_E_TWT] = wl_notify_twt_event;
+#else
+#ifdef WL_TWT_HAL_IF
+	cfg->evt_handler[WLC_E_TWT] = wl_cfgvendor_notify_twt_event;
+#endif /* WL_TWT_HAL_IF */
 #endif /* WL_TWT */
 #ifdef WL_CLIENT_SAE
 	cfg->evt_handler[WLC_E_JOIN_START] = wl_notify_start_auth;
@@ -23358,10 +23360,10 @@ wl_cfg80211_event_roaming_priv(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgd
 #if (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || \
 			LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
 		skb = cfg80211_vendor_event_alloc(wiphy, ndev_to_wdev(ndev), BRCM_ROAMMING_EVENT_LENGTH,
-			BRCM_VENDOR_EVENT_ROAMING, kflags);
+			SYNA_VENDOR_EVENT_ROAMING, kflags);
 #else
 		skb = cfg80211_vendor_event_alloc(wiphy, BRCM_ROAMMING_EVENT_LENGTH,
-			BRCM_VENDOR_EVENT_ROAMING, kflags);
+			SYNA_VENDOR_EVENT_ROAMING, kflags);
 #endif /* (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
 			/* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
 		if (!skb) {
