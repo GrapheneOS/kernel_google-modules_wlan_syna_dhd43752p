@@ -367,6 +367,61 @@ common_iface_combinations[] = {
 };
 #endif /* LINUX_VER >= 3.0 && (WL_IFACE_COMB_NUM_CHANNELS || WL_CFG80211_P2P_DEV_IF) */
 
+#if defined(WL_CFG80211_AKM_TYPES_BKPORT) || (LINUX_VERSION_CODE >= KERNEL_VERSION(5, \
+	7, 0))
+static const uint32
+akm_suites_station[] = {
+	WLAN_AKM_SUITE_8021X,
+	WLAN_AKM_SUITE_PSK,
+	WLAN_AKM_SUITE_SAE,
+	WLAN_AKM_SUITE_FT_OVER_SAE,
+	WLAN_AKM_SUITE_8021X_SHA256,
+	WLAN_AKM_SUITE_PSK_SHA256,
+	WLAN_AKM_SUITE_FT_PSK,
+	WLAN_AKM_SUITE_FT_8021X,
+	WLAN_AKM_SUITE_8021X_SUITE_B,
+	WLAN_AKM_SUITE_8021X_SUITE_B_192,
+	WLAN_AKM_SUITE_FILS_SHA256,
+	WLAN_AKM_SUITE_FILS_SHA384,
+	WLAN_AKM_SUITE_FT_FILS_SHA256,
+	WLAN_AKM_SUITE_FT_FILS_SHA384,
+	WLAN_AKM_SUITE_OWE,
+	WLAN_AKM_SUITE_DPP
+};
+
+static const uint32
+akm_suites_ap[] = {
+	WLAN_AKM_SUITE_PSK,
+	WLAN_AKM_SUITE_SAE,
+	WL_AKM_SUITE_SHA256_PSK,
+};
+
+static const uint32
+akm_suites_p2p[] = {
+	WLAN_AKM_SUITE_PSK,
+	WL_AKM_SUITE_SHA256_PSK,
+};
+
+static const struct wiphy_iftype_akm_suites
+iftype_akm_suites[] = {
+	{
+	.iftypes_mask = BIT(NL80211_IFTYPE_STATION),
+	.akm_suites = akm_suites_station,
+	.n_akm_suites = ARRAY_SIZE(akm_suites_station),
+	},
+	{
+	.iftypes_mask = BIT(NL80211_IFTYPE_AP),
+	.akm_suites = akm_suites_ap,
+	.n_akm_suites = ARRAY_SIZE(akm_suites_ap),
+	},
+	{
+	.iftypes_mask = BIT(NL80211_IFTYPE_P2P_CLIENT) | BIT(NL80211_IFTYPE_P2P_GO),
+	.akm_suites = akm_suites_p2p,
+	.n_akm_suites = ARRAY_SIZE(akm_suites_p2p),
+	},
+};
+#endif /* (WL_CFG80211_AKM_TYPES_BKPORT ) || (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)) */
+
 static const char *wl_if_state_strs[WL_IF_STATE_MAX + 1] = {
 	"WL_IF_CREATE_REQ",
 	"WL_IF_CREATE_DONE",
@@ -11004,6 +11059,12 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 	wdev->wiphy->n_iface_combinations =
 		ARRAY_SIZE(common_iface_combinations);
 #endif /* LINUX_VER >= 3.0 && (WL_IFACE_COMB_NUM_CHANNELS || WL_CFG80211_P2P_DEV_IF) */
+#if defined(WL_CFG80211_AKM_TYPES_BKPORT) || (LINUX_VERSION_CODE >= KERNEL_VERSION(5, \
+	7, 0))
+	wdev->wiphy->iftype_akm_suites = iftype_akm_suites;
+	wdev->wiphy->num_iftype_akm_suites =
+		ARRAY_SIZE(iftype_akm_suites);
+#endif /* (WL_CFG80211_AKM_TYPES_BKPORT ) || (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)) */
 
 	wdev->wiphy->bands[IEEE80211_BAND_2GHZ] = &__wl_band_2ghz;
 
