@@ -2524,13 +2524,18 @@ wl_cfg80211_scan(struct wiphy *wiphy, struct net_device *ndev,
 
 	err = __wl_cfg80211_scan(wiphy, ndev, request, NULL);
 	if (unlikely(err)) {
-		WL_ERR(("scan error (%d)\n", err));
-#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
 		if (err == -EBUSY) {
+			WL_DBG(("scan busy (%d)\n", err));
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
 			dhdp->alert_reason = ALERT_SCAN_BUSY;
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 		} else {
+			WL_ERR(("scan error (%d)\n", err));
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
 			dhdp->alert_reason = ALERT_SCAN_ERR;
+#endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 		}
+#ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
 		dhd_os_send_alert_message(dhdp);
 #endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
 	}
