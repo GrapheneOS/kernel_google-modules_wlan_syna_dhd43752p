@@ -277,6 +277,14 @@ void
 }
 EXPORT_SYMBOL(dhd_wlan_mem_prealloc);
 
+#ifdef DHD_DUMP_BUF_KVMALLOC
+#define DUMP_BUF_MALLOC(size)   kvmalloc(size, GFP_KERNEL)
+#define DUMP_BUF_MFREE(addr)    kvfree(addr)
+#else
+#define DUMP_BUF_MALLOC(size)   kmalloc(size, GFP_KERNEL)
+#define DUMP_BUF_MFREE(addr)    kfree(addr)
+#endif /* DHD_DUMP_BUF_KVMALLOC */
+
 int
 dhd_init_wlan_mem(void)
 {
@@ -333,13 +341,13 @@ dhd_init_wlan_mem(void)
 		goto err_mem_alloc;
 	}
 
-	wlan_static_dhd_log_dump_buf = kmalloc(DHD_LOG_DUMP_BUF_SIZE, GFP_KERNEL);
+	wlan_static_dhd_log_dump_buf = DUMP_BUF_MALLOC(DHD_LOG_DUMP_BUF_SIZE);
 	if (!wlan_static_dhd_log_dump_buf) {
 		pr_err("Failed to alloc wlan_static_dhd_log_dump_buf\n");
 		goto err_mem_alloc;
 	}
 
-	wlan_static_dhd_log_dump_buf_ex = kmalloc(DHD_LOG_DUMP_BUF_EX_SIZE, GFP_KERNEL);
+	wlan_static_dhd_log_dump_buf_ex = DUMP_BUF_MALLOC(DHD_LOG_DUMP_BUF_EX_SIZE);
 	if (!wlan_static_dhd_log_dump_buf_ex) {
 		pr_err("Failed to alloc wlan_static_dhd_log_dump_buf_ex\n");
 		goto err_mem_alloc;
@@ -391,7 +399,7 @@ dhd_init_wlan_mem(void)
 #endif /* BCMPCIE */
 
 #ifdef CONFIG_BCMDHD_PREALLOC_MEMDUMP
-	wlan_static_dhd_memdump_ram = kmalloc(WLAN_DHD_MEMDUMP_SIZE, GFP_KERNEL);
+	wlan_static_dhd_memdump_ram = DUMP_BUF_MALLOC(WLAN_DHD_MEMDUMP_SIZE);
 	if (!wlan_static_dhd_memdump_ram) {
 		pr_err("Failed to alloc wlan_static_dhd_memdump_ram\n");
 		goto err_mem_alloc;
@@ -432,7 +440,7 @@ dhd_exit_wlan_mem(void)
 
 #ifdef CONFIG_BCMDHD_PREALLOC_MEMDUMP
 	if (wlan_static_dhd_memdump_ram) {
-		kfree(wlan_static_dhd_memdump_ram);
+		DUMP_BUF_MFREE(wlan_static_dhd_memdump_ram);
 	}
 
 #endif /* CONFIG_BCMDHD_PREALLOC_MEMDUMP */
@@ -465,11 +473,11 @@ dhd_exit_wlan_mem(void)
 	}
 
 	if (wlan_static_dhd_log_dump_buf) {
-		kfree(wlan_static_dhd_log_dump_buf);
+		DUMP_BUF_MFREE(wlan_static_dhd_log_dump_buf);
 	}
 
 	if (wlan_static_dhd_log_dump_buf_ex) {
-		kfree(wlan_static_dhd_log_dump_buf_ex);
+		DUMP_BUF_MFREE(wlan_static_dhd_log_dump_buf_ex);
 	}
 
 	if (wlan_static_scan_buf1) {
