@@ -475,7 +475,10 @@ static int wifi_ctrlfunc_register_drv(void)
 
 // modify for compaibility
 #if defined(BCMDHD_MODULAR) && defined(BOARD_MODULAR_INIT)
-	dhd_wlan_init();
+	if ((err = dhd_wlan_init())) {
+		DHD_ERROR(("%s: dhd_wlan_init() failed(%d)\n", __FUNCTION__, err));
+		return err;
+	}
 #ifdef WBRC
 	wbrc_init();
 #endif /* WBRC */
@@ -496,7 +499,7 @@ static int wifi_ctrlfunc_register_drv(void)
 	adapter = kzalloc(sizeof(wifi_adapter_info_t), GFP_KERNEL);
 	if (adapter == NULL) {
 		DHD_ERROR(("%s:adapter alloc failed", __FUNCTION__));
-		return ENOMEM;
+		return -ENOMEM;
 	}
 	adapter->name = "DHD generic adapter";
 	adapter->bus_type = -1;
@@ -506,6 +509,11 @@ static int wifi_ctrlfunc_register_drv(void)
 	is_power_on = FALSE;
 	wifi_plat_dev_probe_ret = 0;
 	dhd_wifi_platdata = kzalloc(sizeof(bcmdhd_wifi_platdata_t), GFP_KERNEL);
+	if (dhd_wifi_platdata == NULL) {
+		DHD_ERROR(("%s:dhd_wifi_platdata alloc failed", __FUNCTION__));
+		kfree(adapter);
+		return -ENOMEM;
+	}
 	dhd_wifi_platdata->num_adapters = 1;
 	dhd_wifi_platdata->adapters = adapter;
 
@@ -567,6 +575,11 @@ void wifi_ctrlfunc_unregister_drv(void)
 		platform_driver_unregister(&wifi_platform_dev_driver);
 	if (dev2)
 		platform_driver_unregister(&wifi_platform_dev_driver_legacy);
+
+	if (!dhd_wifi_platdata) {
+		goto done;
+	}
+
 	if (dts_enabled) {
 		wifi_adapter_info_t *adapter;
 		adapter = &dhd_wifi_platdata->adapters[0];
@@ -589,11 +602,16 @@ void wifi_ctrlfunc_unregister_drv(void)
 #endif /* defined(BCMDHD_MODULAR) && defined(BOARD_MODULAR_INIT) */
 #endif /* !defined(CONFIG_DHD_DTS) */
 
-	kfree(dhd_wifi_platdata->adapters);
-	dhd_wifi_platdata->adapters = NULL;
-	dhd_wifi_platdata->num_adapters = 0;
-	kfree(dhd_wifi_platdata);
-	dhd_wifi_platdata = NULL;
+done:
+	if (dhd_wifi_platdata) {
+		if (dhd_wifi_platdata->adapters) {
+			kfree(dhd_wifi_platdata->adapters);
+		}
+		dhd_wifi_platdata->adapters = NULL;
+		dhd_wifi_platdata->num_adapters = 0;
+		kfree(dhd_wifi_platdata);
+		dhd_wifi_platdata = NULL;
+	}
 }
 
 static int bcmdhd_wifi_plat_dev_drv_probe(struct platform_device *pdev)
