@@ -1208,7 +1208,11 @@ BCMFASTPATH(pktsetprio_qms)(void *pkt, uint8* up_table, bool update_vtag)
 			user_priority = dscp2up(up_table, dscp);
 			PKTSETPRIO(pkt, user_priority);
 		}
-
+#ifdef WL_CUSTOM_MAPPING_OF_DSCP
+		else {
+			return pktsetprio(pkt, update_vtag);
+		}
+#endif /* WL_CUSTOM_MAPPING_OF_DSCP */
 		return (rc | user_priority);
 	} else {
 		return pktsetprio(pkt, update_vtag);

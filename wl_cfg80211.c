@@ -13516,7 +13516,7 @@ wl_check_pmstatus(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 }
 #endif	/* CUSTOM_EVENT_PM_WAKE */
 
-#ifdef QOS_MAP_SET
+#if defined(QOS_MAP_SET) || defined(WL_CUSTOM_MAPPING_OF_DSCP)
 /* get user priority table */
 uint8 *
 wl_get_up_table(dhd_pub_t * dhdp, int idx)
@@ -13533,7 +13533,7 @@ wl_get_up_table(dhd_pub_t * dhdp, int idx)
 
 	return NULL;
 }
-#endif /* QOS_MAP_SET */
+#endif /* defined(QOS_MAP_SET) || defined(WL_CUSTOM_MAPPING_OF_DSCP) */
 
 #if defined(DHD_LOSSLESS_ROAMING) || defined (DBG_PKT_MON) || defined(WL_MON_OWN_PKT)
 /*
