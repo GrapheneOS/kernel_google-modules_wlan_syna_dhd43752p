@@ -11194,6 +11194,15 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 	wdev->wiphy->max_num_csa_counters = WL_MAX_NUM_CSA_COUNTERS;
 #endif /* LINUX_VERSION_CODE > KERNEL_VERSION(3, 12, 0) */
 
+#if defined(WL_OCE) && defined(WL_CAP_OCE_STA)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
+	wiphy_ext_feature_set(wdev->wiphy, NL80211_EXT_FEATURE_FILS_MAX_CHANNEL_TIME);
+	wiphy_ext_feature_set(wdev->wiphy, NL80211_EXT_FEATURE_ACCEPT_BCAST_PROBE_RESP);
+	wiphy_ext_feature_set(wdev->wiphy, NL80211_EXT_FEATURE_OCE_PROBE_REQ_HIGH_TX_RATE);
+	wiphy_ext_feature_set(wdev->wiphy, NL80211_EXT_FEATURE_OCE_PROBE_REQ_DEFERRAL_SUPPRESSION);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0) */
+#endif /* WL_OCE && WL_CAP_OCE_STA */
+
 	/* Now we can register wiphy with cfg80211 module */
 	err = wiphy_register(wdev->wiphy);
 	if (unlikely(err < 0)) {
@@ -19922,6 +19931,13 @@ wl_cfg80211_filter_vndr_ext_id(const vndr_ie_t *vndrie)
 		WL_DBG(("%s:SKIP ADDING HE_OP EXTN ID\n", __func__));
 		return true;
 	}
+#ifdef WL_CAP_OCE_STA
+	else if (vndrie->oui[0] == FILS_EXTID_MNG_REQ_PARAMS) {
+		/* Skip adding fils FILS_MAX_CHANNEL_TIME, its already done in FW */
+		WL_DBG(("%s:SKIP ADDING FILS MNG REQ PARAMS \n", __func__));
+		return true;
+	}
+#endif /* WL_CAP_OCE_STA */
 	return false;
 }
 
