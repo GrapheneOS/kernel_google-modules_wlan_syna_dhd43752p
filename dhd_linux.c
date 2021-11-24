@@ -22613,7 +22613,7 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 	char pc_fn[DHD_FUNC_STR_LEN] = "\0";
 	char lr_fn[DHD_FUNC_STR_LEN] = "\0";
 #ifdef DHD_LINUX_STD_FW_API
-	char map_path[PATH_MAX] = DHD_MAP_NAME;
+	char *map_path = DHD_MAP_NAME;
 #else
 	char *map_path = map_file_path;
 #endif /* DHD_LINUX_STD_FW_API */
