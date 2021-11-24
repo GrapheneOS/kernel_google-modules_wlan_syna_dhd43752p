@@ -26,6 +26,8 @@
 #ifndef __DHD_PLAT_H__
 #define __DHD_PLAT_H__
 
+#if defined(__linux__)
+
 #include <linuxver.h>
 
 #if !defined(CONFIG_WIFI_CONTROL_FUNC)
@@ -51,4 +53,10 @@ struct wifi_platform_data {
 };
 #endif /* CONFIG_WIFI_CONTROL_FUNC */
 
+#include <linux/pci.h>
+
+/* To be called when we intend to exit L1 while performing wreg, rreg operations */
+extern void dhd_plat_l1_exit_io(void);
+
+#endif /* __linux__ */
 #endif /* __DHD_PLAT_H__ */

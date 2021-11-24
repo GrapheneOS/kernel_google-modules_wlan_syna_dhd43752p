@@ -972,3 +972,8 @@ end:
 
 	return err;
 }
+
+void __attribute__ ((weak)) dhd_plat_l1_exit_io(void)
+{
+	return;
+}

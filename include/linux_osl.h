@@ -379,7 +379,6 @@ extern char* osl_get_rtctime(void);
 #if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS9820) || \
 	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_GOOGLE)
 extern int pcie_ch_num;
-extern int exynos_pcie_l1_exit(int ch_num);
 #endif /* CONFIG_SOC_EXYNOS9810 || CONFIG_SOC_EXYNOS9820
 	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_GOOGLE
 	*/
@@ -413,6 +412,8 @@ extern void osl_writeq(osl_t *osh, volatile uint64 *r, uint64 v);
 
 #else /* OSLREGOPS */
 
+extern void dhd_plat_l1_exit_io(void);
+
 #ifndef IL_BIGENDIAN
 #ifdef CONFIG_64BIT
 /* readq is defined only for 64 bit platform */
@@ -422,7 +423,7 @@ extern void osl_writeq(osl_t *osh, volatile uint64 *r, uint64 v);
 	SELECT_BUS_READ(osh, \
 		({ \
 			__typeof(*(r)) __osl_v = 0; \
-			exynos_pcie_l1_exit(pcie_ch_num); \
+			dhd_plat_l1_exit_io(); \
 			BCM_REFERENCE(osh);	\
 			switch (sizeof(*(r))) { \
 				case sizeof(uint8):	__osl_v = \
@@ -487,7 +488,7 @@ extern void osl_writeq(osl_t *osh, volatile uint64 *r, uint64 v);
 #define W_REG(osh, r, v) do { \
 	SELECT_BUS_WRITE(osh, \
 		({ \
-			exynos_pcie_l1_exit(pcie_ch_num); \
+			dhd_plat_l1_exit_io(); \
 			switch (sizeof(*(r))) { \
 				case sizeof(uint8):	writeb((uint8)(v), \
 						(volatile uint8*)(r)); break; \
