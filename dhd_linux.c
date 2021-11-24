@@ -6208,6 +6208,9 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 #ifdef ARP_OFFLOAD_SUPPORT
 			DHD_ERROR(("arp hmac_update:%d \n", dhdp->hmac_updated));
 #endif /* ARP_OFFLOAD_SUPPORT */
+#if defined(DHD_WAKEPKT_SET_MARK)
+			PKTMARK(skb) |= 0x80000000;
+#endif /* DHD_WAKEPKT_SET_MARK */
 		}
 #endif /* DHD_WAKE_STATUS && DHD_WAKEPKT_DUMP */
 
