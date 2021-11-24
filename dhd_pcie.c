@@ -1758,9 +1758,13 @@ dhdpcie_bus_intr_init(dhd_bus_t *bus)
 static void
 dhdpcie_cc_watchdog_reset(dhd_bus_t *bus)
 {
-	uint32 wd_en = (bus->sih->buscorerev >= 66) ? WD_SSRESET_PCIE_F0_EN :
-		(WD_SSRESET_PCIE_F0_EN | WD_SSRESET_PCIE_ALL_FN_EN);
-	pcie_watchdog_reset(bus->osh, bus->sih, WD_ENABLE_MASK, wd_en);
+	uint32 wd_en;
+
+	if (bus->sih) {
+		wd_en = (bus->sih->buscorerev >= 66) ? WD_SSRESET_PCIE_F0_EN :
+			(WD_SSRESET_PCIE_F0_EN | WD_SSRESET_PCIE_ALL_FN_EN);
+		pcie_watchdog_reset(bus->osh, bus->sih, WD_ENABLE_MASK, wd_en);
+	}
 }
 void
 dhdpcie_dongle_reset(dhd_bus_t *bus)
@@ -3444,6 +3448,27 @@ dhd_get_chipid(struct dhd_bus *bus)
 		return (uint16)chipid;
 	} else {
 		return 0;
+	}
+}
+
+uint16
+dhd_get_chiprev(struct dhd_bus *bus)
+{
+	if (bus && bus->sih) {
+		return bus->sih->chiprev;
+	} else if (bus && bus->regs) {
+		chipcregs_t *cc = (chipcregs_t *)bus->regs;
+		uint w, chiprev;
+
+		/* Set bar0 window to si_enum_base */
+		dhdpcie_bus_cfg_set_bar0_win(bus, si_enum_base(0));
+
+		w = R_REG(bus->osh, &cc->chipid);
+		chiprev = (w & CID_REV_MASK) >> CID_REV_SHIFT;
+
+		return (uint16)chiprev;
+	} else {
+		return 0xffff;
 	}
 }
 
@@ -7133,6 +7158,14 @@ dhd_bus_perform_flr(dhd_bus_t *bus, bool force_fail)
 	uint flr_capab;
 	uint val;
 	int retry = 0;
+#if defined(CONFIG_SOC_GOOGLE)
+	uint16 chipid;
+
+	chipid = dhd_get_chipid(bus);
+	if (BCM4362_CHIP(chipid) && dhd_get_chiprev(bus) == 2) {
+		return BCME_UNSUPPORTED;
+	}
+#endif /* CONFIG_SOC_GOOGLE */
 
 	DHD_ERROR(("******** Perform FLR ********\n"));
 

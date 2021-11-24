@@ -230,7 +230,7 @@ ifneq ($(CONFIG_BCMDHD_PCIE),)
 # Enable CTO Recovery
 	DHDCFLAGS += -DBCMPCIE_CTO_PREVENTION
 # no reset during dhd attach
-	DHDCFLAGS += -DDHD_SKIP_DONGLE_RESET_IN_ATTACH
+#	DHDCFLAGS += -DDHD_SKIP_DONGLE_RESET_IN_ATTACH
 # Dongle Isolation will ensure no resets devreset ON/OFF
 	DHDCFLAGS += -DDONGLE_ENABLE_ISOLATION
 # Quiesce dongle using DB7 trap

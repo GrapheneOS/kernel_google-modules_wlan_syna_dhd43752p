@@ -313,6 +313,7 @@ void dhdpcie_get_etd_preserve_logs(dhd_pub_t *dhd, uint8 *ext_trap_data,
 #endif
 
 extern uint16 dhd_get_chipid(struct dhd_bus *bus);
+extern uint16 dhd_get_chiprev(struct dhd_bus *bus);
 
 #ifdef BTLOG
 extern void dhd_bus_rx_bt_log(struct dhd_bus *bus, void* pkt);
