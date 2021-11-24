@@ -14461,6 +14461,9 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 	uint32 rrm_bcn_req_thrtl_win = RRM_BCNREQ_MAX_CHAN_TIME * 2;
 	uint32 rrm_bcn_req_max_off_chan_time = RRM_BCNREQ_MAX_CHAN_TIME;
 #endif /* WBTEXT && RRM_BCNREQ_MAX_CHAN_TIME */
+#if (defined(WL_CFG80211) && defined(THERMAL_MITIGATION_THRESHOLD))
+	uint thermal_miti_thresh = THERMAL_MITIGATION_THRESHOLD * 1024 * 1024;
+#endif /* WL_CFG80211 && THERMAL_MITIGATION_THRESHOLD */
 #endif  /* OEM_ANDROID */
 
 	BCM_REFERENCE(iovbuf);
@@ -14941,6 +14944,11 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 #ifdef BCMCCX
 	dhd_iovar(dhd, 0, "ccx_enable", (char *)&ccx, sizeof(ccx), NULL, 0, TRUE);
 #endif /* BCMCCX */
+
+#if (defined(WL_CFG80211) && defined(THERMAL_MITIGATION_THRESHOLD))
+	dhd_iovar(dhd, 0, "thermal_mitigation_thresh", (char *)&thermal_miti_thresh,
+			sizeof(thermal_miti_thresh), NULL, 0, TRUE);
+#endif /* WL_CFG80211 && THERMAL_MITIGATION_THRESHOLD */
 
 #ifdef WLTDLS
 	dhd->tdls_enable = FALSE;
