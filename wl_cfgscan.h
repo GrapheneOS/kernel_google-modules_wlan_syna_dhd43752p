@@ -32,6 +32,7 @@
 #include <net/cfg80211.h>
 #include <linux/rfkill.h>
 #include <osl.h>
+#include <brcm_nl80211.h>
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0))
 #define GET_SCAN_WDEV(scan_request) \
@@ -173,6 +174,24 @@ typedef enum {
 extern bool wl_cfgscan_is_dfs_set(wifi_band band);
 extern s32 wl_cfgscan_get_band_freq_list(struct bcm_cfg80211 *cfg, int band,
         uint16 *list, uint32 *num_channels);
+#endif /* DHD_GET_VALID_CHANNELS */
+#define MAX_AP_IFACES 2
+typedef struct ap_iface_data {
+	chanspec_t chspec;
+	struct net_device *ndev;
+} wl_ap_iface_data_t;
+
+typedef struct ap_oper_data {
+	u8 count;
+	wl_ap_iface_data_t iface[MAX_AP_IFACES];
+} wl_ap_oper_data_t;
+
+#ifdef WL_SUPPORT_AUTO_CHANNEL
+extern int wl_handle_acs_concurrency_cases(struct bcm_cfg80211 *cfg,
+		drv_acs_params_t *parameter, int qty, uint32 *pList);
+#endif /* WL_SUPPORT_AUTO_CHANNEL */
+#ifdef DHD_GET_VALID_CHANNELS
+extern void wl_get_ap_chanspecs(struct bcm_cfg80211 *cfg, wl_ap_oper_data_t *ap_data);
 #endif /* DHD_GET_VALID_CHANNELS */
 
 #ifdef WL11U

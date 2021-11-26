@@ -68,8 +68,27 @@ typedef enum {
 	WIFI_INTERFACE_P2P_CLIENT = 3,
 	WIFI_INTERFACE_P2P_GO = 4,
 	WIFI_INTERFACE_NAN = 5,
-	WIFI_INTERFACE_MESH = 6
+	WIFI_INTERFACE_MESH = 6,
+	WIFI_INTERFACE_TDLS = 7
 } wifi_interface_mode;
+
+typedef enum {
+	/* Filter channels that are unsafe due to cellular coexistence */
+	WIFI_USABLE_CHANNEL_FILTER_CELLULAR_COEXISTENCE  = 1 << 0,
+	/* Filter channels due to concurrency state */
+	WIFI_USABLE_CHANNEL_FILTER_CONCURRENCY  = 1 << 1
+} wifi_usable_channel_filter;
+
+typedef enum {
+	/* WLAN MAC Operates in 2.4 GHz Band */
+	WLAN_MAC_2_4_BAND = 1 << 0,
+	/* WLAN MAC Operates in 5 GHz Band */
+	WLAN_MAC_5_0_BAND = 1 << 1,
+	/* WLAN MAC Operates in 6 GHz Band */
+	WLAN_MAC_6_0_BAND = 1 << 2,
+	/* WLAN MAC Operates in 60 GHz Band */
+	WLAN_MAC_60_0_BAND = 1 << 3
+} wlan_mac_band;
 
 #define WIFI_CAPABILITY_QOS          0x00000001     /* set for QOS association */
 #define WIFI_CAPABILITY_PROTECTED    0x00000002     /* set for protected association (802.11

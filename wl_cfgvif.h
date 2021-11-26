@@ -250,4 +250,5 @@ extern bool wl_cfg80211_is_tdls_tunneled_frame(void *frame, u32 frame_len);
 #ifdef SUPPORT_AP_BWCTRL
 extern void wl_restore_ap_bw(struct bcm_cfg80211 *cfg);
 #endif /* SUPPORT_AP_BWCTRL */
+extern uint32 wl_cfgvif_get_iftype_count(struct bcm_cfg80211 *cfg, wl_iftype_t iftype);
 #endif /* _wl_cfgvif_h_ */

@@ -40,6 +40,7 @@
 #include <dngl_stats.h>
 #include <dhd.h>
 #endif /* BCMDONGLEHOST */
+#include "wifi_stats.h"
 
 #define WL_CFG_DRV_LOCK(lock, flags)	(flags) = osl_spin_lock(lock)
 #define WL_CFG_DRV_UNLOCK(lock, flags)	osl_spin_unlock((lock), (flags))
@@ -714,6 +715,10 @@ do {									\
 #ifdef WL_6G_BAND
 /* additional scan timeout for 6GHz, 6000msec */
 #define WL_SCAN_TIMER_INTERVAL_MS_6G	6000
+#define CHSPEC_TO_WLC_BAND(chspec) (CHSPEC_IS2G(chspec) ? WLC_BAND_2G : CHSPEC_IS5G(chspec) ? \
+	WLC_BAND_5G : WLC_BAND_6G)
+#else
+#define CHSPEC_TO_WLC_BAND(chspec) (CHSPEC_IS2G(chspec) ? WLC_BAND_2G : WLC_BAND_5G)
 #endif /* WL_6G_BAND */
 #define CHSPEC_IS_6G_PSC(chspec) (CHSPEC_IS6G(chspec) && ((CHSPEC_CHANNEL(chspec) % 16) == 5))
 #define WL_CHANNEL_SYNC_RETRY	5
@@ -1797,6 +1802,25 @@ typedef struct wl_event_idx {
 	u32 event_type;
 	u32 min_connect_idx;
 } wl_event_idx_t;
+
+#ifdef WL_USABLE_CHAN
+#define USABLE_CHAN_MAX_SIZE 400
+typedef struct usable_channel {
+	wifi_channel freq;
+	wifi_channel_width_t width;
+	u32 iface_mode_mask;
+	chanspec_t chspec;	/* used only for inter processing */
+} usable_channel_t;
+
+typedef struct usable_channel_info {
+	u32 band_mask;
+	u32 iface_mode_mask;
+	u32 filter_mask;
+	u32 max_size;
+	u32 size;
+	usable_channel_t *channels;
+} usable_channel_info_t;
+#endif /* WL_USABLE_CHAN */
 
 /* private data of cfg80211 interface */
 struct bcm_cfg80211 {
@@ -3220,4 +3244,11 @@ extern int wl_cfg80211_alert(struct net_device *dev);
 extern s32 wl_cfgvendor_notify_twt_event(struct bcm_cfg80211 *cfg,
 	bcm_struct_cfgdev *cfgdev, const wl_event_msg_t *e, void *data);
 #endif /* !WL_TWT && WL_TWT_HAL_IF */
+
+chanspec_t wl_cfg80211_get_sta_chanspec(struct bcm_cfg80211 *cfg);
+
+#ifdef WL_USABLE_CHAN
+int wl_get_usable_channels(struct bcm_cfg80211 *cfg, usable_channel_info_t *u_info);
+#endif /* WL_USABLE_CHAN */
+
 #endif /* _wl_cfg80211_h_ */

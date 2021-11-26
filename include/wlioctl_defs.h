@@ -1527,6 +1527,8 @@
 						  */
 #define WL_CHAN_CLM_RESTRICTED     (1u << 8)     /* channel restricted in CLM (i.e. by default) */
 #define WL_CHAN_BAND_6G            (1u << 9)     /* 6GHz-band channel */
+#define WL_CHAN_BAND_6G_VLP        (1u << 10u)   /* 6GHz VLP channel */
+#define WL_CHAN_BAND_6G_PSC        (1u << 11u)   /* 6GHz PSC channel */
 #define WL_CHAN_OOS_SHIFT          24u           /* shift for OOS field */
 #define WL_CHAN_OOS_MASK           0xFF000000u   /* field specifying minutes remaining for this
 						  * channel's out-of-service period due to radar

@@ -5454,4 +5454,240 @@ wl_cfgscan_get_band_freq_list(struct bcm_cfg80211 *cfg, int band,
 	*num_channels = count;
 	return err;
 }
+
+void
+wl_get_ap_chanspecs(struct bcm_cfg80211 *cfg, wl_ap_oper_data_t *ap_data)
+{
+	struct net_info *iter, *next;
+	u32 ch;
+
+	bzero(ap_data, sizeof(wl_ap_oper_data_t));
+
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	for_each_ndev(cfg, iter, next) {
+		if ((iter->ndev) &&
+			(iter->ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_AP) &&
+			wl_get_drv_status(cfg, CONNECTED, iter->ndev)) {
+				if (wldev_iovar_getint(iter->ndev, "chanspec", (&ch)) == BCME_OK) {
+					ap_data->iface[ap_data->count].ndev = iter->ndev;
+					ap_data->iface[ap_data->count].chspec = (chanspec_t)ch;
+					ap_data->count++;
+				}
+		}
+	}
+	GCC_DIAGNOSTIC_POP();
+}
 #endif /* DHD_GET_VALID_CHANNELS */
+
+inline bool
+is_chanspec_dfs(struct bcm_cfg80211 *cfg, chanspec_t chspec)
+{
+	u32 ch;
+	s32 err;
+	u8 buf[WLC_IOCTL_SMLEN];
+	struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
+
+	ch = (u32)chspec;
+	err = wldev_iovar_getbuf_bsscfg(ndev, "per_chan_info", (void *)&ch,
+			sizeof(u32), buf, WLC_IOCTL_SMLEN, 0, NULL);
+	if (unlikely(err)) {
+		WL_ERR(("get per chan info failed:%d\n", err));
+		return FALSE;
+	}
+
+	/* Check the channel flags returned by fw */
+	if (*((u32 *)buf) & WL_CHAN_PASSIVE) {
+		return TRUE;
+	}
+	return FALSE;
+}
+
+#ifdef WL_SUPPORT_AUTO_CHANNEL
+static bool wl_find_matching_chanspec(chanspec_t sta_chanspec,
+	int qty, uint32 *pList)
+{
+	uint32 i = qty;
+
+	if (!qty) {
+		WL_ERR(("Invalid qty\n"));
+		return false;
+	}
+
+	while (i--) {
+		if (pList[i]) {
+			if (wf_chspec_ctlchspec((pList[i])) == wf_chspec_ctlchspec(sta_chanspec)) {
+				WL_INFORM_MEM(("Found sta chanspec in the list:0x%x\n",
+					sta_chanspec));
+				return true;
+			}
+			WL_INFORM_MEM(("skipped chanspec:0x%x\n", pList[i]));
+		}
+	}
+
+	return false;
+}
+
+static bool
+wl_acs_check_scc(struct bcm_cfg80211 *cfg, drv_acs_params_t *parameter,
+	chanspec_t sta_chanspec, int qty, uint32 *pList)
+{
+	bool scc = FALSE;
+
+	if (!(parameter->freq_bands & CHSPEC_TO_WLC_BAND(sta_chanspec))) {
+		return scc;
+	}
+
+	if (wl_find_matching_chanspec(sta_chanspec, qty, pList)) {
+		scc = TRUE;
+	}
+
+#ifdef DHD_ACS_CHECK_SCC_2G_ACTIVE_CH
+	/*
+	 * For the corner case when STA is running in Ch12 or Ch13
+	 * and Framework may give the Ch [1-11] to ACS algorithm.
+	 * In this case, SoftAP will be failed to run.
+	 * To allow SoftAP to run in that channel as SCC mode,
+	 * get active channels and check it
+	 */
+	if (scc == FALSE && CHSPEC_IS2G(sta_chanspec)) {
+		scc = wl_check_active_2g_chan(cfg, parameter, sta_chanspec);
+	}
+#endif /* DHD_ACS_CHECK_SCC_2G_ACTIVE_CH */
+
+	if (scc == TRUE) {
+		parameter->scc_chspec = sta_chanspec;
+		parameter->freq_bands = CHSPEC_TO_WLC_BAND(sta_chanspec);
+		WL_INFORM_MEM(("SCC case, ACS pick up STA chanspec:0x%x\n", sta_chanspec));
+	}
+	return scc;
+}
+
+int
+wl_handle_acs_concurrency_cases(struct bcm_cfg80211 *cfg, drv_acs_params_t *parameter,
+	int qty, uint32 *pList)
+{
+	chanspec_t chspec = 0;
+	wl_ap_oper_data_t ap_oper_data = {0};
+
+	/* If STA is connected, figure out the STA connected band and applly
+	 * following rules:
+	 * If STA is in DFS channel or there is an AP already in that band, check
+	 * whether the AP can be started in the other band
+	 * If STA band and incoming Band matches, attempt SCC
+	 */
+
+#ifdef DHD_GET_VALID_CHANNELS
+	/* Check whether AP is already operational */
+	wl_get_ap_chanspecs(cfg, &ap_oper_data);
+#endif /* DHD_GET_VALID_CHANNELS */
+
+	if (ap_oper_data.count >= MAX_AP_IFACES) {
+		WL_ERR(("ACS request in multi AP case!! count:%d\n",
+			ap_oper_data.count));
+		return -EINVAL;
+	}
+
+	if (ap_oper_data.count == 1) {
+		chanspec_t ch = ap_oper_data.iface[0].chspec;
+		u16 ap_band;
+
+		/* Single AP case. Bring up the AP in the other band */
+		ap_band = CHSPEC_TO_WLC_BAND(ch);
+		if ((ap_band == WLC_BAND_5G) || (ap_band == WLC_BAND_6G)) {
+			WL_INFORM_MEM(("AP operational in band:%d\n", ap_band));
+			if (!(parameter->freq_bands & WLC_BAND_2G)) {
+				WL_ERR(("2G band not present in ACS list. fail ACS\n"));
+				return -EINVAL;
+			} else {
+				/* Force set 2g and clear other bands for ACS */
+				parameter->freq_bands = WLC_BAND_2G;
+			}
+		} else if (ap_band == WLC_BAND_2G) {
+			WL_INFORM_MEM(("AP operational in 2G band\n"));
+			if (!(parameter->freq_bands & WLC_BAND_5G) &&
+					!(parameter->freq_bands & WLC_BAND_6G)) {
+				WL_ERR(("5G/6G freqs not available in the ACS list. FAIL ACS\n"));
+				return -EINVAL;
+			} else {
+				/* 6g/5g freqlist available. Clear 2g */
+				parameter->freq_bands &= ~WLC_BAND_2G;
+			}
+		}
+		WL_INFORM_MEM(("AP band:0x%x Trimmed ACS band:0x%x\n",
+			ap_band, parameter->freq_bands));
+	}
+
+	/* Check STA concurrency cases */
+	if (wl_cfgvif_get_iftype_count(cfg, WL_IF_TYPE_STA) >= 2) {
+		/* Dual sta operational. Invalid use case */
+		WL_ERR(("Dual sta operational. ACS request not expected.\n"));
+		return -EINVAL;
+	}
+
+	chspec = wl_cfg80211_get_sta_chanspec(cfg);
+
+	if (chspec) {
+		bool scc_case = false;
+		u32 sta_band = CHSPEC_TO_WLC_BAND(chspec);
+		if (sta_band == WLC_BAND_2G) {
+			if (parameter->freq_bands & (WLC_BAND_5G | WLC_BAND_6G)) {
+				/* Remove the 2g band from incoming ACS bands */
+				parameter->freq_bands &= ~WLC_BAND_2G;
+			} else if (wl_acs_check_scc(cfg, parameter, chspec, qty, pList)) {
+				scc_case = TRUE;
+			} else {
+				WL_ERR(("STA connected in 2G,"
+					" but no 2G channel available. Fail ACS\n"));
+				return -EINVAL;
+			}
+		} else if (sta_band == WLC_BAND_5G) {
+			if (is_chanspec_dfs(cfg, chspec) ||
+#ifdef WL_UNII4_CHAN
+				(CHSPEC_IS5G(chspec) &&
+				IS_UNII4_CHANNEL(wf_chspec_primary20_chan(chspec))) ||
+#endif /* WL_UNII4_CHAN */
+				FALSE) {
+				/*
+				 * If STA is in DFS/UNII4 channel,
+				 * check for 2G availability in ACS list
+				 */
+				if (!(parameter->freq_bands & WLC_BAND_2G)) {
+					WL_ERR(("STA connected in 5G DFS."
+						" but no 2G channel available. Fail ACS\n"));
+					return -EINVAL;
+				}
+				/* Remove the 5g/6g band from incoming ACS bands */
+				parameter->freq_bands &= ~(WLC_BAND_5G | WLC_BAND_6G);
+			} else if (wl_acs_check_scc(cfg, parameter, chspec, qty, pList)) {
+				scc_case = TRUE;
+			} else if (parameter->freq_bands & WLC_BAND_2G) {
+				parameter->freq_bands = WLC_BAND_2G;
+			} else {
+				WL_ERR(("STA connected in 5G %x, but no channel available "
+					"for ACS %x\n", chspec, parameter->freq_bands));
+				return -EINVAL;
+			}
+		} else if (sta_band == WLC_BAND_6G) {
+			if (wl_acs_check_scc(cfg, parameter, chspec, qty, pList)) {
+				scc_case = TRUE;
+			} else if (parameter->freq_bands & WLC_BAND_2G) {
+				parameter->freq_bands = WLC_BAND_2G;
+			} else {
+				 WL_ERR(("STA connected in 6G %x, but no channel available "
+				"for ACS %x\n", chspec, parameter->freq_bands));
+				 return -EINVAL;
+			}
+		} else {
+			WL_ERR(("Invalid sta band. Fail ACS\n"));
+			return -EINVAL;
+		}
+
+		if (!scc_case) {
+			WL_INFORM_MEM(("sta_band:%d chanspec:0x%x."
+					" Attempt rsdb ACS for band/s:0x%x\n",
+					sta_band, chspec, parameter->freq_bands));
+		}
+	}
+	return BCME_OK;
+}
+#endif /* WL_SUPPORT_AUTO_CHANNEL */

@@ -88,7 +88,7 @@ typedef struct acs_selected_channels {
 
 typedef struct drv_acs_params {
 	enum hostapd_hw_mode hw_mode;
-	int band;
+	int band; /* band derived from hw_mode */
 
 	int ht_enabled;
 	int ht40_enabled;
@@ -101,6 +101,8 @@ typedef struct drv_acs_params {
 	const u8 *ch_list;
 
 	const int *freq_list;
+	u32 freq_bands; /* band derived from freq list */
+	chanspec_t scc_chspec;
 } drv_acs_params_t;
 
 typedef struct acs_delay_work {

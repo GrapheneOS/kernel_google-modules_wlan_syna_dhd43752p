@@ -86,6 +86,7 @@
 #endif /* PNO_SUPPORT */
 #include <wl_cfgvendor.h>
 #endif /* defined(BCMDONGLEHOST) */
+#include "wifi_stats.h"
 
 #ifdef CONFIG_SLEEP_MONITOR
 #include <linux/power/sleep_monitor.h>
@@ -23794,3 +23795,352 @@ done:
 	return err;
 }
 #endif /* WL_MON_OWN_PKT */
+
+chanspec_t
+wl_cfg80211_get_sta_chanspec(struct bcm_cfg80211 *cfg)
+{
+	chanspec_t *sta_chanspec = NULL;
+
+#ifdef WL_DUAL_APSTA
+	if (wl_cfgvif_get_iftype_count(cfg, WL_IF_TYPE_STA) >= 2) {
+		/* If both STA interfaces are connected return failure */
+		return 0;
+	} else {
+		struct net_info *iter, *next;
+
+		GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+		for_each_ndev(cfg, iter, next) {
+			GCC_DIAGNOSTIC_POP();
+			if ((iter->ndev) && (wl_get_drv_status(cfg, CONNECTED, iter->ndev)) &&
+				(iter->ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_STATION)) {
+				if ((sta_chanspec = (chanspec_t *)wl_read_prof(cfg,
+					iter->ndev, WL_PROF_CHAN))) {
+					return *sta_chanspec;
+				}
+			}
+		}
+	}
+#else
+	if (wl_get_drv_status(cfg, CONNECTED, bcmcfg_to_prmry_ndev(cfg))) {
+		if ((sta_chanspec = (chanspec_t *)wl_read_prof(cfg,
+			bcmcfg_to_prmry_ndev(cfg), WL_PROF_CHAN))) {
+			return *sta_chanspec;
+		}
+	}
+#endif /* WL_DUAL_APSTA */
+
+	return 0;
+}
+
+
+#ifdef WL_USABLE_CHAN
+int wl_check_exist_freq_in_list(usable_channel_t *channels, int cur_idx, u32 freq)
+{
+	int i;
+	for (i = 0; i < cur_idx; i++) {
+		if (channels[i].freq == freq) {
+			return i;
+		}
+	}
+	return BCME_NOTFOUND;
+}
+
+void wl_usable_channels_filter(struct bcm_cfg80211 *cfg, uint32 cur_chspec, uint32 *mask,
+		usable_channel_info_t *u_info, uint32 *conn,
+		chanspec_t sta_chspec)
+{
+#ifdef WL_CELLULAR_CHAN_AVOID
+	wifi_interface_mode mode;
+#endif /* WL_CELLULAR_CHAN_AVOID */
+	drv_acs_params_t param = { 0 };
+	int ret;
+	uint32 cur_band;
+	uint32 filter = 0;
+	bool filter_softap = true;
+
+	/* If there is STA connection on 5GHz DFS channel,
+	 * none of the 5GHz channels are usable for SoftAP
+	 */
+	if (u_info->filter_mask & WIFI_USABLE_CHANNEL_FILTER_CONCURRENCY) {
+
+		/* Filter out P2P_GO, P2P_CLIENT and NAN under condition */
+		if (conn[WL_IF_TYPE_STA] && conn[WL_IF_TYPE_AP]) {
+			/* STA + SOFTAP */
+			filter |= ((1U << WIFI_INTERFACE_P2P_GO) |
+					(1U << WIFI_INTERFACE_P2P_CLIENT) |
+					(1U << WIFI_INTERFACE_NAN));
+			filter_softap = false;
+		} else if (conn[WL_IF_TYPE_STA] && conn[WL_IF_TYPE_P2P_GO]) {
+			/* STA + GO */
+			filter |= ((1U << WIFI_INTERFACE_P2P_CLIENT) |
+					(1U << WIFI_INTERFACE_NAN) |
+					(1U << WIFI_INTERFACE_P2P_GO) |
+					(1U << WIFI_INTERFACE_SOFTAP));
+		} else if (conn[WL_IF_TYPE_STA] && conn[WL_IF_TYPE_P2P_GC]) {
+			/* STA + GC */
+			filter |= ((1U << WIFI_INTERFACE_P2P_GO) |
+					(1U << WIFI_INTERFACE_NAN) |
+					(1U << WIFI_INTERFACE_P2P_CLIENT) |
+					(1U << WIFI_INTERFACE_SOFTAP));
+		} else if (conn[WL_IF_TYPE_STA] && conn[WL_IF_TYPE_NAN]) {
+			/* STA + NAN */
+			filter |= ((1U << WIFI_INTERFACE_P2P_GO) |
+					(1U << WIFI_INTERFACE_P2P_CLIENT) |
+					(1U << WIFI_INTERFACE_NAN) |
+					(1U << WIFI_INTERFACE_SOFTAP));
+		}
+
+		/* Filter out SOFTAP under condition */
+		/* Check whether the cur_chspec is available for SOFTAP (include scc case) */
+		cur_band = CHSPEC_TO_WLC_BAND(CHSPEC_BAND(cur_chspec));
+		if (!filter_softap) {
+			param.freq_bands |= cur_band;
+
+#ifdef WL_SUPPORT_AUTO_CHANNEL
+			ret = wl_handle_acs_concurrency_cases(cfg, &param, 1, &cur_chspec);
+			if (ret != BCME_OK) {
+				WL_DBG(("Clear SOFAP bit chspec:%x ret:%d freq_bands(%d)\n",
+					cur_chspec, ret, param.freq_bands));
+				filter |= (1U << WIFI_INTERFACE_SOFTAP);
+			}
+#endif /* WL_SUPPORT_AUTO_CHANNEL */
+		}
+
+		/* Filter out STA under condition */
+		/* If Dual STA is enabled cannot add another STA iface on any channel
+		 * and TDLS are not supported.
+		 */
+		if (conn[WL_IF_TYPE_STA] == 2U) {
+			filter |= ((1U << WIFI_INTERFACE_TDLS) |
+					(1U << WIFI_INTERFACE_STA));
+			WL_DBG(("DualSTA filter:%u chspec:%x cur_band:%d\n",
+					filter, cur_chspec, cur_band));
+		} else if (conn[WL_IF_TYPE_STA] == 1U && sta_chspec) {
+			if (CHSPEC_CHANNEL(cur_chspec) != CHSPEC_CHANNEL(sta_chspec)) {
+				filter |= (1U << WIFI_INTERFACE_TDLS);
+			}
+		}
+
+		*mask &= ~(filter);
+	}
+
+#ifdef WL_CELLULAR_CHAN_AVOID
+	if (u_info->filter_mask & WIFI_USABLE_CHANNEL_FILTER_CELLULAR_COEXISTENCE) {
+		/*  Filter chanspecs that must be avoided (hard unsafe) due to cell coex */
+		mode = wl_cellavoid_mandatory_to_usable_channel_filter(cfg->cellavoid_info);
+		WL_DBG(("Filter coexistence chspec:%x mode:%d\n", cur_chspec, mode));
+		*mask &= (~mode);
+	}
+#endif /* WL_CELLULAR_CHAN_AVOID */
+
+}
+
+int wl_get_usable_channels(struct bcm_cfg80211 *cfg, usable_channel_info_t *u_info)
+{
+	usable_channel_t *cur_ch = NULL;
+	void *chan_list = NULL;
+	int i, err, idx = 0, band = 0;
+	u32 mask = 0;
+	uint32 channel;
+	uint32 freq, width;
+	uint32 chspec, chaninfo;
+	u16 list_count;
+	int found_idx = BCME_NOTFOUND;
+	bool ch_160mhz_5g;
+	u32 restrict_chan;
+#ifdef WL_SOFTAP_6G
+	u32 vlp_psc_include;
+#endif /* WL_SOFTAP_6G */
+	uint32 conn[WL_IF_TYPE_MAX] = {0};
+	struct net_device *p2p_ndev = NULL;
+	chanspec_t sta_chanspec;
+	uint32 sta_assoc_freq = 0;
+	bool is_unii4 = false;
+
+	bzero(u_info->channels, sizeof(*u_info->channels) * u_info->max_size);
+	/* Get chan_info_list or chanspec from FW */
+
+	chan_list = MALLOCZ(cfg->osh, CHANINFO_LIST_BUF_SIZE);
+	if (chan_list == NULL) {
+		WL_ERR(("failed to allocate local buf\n"));
+		err = -ENOMEM;
+		goto exit;
+	}
+
+	err = wldev_iovar_getbuf_bsscfg(bcmcfg_to_prmry_ndev(cfg), "chan_info_list", NULL,
+			0, chan_list, CHANINFO_LIST_BUF_SIZE, 0, NULL);
+	if (err == BCME_UNSUPPORTED) {
+		WL_INFORM(("get chan_info_list, UNSUPPORTED\n"));
+		goto exit;
+	} else if (err != BCME_OK) {
+		WL_ERR(("get chan_info_list err(%d)\n", err));
+		goto exit;
+	}
+
+	list_count = ((wl_chanspec_list_v1_t *)chan_list)->count;
+	for (i = 0; i < list_count; i++) {
+		if (u_info->max_size <= idx) {
+			WL_ERR(("No more space to add usable channel info idx:%d max_size:%u\n",
+				idx, u_info->max_size));
+			break;
+		}
+		chspec = dtoh32(((wl_chanspec_list_v1_t *)chan_list)->chspecs[i].chanspec);
+		chspec = wl_chspec_driver_to_host(chspec);
+		chaninfo = dtoh32(((wl_chanspec_list_v1_t *)chan_list)->chspecs[i].chaninfo);
+		band = CHSPEC_BAND(chspec);
+		channel = wf_chspec_primary20_chan(chspec);
+		freq = wl_channel_to_frequency(channel, band);
+		width = wl_chanspec_to_host_bw_map(chspec);
+
+		WL_DBG(("chspec:%x channel:%u chaninfo:%x freq:%u band:%u "
+				"req_band:%u req_iface_mode:%u filter:%u\n",
+				chspec, channel, chaninfo, freq, CHSPEC_TO_WLC_BAND(band),
+				u_info->band_mask, u_info->iface_mode_mask, u_info->filter_mask));
+
+		/* Skip if it is not interested */
+		if (!((u_info->band_mask & WLAN_MAC_2_4_BAND) && CHSPEC_IS2G(chspec)) &&
+			!((u_info->band_mask & WLAN_MAC_5_0_BAND) && CHSPEC_IS5G(chspec)) &&
+			!((u_info->band_mask & WLAN_MAC_6_0_BAND) && CHSPEC_IS6G(chspec))) {
+			continue;
+		}
+
+		restrict_chan = ((chaninfo & WL_CHAN_RADAR) ||
+				(chaninfo & WL_CHAN_PASSIVE)||
+				(chaninfo & WL_CHAN_CLM_RESTRICTED));
+#ifdef WL_SOFTAP_6G
+		vlp_psc_include = ((chaninfo & WL_CHAN_BAND_6G_PSC) &&
+				(chaninfo & WL_CHAN_BAND_6G_VLP));
+#endif /* WL_SOFTAP_6G */
+#ifdef WL_UNII4_CHAN
+		is_unii4 = (CHSPEC_IS5G(chspec) &&
+				IS_UNII4_CHANNEL(wf_chspec_primary20_chan(chspec)));
+#endif /* WL_UNII4_CHAN */
+
+		/* STA set all chanspec but can be filtered out in filter function */
+		mask = (1 << WIFI_INTERFACE_STA);
+
+		if (sta_assoc_freq && (sta_assoc_freq == freq) &&
+			(!CHSPEC_IS6G(chspec) && !is_unii4)) {
+			if (CHSPEC_IS5G(chspec) && (chaninfo & WL_CHAN_CLM_RESTRICTED)) {
+				/* if restricted channel, specifically allow only DFS channel
+				 * (radar+passive). TDLS operates on STA channel and
+				 * allowed in DFS channel
+				 */
+				if ((chaninfo & WL_CHAN_RADAR) && (chaninfo & WL_CHAN_PASSIVE)) {
+					mask |= (1 << WIFI_INTERFACE_TDLS);
+				}
+			} else {
+				/* 2g channels || 5G non restricted channels */
+				mask |= (1 << WIFI_INTERFACE_TDLS);
+			}
+		}
+
+		/* Only STA supported 160Mhz in 5G */
+		if (CHSPEC_IS5G(chspec) && CHSPEC_IS160(chspec)) {
+			ch_160mhz_5g = true;
+		} else {
+			ch_160mhz_5g = false;
+		}
+
+		if (!restrict_chan && !ch_160mhz_5g) {
+			if (!is_unii4)
+			{
+				if (CHSPEC_IS6G(chspec)) {
+#ifdef WL_NAN_6G
+					mask |= (1 << WIFI_INTERFACE_NAN);
+#endif /* WL_NAN_6G */
+#ifdef WL_SOFTAP_6G
+					/* consider only VLP and PSC channel in 6g for softap */
+					if (vlp_psc_include) {
+						mask |= (1 << WIFI_INTERFACE_SOFTAP);
+					}
+#endif /* WL_SOFTAP_6G */
+				} else {
+					/* handle 2G and 5G channels */
+					mask |= ((1 << WIFI_INTERFACE_P2P_GO) |
+							(1 << WIFI_INTERFACE_SOFTAP) |
+							(1 << WIFI_INTERFACE_NAN));
+				}
+			}
+		}
+
+		/* Supplicant does scan passive channel but not for DFS channel */
+		if (!(chaninfo & WL_CHAN_RADAR) && !ch_160mhz_5g &&
+			!CHSPEC_IS6G(chspec) && (!is_unii4)) {
+			mask |= (1 << WIFI_INTERFACE_P2P_CLIENT);
+		}
+
+		/* only channel entries matched at least a bit in iface_mode_mask are returned */
+		if ((mask & u_info->iface_mode_mask) == 0) {
+			continue;
+		}
+
+		/* Return only primary channel and max bandwidth.
+		 * If freq is already added and found bigger bandwidth
+		 * replace bandwidth with found one
+		 */
+		found_idx = wl_check_exist_freq_in_list(u_info->channels, idx, freq);
+		if (found_idx != BCME_NOTFOUND) {
+			if (width > u_info->channels[found_idx].width) {
+				u_info->channels[found_idx].width = width;
+			}
+			continue;
+		}
+
+		/* Add current channel to list */
+		cur_ch = &u_info->channels[idx];
+		cur_ch->freq = freq;
+		cur_ch->width = width;
+		cur_ch->iface_mode_mask = mask & u_info->iface_mode_mask;
+		cur_ch->chspec = chspec;
+		WL_INFORM_MEM(("idx:%d chanspec:%x freq:%u width:%u iface_mode_mask:%u\n",
+			idx, cur_ch->chspec, cur_ch->freq, cur_ch->width, cur_ch->iface_mode_mask));
+		idx++;
+	}
+	u_info->size = idx;
+
+	/* Driver should clear unusable interface based on concurrency and coex restriction */
+	if (u_info->filter_mask) {
+		/* Get conneceted bands to clear STA bit when Dual STA is connected */
+		sta_chanspec = wl_cfg80211_get_sta_chanspec(cfg);
+
+		/* Get connected STA, AP, P2P and NAN interface count */
+		conn[WL_IF_TYPE_STA] = wl_cfgvif_get_iftype_count(cfg, WL_IF_TYPE_STA);
+		conn[WL_IF_TYPE_AP] = wl_cfgvif_get_iftype_count(cfg, WL_IF_TYPE_AP);
+		if (wl_cfgp2p_vif_created(cfg)) {
+			p2p_ndev = wl_to_p2p_bss_ndev(cfg, P2PAPI_BSSCFG_CONNECTION1);
+			if (!p2p_ndev) {
+				WL_ERR(("No p2p net device"));
+				goto exit;
+			}
+			if (p2p_ndev->ieee80211_ptr) {
+				if (p2p_ndev->ieee80211_ptr->iftype ==
+						NL80211_IFTYPE_P2P_GO) {
+					conn[WL_IF_TYPE_P2P_GO] = 1;
+				} else if (p2p_ndev->ieee80211_ptr->iftype ==
+						NL80211_IFTYPE_P2P_CLIENT) {
+					conn[WL_IF_TYPE_P2P_GC] = 1;
+				}
+			}
+		}
+		conn[WL_IF_TYPE_NAN] = wl_cfgnan_is_dp_active(bcmcfg_to_prmry_ndev(cfg));
+		WL_INFORM_MEM(("Cur interface STA:%d(chspec:%x) "
+				"AP:%d P2P GO:%d GC:%d NAN:%d\n",
+				conn[WL_IF_TYPE_STA], sta_chanspec,
+				conn[WL_IF_TYPE_AP], conn[WL_IF_TYPE_P2P_GO],
+				conn[WL_IF_TYPE_P2P_GC], conn[WL_IF_TYPE_NAN]));
+
+		for (i = 0; i < u_info->size; i++) {
+			cur_ch = &u_info->channels[i];
+			wl_usable_channels_filter(cfg, cur_ch->chspec, &cur_ch->iface_mode_mask,
+					u_info, conn, sta_chanspec);
+		}
+	}
+
+exit:
+	if (chan_list) {
+		MFREE(cfg->osh, chan_list, CHANINFO_LIST_BUF_SIZE);
+	}
+	return err;
+}
+#endif /* WL_USABLE_CHAN */

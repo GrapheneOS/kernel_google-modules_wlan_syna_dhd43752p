@@ -779,6 +779,8 @@ endif
   DHDCFLAGS += -DDHD_DHCP_DUMP
 endif
 
+# Enable usable_channel support for HAL layer
+DHDCFLAGS += -DWL_USABLE_CHAN
 
 ifneq ($(CONFIG_BCM4339),)
   DHDCFLAGS += -DBCM4339_CHIP -DHW_OOB
