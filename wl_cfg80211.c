@@ -8221,8 +8221,11 @@ wl_cfg80211_set_power_mgmt(struct wiphy *wiphy, struct net_device *dev,
 		return err;
 	}
 
+	/* Don't auto restore PM mode if WL_LAENCY_MODE defined */
+#ifndef WL_LATENCY_MODE
 	/* Enlarge pm_enable_work */
 	wl_add_remove_pm_enable_work(cfg, WL_PM_WORKQ_LONG);
+#endif /* !WL_LATENCY_MODE */
 
 	pm = enabled ? PM_FAST : PM_OFF;
 	if (_net_info->pm_block) {
