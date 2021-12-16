@@ -5591,7 +5591,6 @@ wl_set_set_sharedkey(struct net_device *dev,
 				return -EINVAL;
 			}
 			memcpy(key.data, sme->key, key.len);
-			key.flags = WL_PRIMARY_KEY;
 			if ((sec->cipher_pairwise == WLAN_CIPHER_SUITE_WEP40) ||
 			    (sec->cipher_pairwise == WLAN_CIPHER_SUITE_WEP104)) {
 				key.algo = wl_rsn_cipher_wsec_key_algo_lookup(sec->cipher_pairwise);
@@ -7099,8 +7098,6 @@ wl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 	}
 	memcpy(key.data, params->key, key.len);
 
-	key.flags = WL_PRIMARY_KEY;
-
 	key.algo = wl_rsn_cipher_wsec_key_algo_lookup(params->cipher);
 	val = wl_rsn_cipher_wsec_algo_lookup(params->cipher);
 	if (val == WSEC_NONE) {
@@ -7277,7 +7274,6 @@ wl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *dev,
 #endif /* BCMDONGLEHOST */
 	bzero(&key, sizeof(key));
 
-	key.flags = WL_PRIMARY_KEY;
 	key.algo = CRYPTO_ALGO_OFF;
 	key.index = (u32) key_idx;
 
