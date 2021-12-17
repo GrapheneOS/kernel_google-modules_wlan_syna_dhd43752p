@@ -1600,10 +1600,10 @@ wl_cfgvendor_set_hal_started(struct wiphy *wiphy,
 		struct wireless_dev *wdev, const void  *data, int len)
 {
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
-#ifdef WL_STA_ASSOC_RAND
+#if defined(WL_STA_ASSOC_RAND) && defined(WL_STA_INIT_RAND)
 	struct ether_addr primary_mac;
 	dhd_pub_t *dhd = (dhd_pub_t *)(cfg->pub);
-#endif /* WL_STA_ASSOC_RAND */
+#endif /* WL_STA_ASSOC_RAND && WL_STA_INIT_RAND */
 	int ret = BCME_OK;
 #if defined(WIFI_TURNON_USE_HALINIT)
 	struct net_device *ndev = wdev_to_wlc_ndev(wdev, cfg);
@@ -1639,7 +1639,7 @@ wl_cfgvendor_set_hal_started(struct wiphy *wiphy,
 	WL_INFORM(("%s,[DUMP] HAL STARTED\n", __FUNCTION__));
 
 	cfg->hal_started = true;
-#ifdef WL_STA_ASSOC_RAND
+#if defined(WL_STA_ASSOC_RAND) && defined(WL_STA_INIT_RAND)
 	/* If mac randomization is enabled and primary macaddress is not
 	 * randomized, randomize it from HAL init context
 	 */
@@ -1653,7 +1653,7 @@ wl_cfgvendor_set_hal_started(struct wiphy *wiphy,
 			return ret;
 		}
 	}
-#endif /* WL_STA_ASSOC_RAND */
+#endif /* WL_STA_ASSOC_RAND && WL_STA_INIT_RAND */
 	return ret;
 }
 
