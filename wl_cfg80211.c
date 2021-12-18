@@ -12347,18 +12347,21 @@ wl_cache_assoc_req_ies(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	struct wl_connect_info *conn_info = wl_to_conn(cfg);
 	u32 datalen = ntoh32(e->datalen);
 	u32 event_type = ntoh32(e->event_type);
+	u32 status = ntoh32(e->status);
 
-	if (data && datalen <= sizeof(conn_info->req_ie)) {
-		conn_info->req_ie_len = datalen;
-		WL_DBG((" assoc resp IES len = %d\n", conn_info->req_ie_len));
-		bzero(conn_info->req_ie, sizeof(conn_info->req_ie));
-		(void)memcpy_s(conn_info->req_ie, sizeof(conn_info->req_ie),
-			data, datalen);
+	if (WLC_E_STATUS_SUCCESS == status) {
+		if (data && datalen <= sizeof(conn_info->req_ie)) {
+			conn_info->req_ie_len = datalen;
+			WL_DBG((" assoc req IES len = %d\n", conn_info->req_ie_len));
+			bzero(conn_info->req_ie, sizeof(conn_info->req_ie));
+			(void)memcpy_s(conn_info->req_ie, sizeof(conn_info->req_ie),
+				data, datalen);
 
-		WL_INFORM_MEM(("%s-%d: [%s] cached assoc req ies"
-			"event %d reason=%d ie_len=%d from " MACDBG "\n", __FUNCTION__, __LINE__,
-			ndev->name,	event_type, ntoh32(e->reason), datalen,
-			MAC2STRDBG((const u8*)(&e->addr))));
+			WL_INFORM_MEM(("%s-%d: [%s] cached assoc req ies"
+				"event %d reason=%d ie_len=%d from " MACDBG "\n", __FUNCTION__, __LINE__,
+				ndev->name, event_type, ntoh32(e->reason), datalen,
+				MAC2STRDBG((const u8*)(&e->addr))));
+		}
 	}
 }
 
@@ -12369,18 +12372,38 @@ wl_cache_assoc_resp_ies(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	struct wl_connect_info *conn_info = wl_to_conn(cfg);
 	u32 datalen = ntoh32(e->datalen);
 	u32 event_type = ntoh32(e->event_type);
+	u32 status = ntoh32(e->status);
+#ifdef QOS_MAP_SET
+	bcm_tlv_t * qos_map_ie = NULL;
+#endif /* QOS_MAP_SET */
 
-	if (data && datalen <= sizeof(conn_info->resp_ie)) {
-		conn_info->resp_ie_len = datalen;
-		WL_DBG((" assoc resp IES len = %d\n", conn_info->resp_ie_len));
-		bzero(conn_info->resp_ie, sizeof(conn_info->resp_ie));
-		(void)memcpy_s(conn_info->resp_ie, sizeof(conn_info->resp_ie),
-			data, datalen);
+	if (WLC_E_STATUS_SUCCESS == status) {
+		if (data && datalen <= sizeof(conn_info->resp_ie)) {
+			conn_info->resp_ie_len = datalen;
+			WL_DBG((" assoc resp IES len = %d\n", conn_info->resp_ie_len));
+			bzero(conn_info->resp_ie, sizeof(conn_info->resp_ie));
+			(void)memcpy_s(conn_info->resp_ie, sizeof(conn_info->resp_ie),
+				data, datalen);
 
-		WL_INFORM_MEM(("[%s] cached assoc resp ies"
-			"event %d reason=%d ie_len=%d from " MACDBG "\n",
-			ndev->name,	event_type, ntoh32(e->reason), datalen,
-			MAC2STRDBG((const u8*)(&e->addr))));
+#ifdef QOS_MAP_SET
+			/* find qos map set ie */
+                        if ((qos_map_ie = bcm_parse_tlvs(conn_info->resp_ie, conn_info->resp_ie_len,
+				DOT11_MNG_QOS_MAP_ID)) != NULL) {
+				WL_DBG((" QoS map set IE found in assoc response\n"));
+				if (!cfg->up_table) {
+					cfg->up_table = (uint8 *)MALLOC(cfg->osh, UP_TABLE_MAX);
+				}
+				wl_set_up_table(cfg->up_table, qos_map_ie);
+			} else {
+				MFREE(cfg->osh, cfg->up_table, UP_TABLE_MAX);
+			}
+#endif /* QOS_MAP_SET */
+
+			WL_INFORM_MEM(("[%s] cached assoc resp ies"
+				"event %d reason=%d ie_len=%d from " MACDBG "\n",
+				ndev->name, event_type, ntoh32(e->reason), datalen,
+				MAC2STRDBG((const u8*)(&e->addr))));
+		}
 	}
 }
 
