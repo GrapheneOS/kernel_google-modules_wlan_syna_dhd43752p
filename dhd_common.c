@@ -1501,6 +1501,8 @@ int dhd_collect_coredump(dhd_pub_t *dhdp, dhd_dump_t *dump)
 	}
 
 	total_size = socram_len;
+	buf_ptr += total_size;
+
 	/* SSSR dump */
 	if (!sssr_enab || !dhdp->collect_sssr) {
 		DHD_ERROR(("SSSR is not enabled or not collected yet "
