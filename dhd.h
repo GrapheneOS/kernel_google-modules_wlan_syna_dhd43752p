@@ -2203,16 +2203,19 @@ inline static void MUTEX_UNLOCK_SOFTAP_SET(dhd_pub_t * dhdp)
 }
 
 #ifdef DHD_DEBUG_WAKE_LOCK
+extern int dhd_wakelock_counter_get(dhd_pub_t *pub);
+extern int dhd_wakelock_wd_counter_get(dhd_pub_t *pub);
+
 #define DHD_OS_WAKE_LOCK(pub) \
 	do { \
-		printf("call wake_lock: %s %d\n", \
-			__FUNCTION__, __LINE__); \
+		printf("call wake_lock: %s %d (%d)\n", \
+			__FUNCTION__, __LINE__, dhd_wakelock_counter_get(pub)); \
 		dhd_os_wake_lock(pub); \
 	} while (0)
 #define DHD_OS_WAKE_UNLOCK(pub) \
 	do { \
-		printf("call wake_unlock: %s %d\n", \
-			__FUNCTION__, __LINE__); \
+		printf("call wake_unlock: %s %d (%d)\n", \
+			__FUNCTION__, __LINE__, dhd_wakelock_counter_get(pub)); \
 		dhd_os_wake_unlock(pub); \
 	} while (0)
 #define DHD_EVENT_WAKE_LOCK(pub) \
@@ -2305,6 +2308,18 @@ inline static void MUTEX_UNLOCK_SOFTAP_SET(dhd_pub_t * dhdp)
 			__FUNCTION__, __LINE__); \
 		dhd_os_wake_lock_destroy(dhd); \
 	} while (0)
+#define DHD_OS_WD_WAKE_LOCK(pub) \
+	do { \
+		printf("call dhd_os_WD_wake_lock: %s %d (%d)\n", \
+			__FUNCTION__, __LINE__, dhd_wakelock_wd_counter_get(pub)); \
+		dhd_os_wd_wake_lock(pub); \
+	} while (0)
+#define DHD_OS_WD_WAKE_UNLOCK(pub) \
+	do { \
+		printf("call dhd_os_WD_wake_unlock: %s %d (%d)\n", \
+			__FUNCTION__, __LINE__, dhd_wakelock_wd_counter_get(pub)); \
+		dhd_os_wd_wake_unlock(pub); \
+	} while (0)
 #else
 #define DHD_OS_WAKE_LOCK(pub)			dhd_os_wake_lock(pub)
 #define DHD_OS_WAKE_UNLOCK(pub)		dhd_os_wake_unlock(pub)
@@ -2327,10 +2342,9 @@ inline static void MUTEX_UNLOCK_SOFTAP_SET(dhd_pub_t * dhdp)
 #define DHD_OS_WAKE_LOCK_RESTORE(pub)		dhd_os_wake_lock_restore(pub)
 #define DHD_OS_WAKE_LOCK_INIT(dhd)		dhd_os_wake_lock_init(dhd);
 #define DHD_OS_WAKE_LOCK_DESTROY(dhd)		dhd_os_wake_lock_destroy(dhd);
-#endif /* DHD_DEBUG_WAKE_LOCK */
-
 #define DHD_OS_WD_WAKE_LOCK(pub)		dhd_os_wd_wake_lock(pub)
 #define DHD_OS_WD_WAKE_UNLOCK(pub)		dhd_os_wd_wake_unlock(pub)
+#endif /* DHD_DEBUG_WAKE_LOCK */
 
 #ifdef DHD_USE_SCAN_WAKELOCK
 #ifdef DHD_DEBUG_SCAN_WAKELOCK

@@ -8974,16 +8974,6 @@ dhd_ioctl_entry_wrapper(struct net_device *net, struct ifreq *ifr, int cmd)
 }
 #endif /* DHD_PCIE_NATIVE_RUNTIMEPM */
 
-#ifdef CONFIG_HAS_WAKELOCK
-#define dhd_wake_lock_unlock_destroy(wlock) \
-{ \
-	if (dhd_wake_lock_active(wlock)) { \
-		dhd_wake_unlock(wlock); \
-	} \
-	dhd_wake_lock_destroy(wlock); \
-}
-#endif /* CONFIG_HAS_WAKELOCK */
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) && defined(DHD_TCP_LIMIT_OUTPUT)
 #define DHD_TCP_LIMIT_OUTPUT_BYTES (4 * 1024 * 1024)
 #ifndef TCP_DEFAULT_LIMIT_OUTPUT
@@ -11727,7 +11717,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	dhd->wakelock_counter = 0;
 	/* wakelocks prevent a system from going into a low power state */
 #ifdef CONFIG_HAS_WAKELOCK
-	dhd_wake_lock_init(&dhd->wl_wdwake, WAKE_LOCK_SUSPEND, "wlan_wd_wake");
+	dhd_wake_lock_init(dhd->wl_wdwake, dhd_bus_to_dev(bus), "wlan_wd_wake");
 #endif /* CONFIG_HAS_WAKELOCK */
 
 #if defined(OEM_ANDROID)
@@ -17226,7 +17216,7 @@ void dhd_detach(dhd_pub_t *dhdp)
 #endif
 #ifdef CONFIG_HAS_WAKELOCK
 	dhd->wakelock_wd_counter = 0;
-	dhd_wake_lock_unlock_destroy(&dhd->wl_wdwake);
+	dhd_wake_lock_destroy(dhd->wl_wdwake);
 #endif /* CONFIG_HAS_WAKELOCK */
 	if (dhd->dhd_state & DHD_ATTACH_STATE_WAKELOCKS_INIT) {
 		DHD_TRACE(("wd wakelock count:%d\n", dhd->wakelock_wd_counter));
@@ -18087,7 +18077,7 @@ dhd_os_wd_timer(void *bus, uint wdtick)
 		return;
 	}
 
-	 if (wdtick) {
+	if (wdtick) {
 #ifdef BCMSDIO
 		DHD_OS_WD_WAKE_LOCK(pub);
 		dhd_watchdog_ms = (uint)wdtick;
@@ -21029,10 +21019,10 @@ int dhd_os_wake_lock_timeout(dhd_pub_t *pub)
 			dhd->wakelock_rx_timeout_enable : dhd->wakelock_ctrl_timeout_enable;
 #ifdef CONFIG_HAS_WAKELOCK
 		if (dhd->wakelock_rx_timeout_enable)
-			dhd_wake_lock_timeout(&dhd->wl_rxwake,
+			dhd_wake_lock_timeout(dhd->wl_rxwake,
 				msecs_to_jiffies(dhd->wakelock_rx_timeout_enable));
 		if (dhd->wakelock_ctrl_timeout_enable)
-			dhd_wake_lock_timeout(&dhd->wl_ctrlwake,
+			dhd_wake_lock_timeout(dhd->wl_ctrlwake,
 				msecs_to_jiffies(dhd->wakelock_ctrl_timeout_enable));
 #endif
 		dhd->wakelock_rx_timeout_enable = 0;
@@ -21089,8 +21079,8 @@ int dhd_os_wake_lock_ctrl_timeout_cancel(dhd_pub_t *pub)
 		DHD_WAKE_SPIN_LOCK(&dhd->wakelock_spinlock, flags);
 		dhd->wakelock_ctrl_timeout_enable = 0;
 #ifdef CONFIG_HAS_WAKELOCK
-		if (dhd_wake_lock_active(&dhd->wl_ctrlwake))
-			dhd_wake_unlock(&dhd->wl_ctrlwake);
+		if (dhd_wake_lock_active(dhd->wl_ctrlwake))
+			dhd_wake_unlock(dhd->wl_ctrlwake);
 #endif
 		DHD_WAKE_SPIN_UNLOCK(&dhd->wakelock_spinlock, flags);
 	}
@@ -21324,7 +21314,7 @@ int dhd_os_wake_lock(dhd_pub_t *pub)
 		DHD_WAKE_SPIN_LOCK(&dhd->wakelock_spinlock, flags);
 		if (dhd->wakelock_counter == 0 && !dhd->waive_wakelock) {
 #ifdef CONFIG_HAS_WAKELOCK
-			dhd_wake_lock(&dhd->wl_wifi);
+			dhd_wake_lock(dhd->wl_wifi);
 #elif defined(BCMSDIO)
 			dhd_bus_dev_pm_stay_awake(pub);
 #endif
@@ -21348,7 +21338,7 @@ void dhd_event_wake_lock(dhd_pub_t *pub)
 
 	if (dhd) {
 #ifdef CONFIG_HAS_WAKELOCK
-		dhd_wake_lock(&dhd->wl_evtwake);
+		dhd_wake_lock(dhd->wl_evtwake);
 #elif defined(BCMSDIO)
 		dhd_bus_dev_pm_stay_awake(pub);
 #endif
@@ -21362,7 +21352,7 @@ dhd_pm_wake_lock_timeout(dhd_pub_t *pub, int val)
 	dhd_info_t *dhd = (dhd_info_t *)(pub->info);
 
 	if (dhd) {
-		dhd_wake_lock_timeout(&dhd->wl_pmwake, msecs_to_jiffies(val));
+		dhd_wake_lock_timeout(dhd->wl_pmwake, msecs_to_jiffies(val));
 	}
 #endif /* CONFIG_HAS_WAKE_LOCK */
 }
@@ -21374,7 +21364,7 @@ dhd_txfl_wake_lock_timeout(dhd_pub_t *pub, int val)
 	dhd_info_t *dhd = (dhd_info_t *)(pub->info);
 
 	if (dhd) {
-		dhd_wake_lock_timeout(&dhd->wl_txflwake, msecs_to_jiffies(val));
+		dhd_wake_lock_timeout(dhd->wl_txflwake, msecs_to_jiffies(val));
 	}
 #endif /* CONFIG_HAS_WAKE_LOCK */
 }
@@ -21386,7 +21376,7 @@ dhd_nan_wake_lock_timeout(dhd_pub_t *pub, int val)
 	dhd_info_t *dhd = (dhd_info_t *)(pub->info);
 
 	if (dhd) {
-		dhd_wake_lock_timeout(&dhd->wl_nanwake, msecs_to_jiffies(val));
+		dhd_wake_lock_timeout(dhd->wl_nanwake, msecs_to_jiffies(val));
 	}
 #endif /* CONFIG_HAS_WAKE_LOCK */
 }
@@ -21420,7 +21410,7 @@ int dhd_os_wake_unlock(dhd_pub_t *pub)
 #endif /* DHD_TRACE_WAKE_LOCK */
 			if (dhd->wakelock_counter == 0 && !dhd->waive_wakelock) {
 #ifdef CONFIG_HAS_WAKELOCK
-				dhd_wake_unlock(&dhd->wl_wifi);
+				dhd_wake_unlock(dhd->wl_wifi);
 #elif defined(BCMSDIO)
 				dhd_bus_dev_pm_relax(pub);
 #endif
@@ -21438,7 +21428,7 @@ void dhd_event_wake_unlock(dhd_pub_t *pub)
 
 	if (dhd) {
 #ifdef CONFIG_HAS_WAKELOCK
-		dhd_wake_unlock(&dhd->wl_evtwake);
+		dhd_wake_unlock(dhd->wl_evtwake);
 #elif defined(BCMSDIO)
 		dhd_bus_dev_pm_relax(pub);
 #endif
@@ -21452,8 +21442,8 @@ void dhd_pm_wake_unlock(dhd_pub_t *pub)
 
 	if (dhd) {
 		/* if wl_pmwake is active, unlock it */
-		if (dhd_wake_lock_active(&dhd->wl_pmwake)) {
-			dhd_wake_unlock(&dhd->wl_pmwake);
+		if (dhd_wake_lock_active(dhd->wl_pmwake)) {
+			dhd_wake_unlock(dhd->wl_pmwake);
 		}
 	}
 #endif /* CONFIG_HAS_WAKELOCK */
@@ -21466,8 +21456,8 @@ void dhd_txfl_wake_unlock(dhd_pub_t *pub)
 
 	if (dhd) {
 		/* if wl_txflwake is active, unlock it */
-		if (dhd_wake_lock_active(&dhd->wl_txflwake)) {
-			dhd_wake_unlock(&dhd->wl_txflwake);
+		if (dhd_wake_lock_active(dhd->wl_txflwake)) {
+			dhd_wake_unlock(dhd->wl_txflwake);
 		}
 	}
 #endif /* CONFIG_HAS_WAKELOCK */
@@ -21480,8 +21470,8 @@ void dhd_nan_wake_unlock(dhd_pub_t *pub)
 
 	if (dhd) {
 		/* if wl_nanwake is active, unlock it */
-		if (dhd_wake_lock_active(&dhd->wl_nanwake)) {
-			dhd_wake_unlock(&dhd->wl_nanwake);
+		if (dhd_wake_lock_active(dhd->wl_nanwake)) {
+			dhd_wake_unlock(dhd->wl_nanwake);
 		}
 	}
 #endif /* CONFIG_HAS_WAKELOCK */
@@ -21499,8 +21489,8 @@ int dhd_os_check_wakelock(dhd_pub_t *pub)
 
 #ifdef CONFIG_HAS_WAKELOCK
 	/* Indicate to the SD Host to avoid going to suspend if internal locks are up */
-	if (dhd && (dhd_wake_lock_active(&dhd->wl_wifi) ||
-		(dhd_wake_lock_active(&dhd->wl_wdwake))))
+	if (dhd && (dhd_wake_lock_active(dhd->wl_wifi) ||
+		(dhd_wake_lock_active(dhd->wl_wdwake))))
 		return 1;
 #elif defined(BCMSDIO)
 	if (dhd && (dhd->wakelock_counter > 0) && dhd_bus_dev_pm_enabled(pub))
@@ -21535,20 +21525,20 @@ dhd_os_check_wakelock_all(dhd_pub_t *pub)
 
 #ifdef CONFIG_HAS_WAKELOCK
 	c = dhd->wakelock_counter;
-	l1 = dhd_wake_lock_active(&dhd->wl_wifi);
-	l2 = dhd_wake_lock_active(&dhd->wl_wdwake);
-	l3 = dhd_wake_lock_active(&dhd->wl_rxwake);
-	l4 = dhd_wake_lock_active(&dhd->wl_ctrlwake);
-	l7 = dhd_wake_lock_active(&dhd->wl_evtwake);
+	l1 = dhd_wake_lock_active(dhd->wl_wifi);
+	l2 = dhd_wake_lock_active(dhd->wl_wdwake);
+	l3 = dhd_wake_lock_active(dhd->wl_rxwake);
+	l4 = dhd_wake_lock_active(dhd->wl_ctrlwake);
+	l7 = dhd_wake_lock_active(dhd->wl_evtwake);
 #ifdef BCMPCIE_OOB_HOST_WAKE
-	l5 = dhd_wake_lock_active(&dhd->wl_intrwake);
+	l5 = dhd_wake_lock_active(dhd->wl_intrwake);
 #endif /* BCMPCIE_OOB_HOST_WAKE */
 #ifdef DHD_USE_SCAN_WAKELOCK
-	l6 = dhd_wake_lock_active(&dhd->wl_scanwake);
+	l6 = dhd_wake_lock_active(dhd->wl_scanwake);
 #endif /* DHD_USE_SCAN_WAKELOCK */
-	l8 = dhd_wake_lock_active(&dhd->wl_pmwake);
-	l9 = dhd_wake_lock_active(&dhd->wl_txflwake);
-	l10 = dhd_wake_lock_active(&dhd->wl_nanwake);
+	l8 = dhd_wake_lock_active(dhd->wl_pmwake);
+	l9 = dhd_wake_lock_active(dhd->wl_txflwake);
+	l10 = dhd_wake_lock_active(dhd->wl_nanwake);
 	lock_active = (l1 || l2 || l3 || l4 || l5 || l6 || l7 || l8 || l9 || l10);
 
 	/* Indicate to the Host to avoid going to suspend if internal locks are up */
@@ -21587,7 +21577,7 @@ int dhd_os_wd_wake_lock(dhd_pub_t *pub)
 		if (dhd->wakelock_wd_counter == 0 && !dhd->waive_wakelock) {
 #ifdef CONFIG_HAS_WAKELOCK
 			/* if wakelock_wd_counter was never used : lock it at once */
-			dhd_wake_lock(&dhd->wl_wdwake);
+			dhd_wake_lock(dhd->wl_wdwake);
 #endif
 		}
 		dhd->wakelock_wd_counter++;
@@ -21609,7 +21599,7 @@ int dhd_os_wd_wake_unlock(dhd_pub_t *pub)
 			dhd->wakelock_wd_counter = 0;
 			if (!dhd->waive_wakelock) {
 #ifdef CONFIG_HAS_WAKELOCK
-				dhd_wake_unlock(&dhd->wl_wdwake);
+				dhd_wake_unlock(dhd->wl_wdwake);
 #endif
 			}
 		}
@@ -21626,7 +21616,7 @@ dhd_os_oob_irq_wake_lock_timeout(dhd_pub_t *pub, int val)
 	dhd_info_t *dhd = (dhd_info_t *)(pub->info);
 
 	if (dhd) {
-		dhd_wake_lock_timeout(&dhd->wl_intrwake, msecs_to_jiffies(val));
+		dhd_wake_lock_timeout(dhd->wl_intrwake, msecs_to_jiffies(val));
 	}
 #endif /* CONFIG_HAS_WAKELOCK */
 }
@@ -21639,8 +21629,8 @@ dhd_os_oob_irq_wake_unlock(dhd_pub_t *pub)
 
 	if (dhd) {
 		/* if wl_intrwake is active, unlock it */
-		if (dhd_wake_lock_active(&dhd->wl_intrwake)) {
-			dhd_wake_unlock(&dhd->wl_intrwake);
+		if (dhd_wake_lock_active(dhd->wl_intrwake)) {
+			dhd_wake_unlock(dhd->wl_intrwake);
 		}
 	}
 #endif /* CONFIG_HAS_WAKELOCK */
@@ -21655,7 +21645,7 @@ dhd_os_scan_wake_lock_timeout(dhd_pub_t *pub, int val)
 	dhd_info_t *dhd = (dhd_info_t *)(pub->info);
 
 	if (dhd) {
-		dhd_wake_lock_timeout(&dhd->wl_scanwake, msecs_to_jiffies(val));
+		dhd_wake_lock_timeout(dhd->wl_scanwake, msecs_to_jiffies(val));
 	}
 #endif /* CONFIG_HAS_WAKELOCK */
 }
@@ -21668,8 +21658,8 @@ dhd_os_scan_wake_unlock(dhd_pub_t *pub)
 
 	if (dhd) {
 		/* if wl_scanwake is active, unlock it */
-		if (dhd_wake_lock_active(&dhd->wl_scanwake)) {
-			dhd_wake_unlock(&dhd->wl_scanwake);
+		if (dhd_wake_lock_active(dhd->wl_scanwake)) {
+			dhd_wake_unlock(dhd->wl_scanwake);
 		}
 	}
 #endif /* CONFIG_HAS_WAKELOCK */
@@ -21735,13 +21725,13 @@ int dhd_os_wake_lock_restore(dhd_pub_t *pub)
 
 	if (dhd->wakelock_before_waive == 0 && dhd->wakelock_counter > 0) {
 #ifdef CONFIG_HAS_WAKELOCK
-		dhd_wake_lock(&dhd->wl_wifi);
+		dhd_wake_lock(dhd->wl_wifi);
 #elif defined(BCMSDIO)
 		dhd_bus_dev_pm_stay_awake(&dhd->pub);
 #endif
 	} else if (dhd->wakelock_before_waive > 0 && dhd->wakelock_counter == 0) {
 #ifdef CONFIG_HAS_WAKELOCK
-		dhd_wake_unlock(&dhd->wl_wifi);
+		dhd_wake_unlock(dhd->wl_wifi);
 #elif defined(BCMSDIO)
 		dhd_bus_dev_pm_relax(&dhd->pub);
 #endif
@@ -21761,19 +21751,19 @@ void dhd_os_wake_lock_init(struct dhd_info *dhd)
 	dhd->wakelock_ctrl_timeout_enable = 0;
 	/* wakelocks prevent a system from going into a low power state */
 #ifdef CONFIG_HAS_WAKELOCK
-	dhd_wake_lock_init(&dhd->wl_wifi, WAKE_LOCK_SUSPEND, "wlan_wake");
-	dhd_wake_lock_init(&dhd->wl_rxwake, WAKE_LOCK_SUSPEND, "wlan_rx_wake");
-	dhd_wake_lock_init(&dhd->wl_ctrlwake, WAKE_LOCK_SUSPEND, "wlan_ctrl_wake");
-	dhd_wake_lock_init(&dhd->wl_evtwake, WAKE_LOCK_SUSPEND, "wlan_evt_wake");
-	dhd_wake_lock_init(&dhd->wl_pmwake, WAKE_LOCK_SUSPEND, "wlan_pm_wake");
-	dhd_wake_lock_init(&dhd->wl_txflwake, WAKE_LOCK_SUSPEND, "wlan_txfl_wake");
+	dhd_wake_lock_init(dhd->wl_wifi, dhd_bus_to_dev(dhd->pub.bus), "wlan_wake");
+	dhd_wake_lock_init(dhd->wl_rxwake, dhd_bus_to_dev(dhd->pub.bus), "wlan_rx_wake");
+	dhd_wake_lock_init(dhd->wl_ctrlwake, dhd_bus_to_dev(dhd->pub.bus), "wlan_ctrl_wake");
+	dhd_wake_lock_init(dhd->wl_evtwake, dhd_bus_to_dev(dhd->pub.bus), "wlan_evt_wake");
+	dhd_wake_lock_init(dhd->wl_pmwake, dhd_bus_to_dev(dhd->pub.bus), "wlan_pm_wake");
+	dhd_wake_lock_init(dhd->wl_txflwake, dhd_bus_to_dev(dhd->pub.bus), "wlan_txfl_wake");
 #ifdef BCMPCIE_OOB_HOST_WAKE
-	dhd_wake_lock_init(&dhd->wl_intrwake, WAKE_LOCK_SUSPEND, "wlan_oob_irq_wake");
+	dhd_wake_lock_init(dhd->wl_intrwake, dhd_bus_to_dev(dhd->pub.bus), "wlan_oob_irq_wake");
 #endif /* BCMPCIE_OOB_HOST_WAKE */
 #ifdef DHD_USE_SCAN_WAKELOCK
-	dhd_wake_lock_init(&dhd->wl_scanwake, WAKE_LOCK_SUSPEND, "wlan_scan_wake");
+	dhd_wake_lock_init(dhd->wl_scanwake, dhd_bus_to_dev(dhd->pub.bus), "wlan_scan_wake");
 #endif /* DHD_USE_SCAN_WAKELOCK */
-	dhd_wake_lock_init(&dhd->wl_nanwake, WAKE_LOCK_SUSPEND, "wlan_nan_wake");
+	dhd_wake_lock_init(dhd->wl_nanwake, dhd_bus_to_dev(dhd->pub.bus), "wlan_nan_wake");
 #endif /* CONFIG_HAS_WAKELOCK */
 #ifdef DHD_TRACE_WAKE_LOCK
 	dhd_wk_lock_trace_init(dhd);
@@ -21787,19 +21777,19 @@ void dhd_os_wake_lock_destroy(struct dhd_info *dhd)
 	dhd->wakelock_counter = 0;
 	dhd->wakelock_rx_timeout_enable = 0;
 	dhd->wakelock_ctrl_timeout_enable = 0;
-	dhd_wake_lock_unlock_destroy(&dhd->wl_wifi);
-	dhd_wake_lock_unlock_destroy(&dhd->wl_rxwake);
-	dhd_wake_lock_unlock_destroy(&dhd->wl_ctrlwake);
-	dhd_wake_lock_unlock_destroy(&dhd->wl_evtwake);
-	dhd_wake_lock_unlock_destroy(&dhd->wl_pmwake);
-	dhd_wake_lock_unlock_destroy(&dhd->wl_txflwake);
+	dhd_wake_lock_destroy(dhd->wl_wifi);
+	dhd_wake_lock_destroy(dhd->wl_rxwake);
+	dhd_wake_lock_destroy(dhd->wl_ctrlwake);
+	dhd_wake_lock_destroy(dhd->wl_evtwake);
+	dhd_wake_lock_destroy(dhd->wl_pmwake);
+	dhd_wake_lock_destroy(dhd->wl_txflwake);
 #ifdef BCMPCIE_OOB_HOST_WAKE
-	dhd_wake_lock_unlock_destroy(&dhd->wl_intrwake);
+	dhd_wake_lock_destroy(dhd->wl_intrwake);
 #endif /* BCMPCIE_OOB_HOST_WAKE */
 #ifdef DHD_USE_SCAN_WAKELOCK
-	dhd_wake_lock_unlock_destroy(&dhd->wl_scanwake);
+	dhd_wake_lock_destroy(dhd->wl_scanwake);
 #endif /* DHD_USE_SCAN_WAKELOCK */
-	dhd_wake_lock_unlock_destroy(&dhd->wl_nanwake);
+	dhd_wake_lock_destroy(dhd->wl_nanwake);
 #ifdef DHD_TRACE_WAKE_LOCK
 	dhd_wk_lock_trace_deinit(dhd);
 #endif /* DHD_TRACE_WAKE_LOCK */
@@ -30006,3 +29996,17 @@ static void dhd_bridge_dev_set(dhd_info_t *dhd, int ifidx, struct net_device *de
 	}
 }
 #endif /* defiend(WLDWDS) && defined(FOURADDR_AUTO_BRG) */
+
+#ifdef DHD_DEBUG_WAKE_LOCK
+int
+dhd_wakelock_counter_get(dhd_pub_t *pub)
+{
+	return ((dhd_info_t *)pub)->wakelock_counter;
+}
+
+int
+dhd_wakelock_wd_counter_get(dhd_pub_t *pub)
+{
+	return ((dhd_info_t *)pub)->wakelock_wd_counter;
+}
+#endif /* DHD_DEBUG_WAKE_LOCK */
