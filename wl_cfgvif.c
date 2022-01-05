@@ -3009,17 +3009,15 @@ wl_cfg80211_bcn_bringup_ap(
 		}
 
 #ifdef MFP
-		if (cfg->mfp_mode) {
-			/* This needs to go after wsec otherwise the wsec command will
-			 * overwrite the values set by MFP
-			 */
-			err = wldev_iovar_setint_bsscfg(dev, "mfp", cfg->mfp_mode, bssidx);
-			if (err < 0) {
-				WL_ERR(("MFP Setting failed. ret = %d \n", err));
-				/* If fw doesn't support mfp, Ignore the error */
-				if (err != BCME_UNSUPPORTED) {
-					goto exit;
-				}
+		/* This needs to go after wsec otherwise the wsec command will
+		 * overwrite the values set by MFP
+		 */
+		err = wldev_iovar_setint_bsscfg(dev, "mfp", cfg->mfp_mode, bssidx);
+		if (err < 0) {
+			WL_ERR(("MFP Setting failed. ret = %d \n", err));
+			/* If fw doesn't support mfp, Ignore the error */
+			if (err != BCME_UNSUPPORTED) {
+				goto exit;
 			}
 		}
 #endif /* MFP */
