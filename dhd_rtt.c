@@ -2983,8 +2983,12 @@ dhd_rtt_start(dhd_pub_t *dhd)
 	/* configure the session 1 as initiator */
 	if  (ftm_cfg_cnt < FTM_MAX_CONFIGS) {
 		ftm_configs[ftm_cfg_cnt].enable = TRUE;
-		ftm_configs[ftm_cfg_cnt++].flags =
+		ftm_configs[ftm_cfg_cnt].flags =
 			WL_PROXD_SESSION_FLAG_INITIATOR | WL_PROXD_SESSION_FLAG_RANDMAC;
+		if (rtt_target->type == RTT_ONE_WAY) {
+			ftm_configs[ftm_cfg_cnt].flags |= WL_PROXD_SESSION_FLAG_ONE_WAY;
+		}
+		ftm_cfg_cnt++;
 		dhd_rtt_ftm_config(dhd, FTM_DEFAULT_SESSION, FTM_CONFIG_CAT_OPTIONS,
 				ftm_configs, ftm_cfg_cnt);
 	} else {
@@ -4750,7 +4754,9 @@ dhd_rtt_init(dhd_pub_t *dhd)
 	if (ret == BCME_OK && (version == WL_PROXD_API_VERSION)) {
 		DHD_RTT_ERR(("%s : FTM is supported\n", __FUNCTION__));
 		/* TODO :  need to find a way to check rtt capability */
-		/* rtt_status->rtt_capa.proto |= RTT_CAP_ONE_WAY; */
+#ifdef WL_RTT_ONE_WAY
+		rtt_status->rtt_capa.proto |= RTT_CAP_ONE_WAY;
+#endif /* WL_RTT_ONE_WAY */
 		rtt_status->rtt_capa.proto |= RTT_CAP_FTM_WAY;
 
 		/* indicate to set tx rate */
