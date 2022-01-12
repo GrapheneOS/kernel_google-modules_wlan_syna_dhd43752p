@@ -55,6 +55,12 @@
 
 #define DUMPBUFSZ 1024
 
+/* kvmalloc was added from kernel ver 4.12 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0))
+#define kvmalloc kmalloc
+#define kvfree kfree
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0) */
+
 #ifdef CUSTOMER_HW4_DEBUG
 uint32 g_assert_type = 1; /* By Default not cause Kernel Panic */
 #else
@@ -629,7 +635,7 @@ original:
 #endif /* CONFIG_DHD_USE_STATIC_BUF */
 
 	flags = CAN_SLEEP() ? GFP_KERNEL: GFP_ATOMIC;
-	if ((addr = kmalloc(size, flags)) == NULL) {
+	if ((addr = kvmalloc(size, flags)) == NULL) {
 		if (osh)
 			osh->failed++;
 		return (NULL);
@@ -703,7 +709,7 @@ osl_mfree(osl_t *osh, void *addr, uint size)
 
 		atomic_sub(size, &osh->cmn->malloced);
 	}
-	kfree(addr);
+	kvfree(addr);
 }
 
 #ifdef BCMDBG_MEM
