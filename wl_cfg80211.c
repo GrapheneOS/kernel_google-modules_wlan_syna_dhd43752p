@@ -18341,10 +18341,6 @@ int wl_cfg80211_hang(struct net_device *dev, u16 reason)
 s32 wl_cfg80211_down(struct net_device *dev)
 {
 	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
-#ifdef RTT_SUPPORT
-	dhd_pub_t *dhdp;
-#endif /* RTT_SUPPORT */
-
 	s32 err = BCME_ERROR;
 
 	WL_DBG(("In\n"));
@@ -18356,12 +18352,6 @@ s32 wl_cfg80211_down(struct net_device *dev)
 		mutex_unlock(&cfg->if_sync);
 #endif /* WL_NAN */
 
-#ifdef RTT_SUPPORT
-		dhdp = (dhd_pub_t *)(cfg->pub);
-		if (dhdp->rtt_state) {
-			dhd_rtt_deinit(dhdp);
-		}
-#endif /* RTT_SUPPORT */
 		mutex_lock(&cfg->usr_sync);
 		err = __wl_cfg80211_down(cfg);
 		mutex_unlock(&cfg->usr_sync);

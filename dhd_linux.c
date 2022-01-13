@@ -9067,7 +9067,6 @@ dhd_stop(struct net_device *net)
 		wl_cfg80211_down(net);
 
 		DHD_ERROR(("%s: making dhdpub up FALSE\n", __FUNCTION__));
-#ifdef WL_CFG80211
 		/* Disable Runtime PM before interface down */
 		DHD_STOP_RPM_TIMER(&dhd->pub);
 
@@ -9075,10 +9074,16 @@ dhd_stop(struct net_device *net)
 		dhd->pub.up = 0;
 		DHD_UP_UNLOCK(&dhd->pub.up_lock, flags);
 
-		wl_terminate_event_handler(net);
-#else
-		dhd->pub.up = 0;
-#endif /* WL_CFG80211 */
+		if (!dhd_download_fw_on_driverload) {
+			wl_terminate_event_handler(net);
+		}
+
+#ifdef RTT_SUPPORT
+		if (dhd->pub.rtt_state) {
+			dhd_rtt_deinit(&dhd->pub);
+		}
+#endif /* RTT_SUPPORT */
+
 #if defined(BCMPCIE) && defined(CONFIG_ARCH_MSM)
 		dhd_bus_inform_ep_loaded_to_rc(&dhd->pub, dhd->pub.up);
 #endif /* BCMPCIE && CONFIG_ARCH_MSM */
