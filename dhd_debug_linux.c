@@ -529,8 +529,11 @@ dhd_os_dbg_attach(dhd_pub_t *dhdp)
 
 	/* os_dbg data */
 	os_priv = MALLOCZ(dhdp->osh, sizeof(*os_priv) * DEBUG_RING_ID_MAX);
-	if (!os_priv)
+	if (!os_priv) {
+		DHD_ERROR(("%s:%d: MALLOC failed for os_priv, size %d\n", __FUNCTION__,
+			__LINE__, (uint32)sizeof(*os_priv) * DEBUG_RING_ID_MAX));
 		return BCME_NOMEM;
+	}
 
 	for (ring_id = DEBUG_RING_ID_INVALID + 1; ring_id < DEBUG_RING_ID_MAX;
 	     ring_id++) {
@@ -541,8 +544,9 @@ dhd_os_dbg_attach(dhd_pub_t *dhdp)
 	}
 
 	ret = dhd_dbg_attach(dhdp, dhd_os_dbg_pullreq, dhd_os_dbg_urgent_notifier, os_priv);
-	if (ret)
+	if (ret) {
 		MFREE(dhdp->osh, os_priv, sizeof(*os_priv) * DEBUG_RING_ID_MAX);
+	}
 
 	return ret;
 }

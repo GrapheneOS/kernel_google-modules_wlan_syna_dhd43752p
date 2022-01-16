@@ -2950,52 +2950,75 @@ dhd_dbg_attach(dhd_pub_t *dhdp, dbg_pullreq_t os_pullreq,
 #endif /* DHD_PKT_LOGGING_DBGRING */
 
 	dbg = MALLOCZ(dhdp->osh, sizeof(dhd_dbg_t));
-	if (!dbg)
+	if (!dbg) {
+		DHD_ERROR(("%s:%d: MALLOC failed for dbg, size %d\n",
+			__FUNCTION__, __LINE__, (uint32)sizeof(dhd_dbg_t)));
 		return BCME_NOMEM;
+	}
 
 #ifdef DHD_DEBUGABILITY_EVENT_RING
 	buf = MALLOCZ(dhdp->osh, DHD_EVENT_RING_SIZE);
-	if (!buf)
+	if (!buf) {
+		DHD_ERROR(("%s:%d: MALLOC failed for event_ring, size %d\n",
+			__FUNCTION__, __LINE__, DHD_EVENT_RING_SIZE));
+		ret = BCME_NOMEM;
 		goto error;
+	}
 	ret = dhd_dbg_ring_init(dhdp, &dbg->dbg_rings[DHD_EVENT_RING_ID], DHD_EVENT_RING_ID,
 			(uint8 *)DHD_EVENT_RING_NAME, DHD_EVENT_RING_SIZE, buf, FALSE);
-	if (ret)
+	if (ret) {
 		goto error;
+	}
 #endif /* DHD_DEBUGABILITY_EVENT_RING */
 
 #if defined(DHD_DEBUGABILITY_LOG_DUMP_RING) || \
 	defined(DEBUGABILITY)
 	buf = MALLOCZ(dhdp->osh, FW_VERBOSE_RING_SIZE);
-	if (!buf)
+	if (!buf) {
+		DHD_ERROR(("%s:%d: MALLOC failed for fw_verbose_ring, size %d\n",
+			__FUNCTION__, __LINE__, FW_VERBOSE_RING_SIZE));
+		ret = BCME_NOMEM;
 		goto error;
+	}
 	ret = dhd_dbg_ring_init(dhdp, &dbg->dbg_rings[FW_VERBOSE_RING_ID], FW_VERBOSE_RING_ID,
 			(uint8 *)FW_VERBOSE_RING_NAME, FW_VERBOSE_RING_SIZE, buf, FALSE);
-	if (ret)
+	if (ret) {
 		goto error;
+	}
 #endif /* DHD_DEBUGABILITY_LOG_DUMP_RING || DEBUGABILITY */
 
 #ifdef DHD_DEBUGABILITY_LOG_DUMP_RING
 	buf = MALLOCZ(dhdp->osh, DRIVER_LOG_RING_SIZE);
-	if (!buf)
+	if (!buf) {
+		DHD_ERROR(("%s:%d: MALLOC failed for driver_log_ring, size %d\n",
+			__FUNCTION__, __LINE__, DRIVER_LOG_RING_SIZE));
+		ret = BCME_NOMEM;
 		goto error;
+	}
 	ret = dhd_dbg_ring_init(dhdp, &dbg->dbg_rings[DRIVER_LOG_RING_ID], DRIVER_LOG_RING_ID,
 			(uint8 *)DRIVER_LOG_RING_NAME, DRIVER_LOG_RING_SIZE, buf, FALSE);
-	if (ret)
+	if (ret) {
 		goto error;
+	}
 
 	buf = MALLOCZ(dhdp->osh, ROAM_STATS_RING_SIZE);
-	if (!buf)
+	if (!buf) {
+		DHD_ERROR(("%s:%d: MALLOC failed for roam_stats_ring, size %d\n",
+			__FUNCTION__, __LINE__, ROAM_STATS_RING_SIZE));
+		ret = BCME_NOMEM;
 		goto error;
+	}
 	ret = dhd_dbg_ring_init(dhdp, &dbg->dbg_rings[ROAM_STATS_RING_ID], ROAM_STATS_RING_ID,
 			(uint8 *)ROAM_STATS_RING_NAME, ROAM_STATS_RING_SIZE, buf, FALSE);
-	if (ret)
+	if (ret) {
 		goto error;
+	}
 #endif /* DHD_DEBUGABILITY_LOG_DUMP_RING */
 
 #ifdef DHD_DEBUGABILITY_DEBUG_DUMP
 	/*
 	 * delayed memory allocation. memory will be allocated when debug_dump is invoked
-	 * To prepare the ringbuffer in legacy HAL, we shuold initialize ring at this time
+	 * To prepare the ringbuffer in legacy HAL, we should initialize ring at this time
 	 */
 	ret = dhd_dbg_ring_init(dhdp, &dbg->dbg_rings[DEBUG_DUMP_RING1_ID], DEBUG_DUMP_RING1_ID,
 		(uint8 *)DEBUG_DUMP_RING1_NAME, DEBUG_DUMP_RING1_SIZE, NULL, FALSE);
@@ -3014,24 +3037,33 @@ dhd_dbg_attach(dhd_pub_t *dhdp, dbg_pullreq_t os_pullreq,
 
 #ifdef BTLOG
 	buf = MALLOCZ(dhdp->osh, BT_LOG_RING_SIZE);
-	if (!buf)
+	if (!buf) {
+		DHD_ERROR(("%s:%d: MALLOC failed for bt_log_ring, size %d\n",
+			__FUNCTION__, __LINE__, BT_LOG_RING_SIZE));
+		ret = BCME_NOMEM;
 		goto error;
+	}
 	ret = dhd_dbg_ring_init(dhdp, &dbg->dbg_rings[BT_LOG_RING_ID], BT_LOG_RING_ID,
 			BT_LOG_RING_NAME, BT_LOG_RING_SIZE, buf, FALSE);
-	if (ret)
+	if (ret) {
 		goto error;
+	}
 #endif	/* BTLOG */
 #ifdef DHD_PKT_LOGGING_DBGRING
 	if (dhdp && dhdp->pktlog && dhdp->pktlog->pktlog_ring) {
 		pktlog_ring = dhdp->pktlog->pktlog_ring;
 	}
 
-	if (!pktlog_ring || !pktlog_ring->ring_info_mem) {
+	if (!pktlog_ring) {
+		DHD_ERROR(("%s: pktlog_ring is NULL. return.\n", __FUNCTION__));
+		ret = BCME_ERROR;
 		goto error;
 	}
 
 	buf = pktlog_ring->ring_info_mem;
 	if (!buf) {
+		DHD_ERROR(("%s: ring_info_mem is NULL. return.\n", __FUNCTION__));
+		ret = BCME_ERROR;
 		goto error;
 	}
 	ret = dhd_dbg_ring_init(dhdp, &dbg->dbg_rings[PACKET_LOG_RING_ID],

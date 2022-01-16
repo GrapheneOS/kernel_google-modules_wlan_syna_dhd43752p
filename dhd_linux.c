@@ -11575,7 +11575,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 #endif /* DHD_DEBUG */
 
 #ifdef GET_CUSTOM_MAC_ENABLE
-	 wifi_platform_get_mac_addr(dhd->adapter, dhd->pub.mac.octet);
+	wifi_platform_get_mac_addr(dhd->adapter, dhd->pub.mac.octet);
 #endif /* GET_CUSTOM_MAC_ENABLE */
 #ifdef CUSTOM_COUNTRY_CODE
 #ifdef CUSTOM_FORCE_NODFS_FLAG
@@ -11806,6 +11806,10 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 #endif /* !OEM_ANDROID && BTLOG */
 #ifdef DBG_PKT_MON
 	dhd->pub.dbg->pkt_mon_lock = osl_spin_lock_init(dhd->pub.osh);
+	if (!dhd->pub.dbg->pkt_mon_lock) {
+		DHD_ERROR(("%s: pkt_mon_lock init failed !\n", __FUNCTION__));
+		goto fail;
+	}
 #ifdef DBG_PKT_MON_INIT_DEFAULT
 	dhd_os_dbg_attach_pkt_monitor(&dhd->pub);
 #endif /* DBG_PKT_MON_INIT_DEFAULT */
@@ -11815,12 +11819,20 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 
 #ifdef DHD_MEM_STATS
 	dhd->pub.mem_stats_lock = osl_spin_lock_init(dhd->pub.osh);
+	if (!dhd->pub.mem_stats_lock) {
+		DHD_ERROR(("%s: mem_stats_lock init failed !\n", __FUNCTION__));
+		goto fail;
+	}
 	dhd->pub.txpath_mem = 0;
 	dhd->pub.rxpath_mem = 0;
 #endif /* DHD_MEM_STATS */
 
 #if defined(DHD_AWDL) && defined(AWDL_SLOT_STATS)
 	dhd->pub.awdl_stats_lock = osl_spin_lock_init(dhd->pub.osh);
+	if (!dhd->pub.awdl_stats_lock) {
+		DHD_ERROR(("%s: awdl_stats_lock init failed !\n", __FUNCTION__));
+		goto fail;
+	}
 #endif /* DHD_AWDL && AWDL_SLOT_STATS */
 
 #ifdef DHD_STATUS_LOGGING
@@ -11828,6 +11840,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 		MAX_STATLOG_REQ_ITEM, STATLOG_LOGBUF_LEN);
 	if (dhd->pub.statlog == NULL) {
 		DHD_ERROR(("%s: alloc statlog failed\n", __FUNCTION__));
+		goto fail;
 	}
 #endif /* DHD_STATUS_LOGGING */
 
@@ -11835,6 +11848,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	dhd->pub.hang_info = MALLOCZ(osh, VENDOR_SEND_HANG_EXT_INFO_LEN);
 	if (dhd->pub.hang_info == NULL) {
 		DHD_ERROR(("%s: alloc hang_info failed\n", __FUNCTION__));
+		goto fail;
 	}
 #endif /* WL_CFGVENDOR_SEND_HANG_EVENT */
 	if (dhd_sta_pool_init(&dhd->pub, DHD_MAX_STA) != BCME_OK) {
