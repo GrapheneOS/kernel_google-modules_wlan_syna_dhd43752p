@@ -1438,6 +1438,12 @@ dhd_rtt_nan_start_session(dhd_pub_t *dhd, rtt_target_info_t *rtt_target)
 		goto done;
 	}
 
+	if (NAN_RTT_ENABLED(cfg) != TRUE) {
+		/* If nan is not enabled or nan ranging is not enabled report error */
+		err = BCME_NOTENABLED;
+		goto done;
+	}
+
 	/* Below Scenarios should be avoided by callers/schedulers */
 	if (dhd_rtt_nan_is_directed_setup_in_prog(dhd)) {
 		DHD_RTT_ERR(("dhd_rtt_nan_start_session failed, setup already in prog\n"));

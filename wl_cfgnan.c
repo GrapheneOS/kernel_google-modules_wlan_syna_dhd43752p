@@ -4656,6 +4656,14 @@ wl_cfgnan_check_disc_result_for_ranging(struct bcm_cfg80211 *cfg,
 	bool add_target;
 
 	*send_disc_result = TRUE;
+
+	if (cfg->nancfg->ranging_enable == FALSE) {
+		WL_INFORM_MEM(("Nan Ranging not enabled, skip geofence ranging\n"));
+		*send_disc_result = TRUE;
+		ret = BCME_NOTENABLED;
+		goto exit;
+	}
+
 	svc = wl_cfgnan_get_svc_inst(cfg, nan_event_data->sub_id, 0);
 
 	if (svc && svc->ranging_required) {
@@ -4814,6 +4822,13 @@ wl_cfgnan_handle_ranging_ind(struct bcm_cfg80211 *cfg,
 	int err_at = 0;
 
 	WL_DBG(("Trigger range response\n"));
+
+	if (cfg->nancfg->ranging_enable == FALSE) {
+		WL_ERR(("Nan Ranging not enabled..reject request\n"));
+		ret = BCME_NOTENABLED;
+		err_at = 1;
+		goto done;
+	}
 
 	/* Check if ranging is allowed */
 	rtt_invalid_state = dhd_rtt_invalid_states(ndev, peer_addr);

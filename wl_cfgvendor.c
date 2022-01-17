@@ -6171,6 +6171,7 @@ wl_cfgvendor_nan_start_handler(struct wiphy *wiphy,
 
 	cmd_data->sid_beacon.sid_enable = NAN_SID_ENABLE_FLAG_INVALID; /* Setting to some default */
 	cmd_data->sid_beacon.sid_count = NAN_SID_BEACON_COUNT_INVALID; /* Setting to some default */
+	cfg->nancfg->ranging_enable = TRUE; /* by default enable ranging */
 
 	ret = wl_cfgvendor_nan_parse_args(wiphy, data, len, cmd_data, &nan_attr_mask);
 	if (ret) {
