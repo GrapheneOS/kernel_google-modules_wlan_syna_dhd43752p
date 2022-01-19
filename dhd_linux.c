@@ -14262,8 +14262,13 @@ dhd_optimised_preinit_ioctls(dhd_pub_t * dhd)
 	}
 
 #ifdef CONFIG_SILENT_ROAM
+#ifdef HIGHBAND_ROAM
+	dhd->sroam_turn_on = FALSE;
+	dhd_highband_roam_init(dhd);
+#else
 	dhd->sroam_turn_on = TRUE;
 	dhd->sroamed = FALSE;
+#endif /* HIGHBAND_ROAM */
 #endif /* CONFIG_SILENT_ROAM */
 
 #ifndef OEM_ANDROID
@@ -16075,8 +16080,13 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 	}
 
 #ifdef CONFIG_SILENT_ROAM
+#ifdef HIGHBAND_ROAM
+	dhd->sroam_turn_on = FALSE;
+	dhd_highband_roam_init(dhd);
+#else
 	dhd->sroam_turn_on = TRUE;
 	dhd->sroamed = FALSE;
+#endif /* HIGHBAND_ROAM */
 #endif /* CONFIG_SILENT_ROAM */
 #ifdef READ_CONFIG_FROM_FILE
 	dhd_preinit_config(dhd, 0);

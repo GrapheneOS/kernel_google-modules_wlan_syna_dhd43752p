@@ -586,6 +586,8 @@ DHDCFLAGS += -DWL_SAE_FT
 
 # Silent roam
 DHDCFLAGS += -DCONFIG_SILENT_ROAM
+# Highband roam
+DHDCFLAGS += -DHIGHBAND_ROAM
 # Get ROAM Channel Cache
 DHDCFLAGS += -DWL_GET_RCC
 # ROAM candidatae RSSI limit

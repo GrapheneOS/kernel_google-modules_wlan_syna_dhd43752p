@@ -4536,6 +4536,9 @@ static INLINE void dhd_set_tid_based_on_uid(dhd_pub_t *dhdp, void *pkt) { return
 #endif /* SUPPORT_SET_TID */
 
 #ifdef CONFIG_SILENT_ROAM
+#ifdef HIGHBAND_ROAM
+int dhd_highband_roam_init(dhd_pub_t *dhd);
+#endif /* HIGHBAND_ROAM */
 extern int dhd_sroam_set_mon(dhd_pub_t *dhd, bool set);
 typedef wlc_sroam_info_v1_t wlc_sroam_info_t;
 #endif /* CONFIG_SILENT_ROAM */

@@ -24800,6 +24800,7 @@ typedef struct wlc_sroam_info_v1 {
 	uint8 pad[3];
 	uint32 sroam_txfrm_prev;	/* save current tx frame counts */
 	uint32 sroam_rxfrm_prev;	/* save current rx frame counts */
+	uint8 sroam_inact_time;		/* Check for continuous inactivity time */
 } wlc_sroam_info_v1_t;
 
 typedef struct wlc_sroam {

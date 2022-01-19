@@ -7531,6 +7531,69 @@ exit:
 #endif /* OEM_ANDROID && BCMPCIE */
 
 #ifdef CONFIG_SILENT_ROAM
+#ifdef HIGHBAND_ROAM
+#define HIGHBAND_PERIOD_TIME 120
+#define HIGHBAND_INACT_CNT 16
+#define HIGHBAND_INACT_TIME 10
+#define HIGHBAND_RSSI -60
+int
+dhd_highband_roam_init(dhd_pub_t *dhd)
+{
+	int ret = BCME_OK;
+	wlc_sroam_t *psroam;
+	wlc_sroam_info_t *sroam;
+	uint sroamlen = sizeof(*sroam) + SROAM_HDRLEN;
+
+	if (dhd->op_mode &
+		(DHD_FLAG_HOSTAP_MODE | DHD_FLAG_P2P_GC_MODE | DHD_FLAG_P2P_GO_MODE)) {
+		DHD_INFO((" Failed to init sroam, op_mode 0x%04x\n", dhd->op_mode));
+		return ret;
+	}
+
+	psroam = (wlc_sroam_t *)MALLOCZ(dhd->osh, sroamlen);
+	if (!psroam) {
+		DHD_ERROR(("%s Fail to malloc buffer\n", __FUNCTION__));
+		return BCME_NOMEM;
+	}
+
+	ret = dhd_iovar(dhd, 0, "sroam", NULL, 0, (char *)psroam, sroamlen, FALSE);
+	if (ret < 0) {
+		DHD_ERROR(("%s Failed to Get sroam %d\n", __FUNCTION__, ret));
+		goto done;
+	}
+
+	if (psroam->ver != WLC_SILENT_ROAM_CUR_VER) {
+		ret = BCME_VERSION;
+		goto done;
+	}
+
+	sroam = (wlc_sroam_info_t *)psroam->data;
+	sroam->sroam_on = TRUE;
+	sroam->sroam_period_time = HIGHBAND_PERIOD_TIME;
+	sroam->sroam_inact_cnt = HIGHBAND_INACT_CNT;
+	sroam->sroam_inact_time = HIGHBAND_INACT_TIME;
+	sroam->sroam_min_rssi = HIGHBAND_RSSI;
+
+	DHD_ERROR(("Silent roam monitor init, sroam_on = %d "
+		"sroam_period_time = %d, sroam_inact_cnt = %d, sroam_inact_time = %d "
+		"sroam_min_rssi = %d\n"
+		,sroam->sroam_on, sroam->sroam_period_time,
+		sroam->sroam_inact_cnt, sroam->sroam_inact_time, sroam->sroam_min_rssi));
+
+	ret = dhd_iovar(dhd, 0, "sroam", (char *)psroam, sroamlen, NULL, 0, TRUE);
+	if (ret < 0) {
+		DHD_ERROR(("%s Failed to Set sroam %d\n", __FUNCTION__, ret));
+	}
+
+done:
+	if (psroam) {
+		MFREE(dhd->osh, psroam, sroamlen);
+	}
+
+	return ret;
+}
+#endif /* HIGHBAND_ROAM */
+
 int
 dhd_sroam_set_mon(dhd_pub_t *dhd, bool set)
 {
