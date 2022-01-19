@@ -773,12 +773,62 @@ static const char pwrstr_cnt[] = "count:";
 static const char pwrstr_dur[] = "duration_usec:";
 static const char pwrstr_ts[] = "last_entry_timestamp_usec:";
 
+ssize_t print_pwrstats_cum(char *buf)
+{
+	ssize_t ret = 0;
+
+	ret += scnprintf(buf, PAGE_SIZE, "WIFI\n");
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "AWAKE:\n");
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_cnt,
+		accumstats.awake_cnt);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_dur,
+		accumstats.awake_dur);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_ts,
+		laststats.awake_last_entry_us);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "ASLEEP:\n");
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_cnt,
+		accumstats.pm_cnt);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_dur,
+		accumstats.pm_dur);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_ts,
+		laststats.pm_last_entry_us);
+
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "\nWIFI-PCIE\n");
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "L0:\n");
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_cnt,
+		accumstats.l0_cnt);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_dur,
+		accumstats.l0_dur_us);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "L1:\n");
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_cnt,
+		accumstats.l1_cnt);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_dur,
+		accumstats.l1_dur_us);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "L1_1:\n");
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_cnt,
+		accumstats.l1_1_cnt);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_dur,
+		accumstats.l1_1_dur_us);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "L1_2:\n");
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_cnt,
+		accumstats.l1_2_cnt);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_dur,
+		accumstats.l1_2_dur_us);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "L2:\n");
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_cnt,
+		accumstats.l2_cnt);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s 0x%0llx\n", pwrstr_dur,
+		accumstats.l2_dur_us);
+
+	return ret;
+}
+
 void update_pwrstats_cum(uint64 *accum, uint64 *last, uint64 *now, bool force)
 {
 	if (accum) { /* accumulation case, ex; counts, duration */
 		if (*now < *last) {
-			if (force || ((*last - *now) > USEC_PER_MSEC)) {
-				/* not to update accum for pm_dur/awake_dur case */
+			if (force) {
+				/* force update for pm_cnt/awake_cnt and PCIE stats */
 				*accum += *now;
 				*last = *now;
 			}
@@ -802,6 +852,8 @@ static const uint16 pwrstats_req_type[] = {
 	+ sizeof(wl_pwr_pm_accum_stats_v1_t) \
 	+ (uint)strlen("pwrstats") + 1
 
+extern uint64 dhdpcie_get_last_suspend_time(dhd_pub_t *dhdp);
+
 static ssize_t
 show_pwrstats_path(struct dhd_info *dev, char *buf)
 {
@@ -819,6 +871,34 @@ show_pwrstats_path(struct dhd_info *dev, char *buf)
 	uint64 ts_sec, ts_usec, time_delta;
 
 	ASSERT(g_dhd_pub);
+
+	/* Even if dongle is in D3 state,
+	 * ASLEEP duration should be updated with estimated value.
+	 */
+	if (!dhd_os_check_if_up(&dhd->pub)) {
+		if (dhd->pub.busstate == DHD_BUS_SUSPEND) {
+			static uint64 last_suspend_end_time = 0;
+			uint64 curr_time = 0, estimated_pm_dur = 0;
+
+			if (last_suspend_end_time <
+					dhdpcie_get_last_suspend_time(&dhd->pub)) {
+				last_suspend_end_time = dhdpcie_get_last_suspend_time(&dhd->pub);
+			}
+
+			curr_time = OSL_LOCALTIME_NS();
+			if (curr_time >= last_suspend_end_time) {
+				estimated_pm_dur =
+					(curr_time - last_suspend_end_time) / NSEC_PER_USEC;
+				estimated_pm_dur += laststats.pm_dur;
+
+				update_pwrstats_cum(&accumstats.pm_dur, &laststats.pm_dur,
+					&estimated_pm_dur, FALSE);
+				last_suspend_end_time = curr_time;
+			}
+		}
+		ret = print_pwrstats_cum(buf);
+		goto done; /* Not ready yet */
+	}
 
 	len = PWRSTATS_IOV_BUF_LEN;
 	iovar_buf = (char *)MALLOCZ(g_dhd_pub->osh, len);
@@ -847,6 +927,7 @@ show_pwrstats_path(struct dhd_info *dev, char *buf)
 		iovar_buf, PWRSTATS_IOV_BUF_LEN, NULL);
 	if (err != BCME_OK) {
 		DHD_ERROR(("error (%d) - size = %zu\n", err, sizeof(wl_pwrstats_t)));
+		ret = print_pwrstats_cum(buf);
 		goto done;
 	}
 
@@ -944,6 +1025,11 @@ show_pwrstats_path(struct dhd_info *dev, char *buf)
 		*(uint8**)&p_data += taglen;
 	} while (len >= BCM_XTLV_HDR_SIZE);
 
+	/* [awake|pm]_last_entry_us are provided based on host timestamp.
+	 * These are calculated by dongle timestamp + (delta time of host & dongle)
+	 * If the newly calculated delta time is more than 1 second gap from
+	 * the existing delta time, it is updated to compensate more accurately.
+	 */
 	OSL_GET_LOCALTIME(&ts_sec, &ts_usec);
 	time_delta = ts_sec * USEC_PER_SEC + ts_usec - pwrstats_sysfs.current_ts;
 	if ((time_delta > last_delta) &&
@@ -960,24 +1046,9 @@ show_pwrstats_path(struct dhd_info *dev, char *buf)
 	update_pwrstats_cum(&accumstats.pm_dur, &laststats.pm_dur, &pwrstats_sysfs.pm_dur,
 			FALSE);
 	update_pwrstats_cum(NULL, &laststats.awake_last_entry_us,
-			&pwrstats_sysfs.awake_last_entry_us, TRUE);
+			&pwrstats_sysfs.awake_last_entry_us, FALSE);
 	update_pwrstats_cum(NULL, &laststats.pm_last_entry_us,
-			&pwrstats_sysfs.pm_last_entry_us, TRUE);
-
-	ret += scnprintf(buf, PAGE_SIZE - 1, "AWAKE:\n");
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_cnt,
-			accumstats.awake_cnt);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_dur,
-			accumstats.awake_dur);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_ts,
-			laststats.awake_last_entry_us);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "ASLEEP:\n");
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_cnt,
-			accumstats.pm_cnt);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_dur,
-			accumstats.pm_dur);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_ts,
-			laststats.pm_last_entry_us);
+			&pwrstats_sysfs.pm_last_entry_us, FALSE);
 
 	update_pwrstats_cum(&accumstats.l0_cnt, &laststats.l0_cnt, &pwrstats_sysfs.l0_cnt,
 			TRUE);
@@ -1000,32 +1071,7 @@ show_pwrstats_path(struct dhd_info *dev, char *buf)
 	update_pwrstats_cum(&accumstats.l2_dur_us, &laststats.l2_dur_us,
 			&pwrstats_sysfs.l2_dur_us, TRUE);
 
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "L0:\n");
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_cnt,
-			accumstats.l0_cnt);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_dur,
-			accumstats.l0_dur_us);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "L1:\n");
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_cnt,
-			accumstats.l1_cnt);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_dur,
-			accumstats.l1_dur_us);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "L1_1:\n");
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_cnt,
-			accumstats.l1_1_cnt);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_dur,
-			accumstats.l1_1_dur_us);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "L1_2:\n");
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_cnt,
-			accumstats.l1_2_cnt);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_dur,
-			accumstats.l1_2_dur_us);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "L2:\n");
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_cnt,
-			accumstats.l2_cnt);
-	ret += scnprintf(buf + ret, PAGE_SIZE - 1 - ret, "%s 0x%0llx\n", pwrstr_dur,
-			accumstats.l2_dur_us);
-
+	ret = print_pwrstats_cum(buf);
 done:
 	if (p_query) {
 		MFREE(g_dhd_pub->osh, p_query, (OFFSETOF(wl_pwrstats_query_t, type) +

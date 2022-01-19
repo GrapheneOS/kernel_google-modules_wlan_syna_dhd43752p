@@ -9498,6 +9498,14 @@ dhdpcie_bus_clear_intstatus(struct dhd_bus *bus)
 	}
 }
 
+#ifdef PWRSTATS_SYSFS
+uint64
+dhdpcie_get_last_suspend_time(dhd_pub_t *dhdp)
+{
+	return dhdp->bus->last_suspend_end_time;
+}
+#endif /* PWRSTATS_SYSFS */
+
 int
 #ifdef DHD_PCIE_NATIVE_RUNTIMEPM
 dhdpcie_bus_suspend(struct dhd_bus *bus, bool state, bool byint)
