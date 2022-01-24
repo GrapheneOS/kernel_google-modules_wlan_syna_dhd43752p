@@ -2423,7 +2423,7 @@ dhd_pktid_map_init(dhd_pub_t *dhd, uint32 num_items)
 
 	map = (dhd_pktid_map_t *)VMALLOC(osh, dhd_pktid_map_sz);
 	if (map == NULL) {
-		DHD_ERROR(("%s:%d: MALLOC failed for size %d\n",
+		DHD_ERROR(("%s:%d: VMALLOC failed for size %d\n",
 			__FUNCTION__, __LINE__, dhd_pktid_map_sz));
 		return (dhd_pktid_map_handle_t *)NULL;
 	}
@@ -2442,9 +2442,9 @@ dhd_pktid_map_init(dhd_pub_t *dhd, uint32 num_items)
 		goto error;
 	}
 
-	map->keys = (dhd_pktid_key_t *)MALLOC(osh, map_keys_sz);
+	map->keys = (dhd_pktid_key_t *)VMALLOC(osh, map_keys_sz);
 	if (map->keys == NULL) {
-		DHD_ERROR(("%s:%d: MALLOC failed for map->keys size %d\n",
+		DHD_ERROR(("%s:%d: VMALLOC failed for map->keys size %d\n",
 			__FUNCTION__, __LINE__, map_keys_sz));
 		goto error;
 	}
@@ -2493,7 +2493,7 @@ error:
 #endif /* DHD_PKTID_AUDIT_ENABLED */
 
 		if (map->keys) {
-			MFREE(osh, map->keys, map_keys_sz);
+			VMFREE(osh, map->keys, map_keys_sz);
 		}
 
 		if (map->pktid_lock) {
@@ -2520,6 +2520,10 @@ dhd_pktid_map_reset(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle)
 	uint32 map_items;
 	unsigned long flags;
 	bool data_tx = FALSE;
+
+	if (handle == NULL) {
+		return;
+	}
 
 	map = (dhd_pktid_map_t *)handle;
 	DHD_PKTID_LOCK(map->pktid_lock, flags);
@@ -2573,6 +2577,10 @@ dhd_pktid_map_reset_ioctl(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle)
 	dhd_pktid_item_t *locker;
 	uint32 map_items;
 	unsigned long flags;
+
+	if (handle == NULL) {
+		return;
+	}
 
 	map = (dhd_pktid_map_t *)handle;
 	DHD_PKTID_LOCK(map->pktid_lock, flags);
@@ -2641,7 +2649,7 @@ dhd_pktid_map_fini(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle)
 		}
 	}
 #endif /* DHD_PKTID_AUDIT_ENABLED */
-	MFREE(dhd->osh, map->keys, map_keys_sz);
+	VMFREE(dhd->osh, map->keys, map_keys_sz);
 	VMFREE(dhd->osh, handle, dhd_pktid_map_sz);
 }
 #ifdef IOCTLRESP_USE_CONSTMEM
@@ -2674,7 +2682,7 @@ dhd_pktid_map_fini_ioctl(dhd_pub_t *dhd, dhd_pktid_map_handle_t *handle)
 	}
 #endif /* DHD_PKTID_AUDIT_ENABLED */
 
-	MFREE(dhd->osh, map->keys, map_keys_sz);
+	VMFREE(dhd->osh, map->keys, map_keys_sz);
 	VMFREE(dhd->osh, handle, dhd_pktid_map_sz);
 }
 #endif /* IOCTLRESP_USE_CONSTMEM */
@@ -3163,6 +3171,10 @@ static void
 dhd_pktid_map_reset(dhd_pub_t *dhd, pktlists_t *handle)
 {
 	osl_t *osh = dhd->osh;
+
+	if (handle == NULL) {
+		return;
+	}
 
 	if (handle->ctrl_pkt_list) {
 		PKTLIST_FINI(handle->ctrl_pkt_list);
