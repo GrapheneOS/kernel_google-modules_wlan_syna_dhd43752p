@@ -1334,6 +1334,21 @@ dhdpcie_cto_recovery_handler(dhd_pub_t *dhd)
 	dhd_bus_t *bus = dhd->bus;
 	int ret;
 
+	if (dhd->up == FALSE) {
+		DHD_ERROR(("%s : dhd is not up\n", __FUNCTION__));
+		return;
+	}
+
+	if (bus->is_linkdown) {
+		DHD_ERROR(("%s: link is down\n", __FUNCTION__));
+		return;
+	}
+
+	if (bus->sih == NULL) {
+		DHD_ERROR(("%s: The address of sih is invalid\n", __FUNCTION__));
+		return;
+	}
+
 	/* Disable PCIe Runtime PM to avoid D3_ACK timeout.
 	 */
 	DHD_DISABLE_RUNTIME_PM(dhd);
