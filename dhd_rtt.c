@@ -2780,14 +2780,20 @@ dhd_rtt_set_ftm_config_param(ftm_config_param_info_t *ftm_params,
 			break;
 		case WL_PROXD_TLV_ID_BURST_NUM_FTM:
 			/* number of frame per burst */
-			rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_80M;
-			if (CHSPEC_IS80(rtt_target->chanspec)) {
+#ifdef WL_RTT_CTS
+			if (rtt_target->num_frames_per_burst == 0) {
+#endif
 				rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_80M;
-			} else if (CHSPEC_IS40(rtt_target->chanspec)) {
-				rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_40M;
-			} else if (CHSPEC_IS20(rtt_target->chanspec)) {
-				rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_20M;
+				if (CHSPEC_IS80(rtt_target->chanspec)) {
+					rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_80M;
+				} else if (CHSPEC_IS40(rtt_target->chanspec)) {
+					rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_40M;
+				} else if (CHSPEC_IS20(rtt_target->chanspec)) {
+					rtt_target->num_frames_per_burst = FTM_DEFAULT_CNT_20M;
+				}
+#ifdef WL_RTT_CTS
 			}
+#endif
 			ftm_params[*ftm_param_cnt].data16 =
 				htol16(rtt_target->num_frames_per_burst);
 			ftm_params[*ftm_param_cnt].tlvid =
