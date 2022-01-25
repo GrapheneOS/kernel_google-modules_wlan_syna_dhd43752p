@@ -15001,38 +15001,24 @@ wl_check_brcm_specifc_country_code(char *country_code)
 }
 
 static s32
-wl_cfg80211_ccode_evt_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
-	const wl_event_msg_t *event, void *data)
+wl_cfg80211_update_self_regd(struct bcm_cfg80211 *cfg, char *ccode)
 {
 	s32 err = BCME_OK;
-	char country_str_lookup[WLC_CNTRY_BUF_SZ] = { 0 };
 	struct wiphy *wiphy = bcmcfg_to_wiphy(cfg);
+	struct net_device *dev = bcmcfg_to_prmry_ndev(cfg);
 	int regd_len = 0;
 	struct ieee80211_regdomain *regd_copy = NULL;
 	s32 clm_flags = 0;
-	struct net_device *dev = bcmcfg_to_prmry_ndev(cfg);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0))
+	int need_rtnl_lock = 0;
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0) */
 
-	strncpy(country_str_lookup, data, WLC_CNTRY_BUF_SZ);
+	wl_check_brcm_specifc_country_code(ccode);
 
-	if (strncmp(cfg->country, country_str_lookup, WL_CCODE_LEN) == 0) {
-		/* If country code is updated from command context, skip wiphy update */
-		WL_DBG_MEM(("No change in country (%s)\n", country_str_lookup));
-		return BCME_OK;
-	}
-	/* Indicate to upper layer for regdom change */
-	WL_INFORM_MEM(("Received country code change event\n"));
-	err = wl_update_wiphybands(cfg, true);
-	if (err != BCME_OK) {
-		WL_ERR(("%s: update wiphy bands failed\n", __FUNCTION__));
-		return err;
-	}
-
-	wl_check_brcm_specifc_country_code(country_str_lookup);
-
-	WL_DBG(("Updating new country %s\n", country_str_lookup));
+	WL_DBG(("Updating new country %s\n", ccode));
 
 	if (!IS_REGDOM_SELF_MANAGED(wiphy)) {
-		err = regulatory_hint(wiphy, country_str_lookup);
+		err = regulatory_hint(wiphy, ccode);
 		if (err) {
 			WL_ERR(("%s: update country change to upper layers failed\n", __FUNCTION__));
 		}
@@ -15041,16 +15027,16 @@ wl_cfg80211_ccode_evt_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgde
 
 		regd_len = sizeof(struct ieee80211_regdomain) +
 			(global_regd_copy->n_reg_rules * sizeof(struct ieee80211_reg_rule));
-		/* it will be released in function reg_process_self_managed_hints */
 		regd_copy = kzalloc(regd_len, GFP_ATOMIC);
 
 		if (!regd_copy) {
 			return BCME_NOMEM;
 		}
 		wl_copy_regd(regd_copy, global_regd_copy);
+
 		/* Set country code for REGDOM_SELF_MANAGED  */
-		regd_copy->alpha2[0] = country_str_lookup[0];
-		regd_copy->alpha2[1] = country_str_lookup[1];
+		regd_copy->alpha2[0] = ccode[0];
+		regd_copy->alpha2[1] = ccode[1];
 		err = wldev_iovar_getint(dev, "clm_flags", &clm_flags);
 		if (unlikely(err)) {
 			WL_ERR(("error reading clm_flags(%d)\n", err));
@@ -15070,15 +15056,44 @@ wl_cfg80211_ccode_evt_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgde
 		}
 		if (wiphy) {
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0))
-			rtnl_lock();
+			need_rtnl_lock = !rtnl_is_locked();
+			if (need_rtnl_lock)
+				rtnl_lock();
 			regulatory_set_wiphy_regd_sync_rtnl(wiphy, regd_copy);
-			rtnl_unlock();
+			if (need_rtnl_lock)
+				rtnl_unlock();
 #else
 			regulatory_set_wiphy_regd_sync(wiphy, regd_copy);
 #endif /* LINUX_VERSION < VERSION(5, 12, 0) */
 		}
 		kfree(regd_copy);
 	}
+	return err;
+}
+
+static s32
+wl_cfg80211_ccode_evt_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
+	const wl_event_msg_t *event, void *data)
+{
+	s32 err = BCME_OK;
+	char country_str_lookup[WLC_CNTRY_BUF_SZ] = { 0 };
+
+	strncpy(country_str_lookup, data, WLC_CNTRY_BUF_SZ);
+
+	if (strncmp(cfg->country, country_str_lookup, WL_CCODE_LEN) == 0) {
+		/* If country code is updated from command context, skip wiphy update */
+		WL_DBG_MEM(("No change in country (%s)\n", country_str_lookup));
+		return BCME_OK;
+	}
+	/* Indicate to upper layer for regdom change */
+	WL_INFORM_MEM(("Received country code change event\n"));
+	err = wl_update_wiphybands(cfg, true);
+	if (err != BCME_OK) {
+		WL_ERR(("%s: update wiphy bands failed\n", __FUNCTION__));
+		return err;
+	}
+
+	wl_cfg80211_update_self_regd(cfg, country_str_lookup);
 
 	return err;
 }
@@ -18164,6 +18179,9 @@ s32 wl_cfg80211_up(struct net_device *net)
 #ifdef WL_USE_RANDOMIZED_SCAN
 	uint8 random_addr[ETHER_ADDR_LEN] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
 #endif /* WL_USE_RANDOMIZED_SCAN */
+#if defined(CUSTOMER_HW6) || defined(WIPHY_DYNAMIC_UPDATE)
+	wl_country_t cur_cspec = {{0}, 0, {0}};
+#endif /* CUSTOMER_HW6 || WIPHY_DYNAMIC_UPDATE */
 	WL_DBG(("In\n"));
 	cfg = wl_get_cfg(net);
 
@@ -18258,6 +18276,18 @@ s32 wl_cfg80211_up(struct net_device *net)
 	bcm_cfg80211_add_ibss_if(cfg->wdev->wiphy, IBSS_IF_NAME);
 #endif /* WLAIBSS_MCHAN */
 	cfg->spmk_info_list->pmkids.count = 0;
+#if defined(CUSTOMER_HW6) || defined(WIPHY_DYNAMIC_UPDATE)
+	err = wldev_iovar_getbuf(net, "country", NULL, 0, &cur_cspec,
+		sizeof(cur_cspec), NULL);
+	if (err < 0) {
+		WL_ERR(("get country code failed = %d\n", err));
+		return err;
+	}
+	if (strncmp(cfg->country, cur_cspec.ccode, WL_CCODE_LEN)) {
+		strncpy(cfg->country, cur_cspec.ccode, WL_CCODE_LEN);
+		wl_cfg80211_update_self_regd(cfg, cur_cspec.ccode);
+	}
+#endif /* CUSTOMER_HW6 || WIPHY_DYNAMIC_UPDATE */
 	return err;
 }
 
