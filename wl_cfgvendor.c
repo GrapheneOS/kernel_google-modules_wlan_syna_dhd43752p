@@ -7427,6 +7427,8 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 		COMPAT_ASSIGN_VALUE(iface, peer_info->bssload.chan_util, bssload->chan_util);
 	} else if (err == BCME_UNSUPPORTED) {
 		WL_ERR(("bssload_report is unsupported \n"));
+	} else if (err == BCME_NOTASSOCIATED) {
+		WL_ERR(("bssload_report IOVAR failed. STA is not associated.\n"));
 	} else {
 		WL_ERR(("error (%d) - size = %zu\n", err, sizeof(wl_bssload_t)));
 		goto exit;
