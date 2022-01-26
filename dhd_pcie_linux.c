@@ -3218,6 +3218,10 @@ bool dhd_runtime_bus_wake(dhd_bus_t *bus, bool wait, void *func_addr)
 	unsigned long flags;
 	bus->idlecount = 0;
 	DHD_TRACE(("%s : enter\n", __FUNCTION__));
+	if (bus->dhd == NULL) {
+		DHD_INFO(("%s : dhd is NULL\n", __FUNCTION__));
+		return FALSE;
+	}
 	if (bus->dhd->up == FALSE) {
 		DHD_INFO(("%s : dhd is not up\n", __FUNCTION__));
 		return FALSE;
