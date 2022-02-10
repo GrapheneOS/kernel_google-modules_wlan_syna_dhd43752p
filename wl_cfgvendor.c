@@ -3705,6 +3705,65 @@ wl_cfgvendor_nan_parse_dp_sec_info_args(struct wiphy *wiphy,
 }
 #endif /* WL_NAN_DISC_CACHE */
 
+static int
+wl_cfgvendor_nan_parse_scid_params(struct bcm_cfg80211 *cfg, nan_str_data_t *scid,
+	const struct nlattr *iter, int attr_type)
+{
+	int ret = BCME_OK;
+
+	switch (attr_type) {
+	case NAN_ATTRIBUTE_SCID_LEN:
+		if (nla_len(iter) != sizeof(uint32)) {
+			ret = -EINVAL;
+			goto exit;
+		}
+		if (scid->dlen) {
+			WL_ERR(("trying to overwrite:%d\n", attr_type));
+			ret = -EINVAL;
+			goto exit;
+		}
+		scid->dlen = nla_get_u32(iter);
+		if ((!scid->dlen) || scid->dlen >= NAN_MAX_SCID_BUF_LEN) {
+			ret = -EINVAL;
+			WL_ERR(("scid len %d invalid\n", scid->dlen));
+			goto exit;
+		}
+		WL_TRACE(("valid scid length = %u\n", scid->dlen));
+		break;
+	case NAN_ATTRIBUTE_SCID:
+		if (!scid->dlen || (nla_len(iter) != scid->dlen)) {
+			WL_ERR(("wrong scid len:%d,%d\n", scid->dlen, nla_len(iter)));
+			ret = -EINVAL;
+			goto exit;
+		}
+		if (scid->data) {
+			WL_ERR(("trying to overwrite:%d\n", attr_type));
+			ret = -EINVAL;
+			goto exit;
+		}
+
+		scid->data = MALLOCZ(cfg->osh, scid->dlen);
+		if (scid->data == NULL) {
+			WL_ERR(("failed to allocate scid, len=%d\n", scid->dlen));
+			ret = -ENOMEM;
+			goto exit;
+		}
+		ret = memcpy_s(scid->data, scid->dlen,
+				nla_data(iter), nla_len(iter));
+		if (ret != BCME_OK) {
+			WL_ERR(("Failed to copy scid data\n"));
+			return ret;
+		}
+		break;
+	default:
+		WL_ERR(("Unknown type, %d\n", attr_type));
+		ret = -EINVAL;
+		break;
+	}
+exit:
+	return ret;
+}
+
 int8 chanbuf[CHANSPEC_STR_LEN];
 static int
 wl_cfgvendor_nan_parse_datapath_args(struct wiphy *wiphy,
@@ -4019,7 +4078,16 @@ wl_cfgvendor_nan_parse_datapath_args(struct wiphy *wiphy,
 				goto exit;
 			}
 			break;
-
+		case NAN_ATTRIBUTE_SCID_LEN:
+		/* Fall through */
+		case NAN_ATTRIBUTE_SCID:
+			ret = wl_cfgvendor_nan_parse_scid_params(cfg, &cmd_data->scid,
+					iter, attr_type);
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to scid data\n"));
+				return ret;
+			}
+			break;
 		default:
 			WL_ERR(("Unknown type, %d\n", attr_type));
 			ret = -EINVAL;
@@ -4579,6 +4647,16 @@ wl_cfgvendor_nan_parse_discover_args(struct wiphy *wiphy,
 				return ret;
 			}
 			break;
+		case NAN_ATTRIBUTE_SCID_LEN:
+		/* Fall through */
+		case NAN_ATTRIBUTE_SCID:
+			ret = wl_cfgvendor_nan_parse_scid_params(cfg, &cmd_data->scid,
+					iter, attr_type);
+			if (ret != BCME_OK) {
+				WL_ERR(("Failed to scid data\n"));
+				return ret;
+			}
+			break;
 		case NAN_ATTRIBUTE_RSSI_THRESHOLD_FLAG:
 			if (nla_len(iter) != sizeof(uint8)) {
 				ret = -EINVAL;
@@ -5108,45 +5186,10 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 			WL_TRACE(("CSID = %u\n", cmd_data->csid));
 			break;
 		case NAN_ATTRIBUTE_SCID_LEN:
-			if (nla_len(iter) != sizeof(uint32)) {
-				ret = -EINVAL;
-				goto exit;
-			}
-			if (cmd_data->scid.dlen) {
-				WL_ERR(("trying to overwrite:%d\n", attr_type));
-				ret = -EINVAL;
-				goto exit;
-			}
-			cmd_data->scid.dlen = nla_get_u32(iter);
-			if (cmd_data->scid.dlen > MAX_SCID_LEN) {
-				ret = -EINVAL;
-				WL_ERR_RLMT(("Not allowed beyond %d\n", MAX_SCID_LEN));
-				goto exit;
-			}
-			WL_TRACE(("valid scid length = %u\n", cmd_data->scid.dlen));
-			break;
+		/* Fall through */
 		case NAN_ATTRIBUTE_SCID:
-			if (!cmd_data->scid.dlen || (nla_len(iter) != cmd_data->scid.dlen)) {
-				WL_ERR(("wrong scid len:%d,%d\n", cmd_data->scid.dlen,
-					nla_len(iter)));
-				ret = -EINVAL;
-				goto exit;
-			}
-			if (cmd_data->scid.data) {
-				WL_ERR(("trying to overwrite:%d\n", attr_type));
-				ret = -EINVAL;
-				goto exit;
-			}
-
-			cmd_data->scid.data = MALLOCZ(cfg->osh, cmd_data->scid.dlen);
-			if (cmd_data->scid.data == NULL) {
-				WL_ERR(("failed to allocate scid, len=%d\n",
-					cmd_data->scid.dlen));
-				ret = -ENOMEM;
-				goto exit;
-			}
-			ret = memcpy_s(cmd_data->scid.data, cmd_data->scid.dlen,
-					nla_data(iter), nla_len(iter));
+			ret = wl_cfgvendor_nan_parse_scid_params(cfg, &cmd_data->scid,
+					iter, attr_type);
 			if (ret != BCME_OK) {
 				WL_ERR(("Failed to scid data\n"));
 				return ret;
@@ -5226,6 +5269,21 @@ wl_cfgvendor_nan_parse_args(struct wiphy *wiphy, const void *buf,
 				goto exit;
 			}
 			cmd_data->use_ndpe_attr = nla_get_u32(iter);
+			break;
+		case NAN_ATTRIBUTE_INSTANT_MODE_ENABLE:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->instant_mode_en = nla_get_u32(iter);
+			*nan_attr_mask |= NAN_ATTR_INSTANT_MODE_CONFIG;
+			break;
+		case NAN_ATTRIBUTE_INSTANT_COMM_CHAN:
+			if (nla_len(iter) != sizeof(uint32)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+			cmd_data->instant_chan = nla_get_u32(iter);
 			break;
 		case NAN_ATTRIBUTE_ENABLE_MERGE:
 			if (nla_len(iter) != sizeof(uint8)) {
@@ -5390,6 +5448,23 @@ wl_cfgvendor_nan_dp_ind_event_data_filler(struct sk_buff *msg,
 			goto fail;
 		}
 	}
+#ifdef WL_NAN_INSTANT_MODE
+	/* PMKID(scid) info */
+	if (event_data->scid.dlen && event_data->scid.data) {
+		ret = nla_put_u32(msg, NAN_ATTRIBUTE_SCID_LEN, event_data->scid.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put scid info len, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_SCID,
+				event_data->scid.dlen, event_data->scid.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put scid info, ret=%d\n", ret));
+			goto fail;
+		}
+		WL_TRACE(("scid info len = %d\n", event_data->scid.dlen));
+	}
+#endif /* WL_NAN_INSTANT_MODE */
 
 fail:
 	return ret;
@@ -5618,6 +5693,13 @@ wl_cfgvendor_nan_sub_match_event_filler(struct sk_buff *msg,
 		WL_ERR(("Failed to put remote NMI, ret=%d\n", ret));
 		goto fail;
 	}
+#ifdef WL_NAN_INSTANT_MODE
+		ret = nla_put_u8(msg, NAN_ATTRIBUTE_CIPHER_SUITE_TYPE, event_data->peer_cipher_suite);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put CSID, ret=%d\n", ret));
+			goto fail;
+		}
+#endif /* WL_NAN_INSTANT_MODE */
 	if (event_data->publish_rssi) {
 		event_data->publish_rssi = -event_data->publish_rssi;
 		ret = nla_put_u8(msg, NAN_ATTRIBUTE_RSSI_PROXIMITY,
@@ -5664,6 +5746,23 @@ wl_cfgvendor_nan_sub_match_event_filler(struct sk_buff *msg,
 		WL_TRACE(("tx matching filter (%d):\n",
 				event_data->tx_match_filter.dlen));
 	}
+#ifdef WL_NAN_INSTANT_MODE
+	/* PMKID(scid) info */
+	if (event_data->scid.dlen && event_data->scid.data) {
+		ret = nla_put_u32(msg, NAN_ATTRIBUTE_SCID_LEN, event_data->scid.dlen);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put scid info len, ret=%d\n", ret));
+			goto fail;
+		}
+		ret = nla_put(msg, NAN_ATTRIBUTE_SCID,
+				event_data->scid.dlen, event_data->scid.data);
+		if (unlikely(ret)) {
+			WL_ERR(("Failed to put scid info, ret=%d\n", ret));
+			goto fail;
+		}
+		WL_TRACE(("scid info len = %d\n", event_data->scid.dlen));
+	}
+#endif /* WL_NAN_INSTANT_MODE */
 
 fail:
 	return ret;
@@ -11718,6 +11817,8 @@ const struct nla_policy nan_attr_policy[NAN_ATTRIBUTE_MAX] = {
 	[NAN_ATTRIBUTE_CHANNEL_INFO] = { .type = NLA_BINARY, .len =
 	sizeof(nan_channel_info_t) * NAN_MAX_CHANNEL_INFO_SUPPORTED },
 	[NAN_ATTRIBUTE_NUM_CHANNELS] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_INSTANT_MODE_ENABLE] = { .type = NLA_U32, .len = sizeof(uint32) },
+	[NAN_ATTRIBUTE_INSTANT_COMM_CHAN] = { .type = NLA_U32, .len = sizeof(uint32) },
 };
 #endif /* WL_NAN */
 

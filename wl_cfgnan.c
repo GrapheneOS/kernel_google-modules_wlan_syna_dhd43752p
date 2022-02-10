@@ -6334,9 +6334,11 @@ wl_cfgnan_get_capability(struct net_device *ndev,
 	capabilities->is_ndp_security_supported = fw_cap->is_ndp_security_supported;
 	capabilities->ndp_supported_bands = fw_cap->ndp_supported_bands;
 	capabilities->cipher_suites_supported = fw_cap->cipher_suites_supported_mask;
+#ifdef WL_NAN_INSTANT_MODE
 	if (fw_cap->flags1 & WL_NAN_FW_CAP_FLAG1_INSTANT_MODE) {
 		capabilities->is_instant_mode_supported = true;
 	}
+#endif /* WL_NAN_INSTANT_MODE */
 	if (fw_cap->flags1 & WL_NAN_FW_CAP_FLAG1_NDPE) {
 		capabilities->ndpe_attr_supported = true;
 	}
@@ -6412,7 +6414,10 @@ exit:
 	capabilities->max_sdea_service_specific_info_len = MAX_SDEA_SVC_INFO_LEN;
 	capabilities->max_subscribe_address = MAX_SUBSCRIBE_ADDRESS;
 	capabilities->cipher_suites_supported = WL_NAN_CIPHER_SUITE_SHARED_KEY_128_MASK;
-	capabilities->max_scid_len = MAX_SCID_LEN;
+#ifdef WL_NAN_INSTANT_MODE
+	capabilities->cipher_suites_supported |= (WL_NAN_CIPHER_SUITE_PUBLIC_KEY_128_MASK);
+#endif /* WL_NAN_INSTANT_MODE */
+	capabilities->max_scid_len = NAN_MAX_SCID_BUF_LEN;
 	capabilities->is_ndp_security_supported = true;
 	capabilities->ndp_supported_bands = NDP_SUPPORTED_BANDS;
 	capabilities->ndpe_attr_supported = false;
