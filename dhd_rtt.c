@@ -114,7 +114,7 @@ static DEFINE_SPINLOCK(noti_list_lock);
  * Parallel RTT Sessions are supported
  * with this major and minor verion onwards
  */
-#define RTT_PARALLEL_SSNS_SUPPORTED_MAJ_VER	14
+#define RTT_PARALLEL_SSNS_SUPPORTED_MAJ_VER	12
 #define RTT_PARALLEL_SSNS_SUPPORTED_MIN_VER	2
 
 /* PROXD TIMEOUT */
