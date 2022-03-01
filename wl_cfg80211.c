@@ -286,6 +286,16 @@ int dhd_update_reg_rules(int init, int chan_start, int chan_end, int bw, int reg
 #endif
 		return -1;
 	}
+	WL_DBG(("chan_start=%d, end=%d, bw=%d, flag=%x\n",
+			chan_start, chan_end, bw, reg_flags));
+	if (bw == 0) {
+		/* IEEE80211_CHAN_DISABLED */
+		return -1;
+	}
+	if (chan_start > chan_end) {
+		/* channel out of range */
+		return -1;
+	}
 	global_regd_copy->reg_rules[global_regd_copy->n_reg_rules].freq_range.start_freq_khz = MHZ_TO_KHZ(chan_start - 10);
 	global_regd_copy->reg_rules[global_regd_copy->n_reg_rules].freq_range.end_freq_khz = MHZ_TO_KHZ(chan_end + 10);
 	global_regd_copy->reg_rules[global_regd_copy->n_reg_rules].freq_range.max_bandwidth_khz = MHZ_TO_KHZ(bw);
@@ -1074,6 +1084,22 @@ static struct ieee80211_channel __wl_2ghz_channels[] = {
 	CHAN2G(12, 2467, 0),
 	CHAN2G(13, 2472, 0),
 	CHAN2G(14, 2484, 0)
+};
+
+static struct ieee80211_channel available_5ghz_a_channels[] = {
+	CHAN5G(36, 0), CHAN5G(40, 0),
+	CHAN5G(44, 0), CHAN5G(48, 0),
+	CHAN5G(52, 0), CHAN5G(56, 0),
+	CHAN5G(60, 0), CHAN5G(64, 0),
+	CHAN5G(100, 0), CHAN5G(104, 0),
+	CHAN5G(108, 0), CHAN5G(112, 0),
+	CHAN5G(116, 0), CHAN5G(120, 0),
+	CHAN5G(124, 0), CHAN5G(128, 0),
+	CHAN5G(132, 0), CHAN5G(136, 0),
+	CHAN5G(140, 0), CHAN5G(144, 0),
+	CHAN5G(149, 0), CHAN5G(153, 0),
+	CHAN5G(157, 0), CHAN5G(161, 0),
+	CHAN5G(165, 0),
 };
 
 static struct ieee80211_channel __wl_5ghz_a_channels[] = {
@@ -17053,9 +17079,10 @@ static int wl_construct_reginfo(struct bcm_cfg80211 *cfg, s32 bw_cap_2g, s32 bw_
 	bool dfs_radar_disabled = FALSE;
 	bool legacy_chan_info = FALSE;
 	u16 list_count;
-	u32 channels_array[ARRAYSIZE(__wl_5ghz_a_channels)];
+	u32 channels_array[ARRAYSIZE(available_5ghz_a_channels)];
 	u32 channel_index = 0;
 	u32 channel_counts = 0;
+	u32 a_channel_counts = 0;
 
 #define LOCAL_BUF_LEN 4096
 	list = MALLOCZ(cfg->osh, LOCAL_BUF_LEN);
@@ -17087,7 +17114,7 @@ static int wl_construct_reginfo(struct bcm_cfg80211 *cfg, s32 bw_cap_2g, s32 bw_
 	memset(channels_array, 0, channel_counts);
 
 	WL_CHANNEL_ARRAY_INIT(__wl_2ghz_channels);
-	WL_CHANNEL_ARRAY_INIT(__wl_5ghz_a_channels);
+	WL_CHANNEL_ARRAY_INIT(available_5ghz_a_channels);
 #ifdef CFG80211_6G_SUPPORT
 	WL_CHANNEL_ARRAY_INIT(__wl_6ghz_channels);
 #endif /* CFG80211_6G_SUPPORT */
@@ -17141,8 +17168,8 @@ static int wl_construct_reginfo(struct bcm_cfg80211 *cfg, s32 bw_cap_2g, s32 bw_
 			(channel <= CH_MAX_6G_CHANNEL)) ||
 #endif /* WL_6G_BAND */
 			(CHSPEC_IS5G(chspec) && channel >= CH_MIN_5G_CHANNEL)) {
-			band_chan_arr = __wl_5ghz_a_channels;
-			array_size = ARRAYSIZE(__wl_5ghz_a_channels);
+			band_chan_arr = available_5ghz_a_channels;
+			array_size = ARRAYSIZE(available_5ghz_a_channels);
 			ht40_allowed = WL_BW_CAP_40MHZ(bw_cap_5g);
 			ht80_allowed = WL_BW_CAP_80MHZ(bw_cap_5g);
 		} else {
@@ -17228,67 +17255,115 @@ static int wl_construct_reginfo(struct bcm_cfg80211 *cfg, s32 bw_cap_2g, s32 bw_
 
 #if defined(WL_SELF_MANAGED_REGDOM) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0))
 	{
-		int flags;
+		int flags, flags_wo40;
 
 		index = 0;
 		band_chan_arr = __wl_2ghz_channels;
 		flags = band_chan_arr[0].flags;
+		flags_wo40 = band_chan_arr[0].flags & ~IEEE80211_CHAN_NO_HT40;
 
 		for(j = 1; j < __wl_band_2ghz.n_channels; j++) {
-			if (flags != (band_chan_arr[j].flags)) {
-				dhd_update_reg_rules(1, band_chan_arr[index].center_freq,
-					band_chan_arr[j - 1].center_freq,
-					wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
+			if (flags_wo40 != (band_chan_arr[j].flags & ~IEEE80211_CHAN_NO_HT40)) {
+				WL_DBG(("%d flag = %x, bw=%d, index=%d\n",
+							__LINE__, band_chan_arr[j].flags, wl_flag_to_bw(flags), index));
+				dhd_update_reg_rules((index == 0)?1:0, band_chan_arr[index].center_freq,
+						band_chan_arr[j - 1].center_freq,
+						wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
 				flags = band_chan_arr[j].flags;
+				flags_wo40 = (band_chan_arr[j].flags & ~IEEE80211_CHAN_NO_HT40);
 				index = j;
 			}
 		}
 		WL_DBG(("index=%d, j=%d, __wl_band_2ghz.n_channels=%d\n",
-				index, j, __wl_band_2ghz.n_channels));
+					index, j, __wl_band_2ghz.n_channels));
 		if (index != j) {
 			flags = band_chan_arr[j - 1].flags;
 			WL_DBG(("%s %d index=%d, j=%d,  center_freq=%d, j-1=%d, center_freq=%d\n",
-				__func__, __LINE__, index, j, band_chan_arr[index].center_freq,
-				j-1,  band_chan_arr[j - 1].center_freq));
+						__func__, __LINE__, index, j, band_chan_arr[index].center_freq,
+						j-1,  band_chan_arr[j - 1].center_freq));
+			WL_DBG(("%d flag = %x, bw=%d, index=%d\n",
+						__LINE__, band_chan_arr[j].flags, wl_flag_to_bw(flags), index));
 			if(index == 0) {
 				dhd_update_reg_rules(1, band_chan_arr[index].center_freq,
-					band_chan_arr[j - 1].center_freq,
-					wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
+						band_chan_arr[j - 1].center_freq,
+						wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
 			} else {
 				dhd_update_reg_rules(0, band_chan_arr[index].center_freq,
-					band_chan_arr[j - 1].center_freq,
-					wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
+						band_chan_arr[j - 1].center_freq,
+						wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
 			}
 		}
 
 	}
 #endif /* WL_SELF_MANAGED_REGDOM */
-	__wl_band_5ghz_a.n_channels = ARRAYSIZE(__wl_5ghz_a_channels);
+	a_channel_counts = ARRAYSIZE(available_5ghz_a_channels);
 #if defined(WL_SELF_MANAGED_REGDOM) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0))
 	{
 		int flags, k;
 
-		index = 1;
-		band_chan_arr = __wl_5ghz_a_channels;
+		index = 0;
+		band_chan_arr = available_5ghz_a_channels;
 		flags = band_chan_arr[1].flags;
-		for (j = 2; j < __wl_band_5ghz_a.n_channels; j++) {
+		for (j = 1; j < a_channel_counts; j++) {
+			if ((flags & IEEE80211_CHAN_DISABLED) && (band_chan_arr[j].flags & IEEE80211_CHAN_DISABLED)) {
+				/* Channel is disabled, so ignore it */
+				flags = band_chan_arr[j].flags;
+				index = j;
+				continue;
+			}
+			WL_DBG(("j=%d, hw_vlaue=%d, flag=%x\n",
+					j, band_chan_arr[j].hw_value, band_chan_arr[j].flags));
 			for (k = 0; k < channel_index; k++) {
 				if (band_chan_arr[j].hw_value == channels_array[k]) {
+					/* channel match with current support channel */
+					WL_DBG(("%d, k%d, j%d, hw_value=%d vs %d , flag=%x vs %x, chan=%d\n", __LINE__, k, j,
+							band_chan_arr[j].hw_value, channels_array[k],
+							flags, band_chan_arr[j].flags, band_chan_arr[j-1].center_freq));
+					/* According to the channel flag, gather same flags channel into same group */
 					if ((flags & 0x0f) != ((band_chan_arr[j].flags) & 0x0f)) {
+						if (flags & IEEE80211_CHAN_DISABLED) {
+							/* Channel is disabled, so ignore it */
+							flags = band_chan_arr[j].flags;
+							index = j;
+							break;
+						}
 						dhd_update_reg_rules(0, band_chan_arr[index].center_freq,
-							band_chan_arr[j - 1].center_freq,
-							wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
+								band_chan_arr[j - 1].center_freq,
+								wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
 						flags = band_chan_arr[j].flags;
 						index = j;
 					}
 					break;
 				}
 			}
+			if (k == channel_index) {
+				/* Can't find this channel, means channel is disable, don't add to the reg tables */
+				dhd_update_reg_rules(0, band_chan_arr[index].center_freq,
+						band_chan_arr[j - 1].center_freq,
+						wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
+
+				if (j < (a_channel_counts - 1)) {
+					/* if j is not out of range, fetch the next channel flag, so (j + 1) */
+					flags = band_chan_arr[j + 1].flags;
+					index = j + 1;
+				}else {
+					/* if j is out of range, keep index to j */
+					flags = band_chan_arr[j].flags;
+					index = j;
+				}
+			}
 		}
+		/* try to find last valid channel if all failed, return j = 1 (update j=1)*/
+		for (j = a_channel_counts - 1; j > 0; j--) {
+			if (!(band_chan_arr[j].flags & IEEE80211_CHAN_DISABLED)) {
+				break;
+			}
+		}
+		WL_DBG(("%d, index=%d, j=%d\n", __LINE__, index, j));
 		if (index != j) {
 			dhd_update_reg_rules(0, band_chan_arr[index].center_freq,
-				band_chan_arr[j - 1].center_freq,
-				wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
+					band_chan_arr[j].center_freq,
+					wl_flag_to_bw(flags), wl_flag_to_regflags(flags));
 		}
 	}
 #endif /* WL_SELF_MANAGED_REGDOM */
