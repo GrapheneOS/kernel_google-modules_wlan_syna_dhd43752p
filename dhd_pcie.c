@@ -967,6 +967,7 @@ dhdpcie_chip_support_msi(dhd_bus_t *bus)
 		si_chipid(bus->sih) == BCM4362_CHIP_ID ||
 		si_chipid(bus->sih) == BCM43751_CHIP_ID ||
 		si_chipid(bus->sih) == BCM43752_CHIP_ID ||
+		si_chipid(bus->sih) == BCM43756_CHIP_ID ||
 		si_chipid(bus->sih) == BCM4361_CHIP_ID ||
 		si_chipid(bus->sih) == BCM4359_CHIP_ID) {
 		return FALSE;
@@ -2291,6 +2292,9 @@ dhdpcie_dongle_attach(dhd_bus_t *bus)
 			break;
 		case BCM43752_CHIP_ID:
 			bus->dongle_ram_base = CR4_43752_RAM_BASE;
+			break;
+		case BCM43756_CHIP_ID:
+			bus->dongle_ram_base = CR4_43756_RAM_BASE;
 			break;
 		case BCM4376_CHIP_GRPID:
 			bus->dongle_ram_base = CR4_4376_RAM_BASE;
@@ -10207,7 +10211,8 @@ dhd_apply_d11_war_length(struct  dhd_bus *bus, uint32 len, uint32 d11_lpbk)
 		chipid == BCM4362_CHIP_ID ||
 		chipid == BCM4377_CHIP_ID ||
 		chipid == BCM43751_CHIP_ID ||
-		chipid == BCM43752_CHIP_ID) &&
+		chipid == BCM43752_CHIP_ID ||
+		chipid == BCM43756_CHIP_ID) &&
 		(d11_lpbk != M2M_DMA_LPBK && d11_lpbk != M2M_NON_DMA_LPBK)) {
 			len += 8;
 	}
@@ -14337,6 +14342,8 @@ dhdpcie_chipmatch(uint16 vendor, uint16 device)
 		case BCM43752_D11AX2G_ID:
 		case BCM43752_D11AX5G_ID:
 		case BCM43752_CHIP_ID:
+		case BCM43756_D11AX_ID:
+		case BCM43756_CHIP_ID:
 		case BCM4388_CHIP_ID:
 		case BCM4388_D11AX_ID:
 		case BCM4389_CHIP_ID:
