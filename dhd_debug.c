@@ -1108,10 +1108,6 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 	memcpy(logbuf + sizeof(*logentry_header), data, datalen);
 	DHD_DBGIF(("%s: datalen %d %d\n", __FUNCTION__, msg_hdr.len, datalen));
 
-#if defined(DEBUGABILITY)
-	dhd_dbg_push_to_ring(dhdp, FW_VERBOSE_RING_ID, &msg_hdr, logbuf);
-#endif /* DEBUGABILITY && CUSTOMER_HW6 */
-
 	/* Print sequence number, originating set and length of received
 	 * event log buffer. Refer to event log buffer structure in
 	 * event_log.h
