@@ -5471,6 +5471,27 @@ fail:
 }
 
 static int
+wl_cfgvendor_nan_match_expiry_event_filler(struct sk_buff *msg,
+		nan_event_data_t *event_data) {
+	int ret = BCME_OK;
+
+	WL_DBG(("sub id (local id)=%d, pub id (remote id)=%d\n",
+		event_data->sub_id, event_data->pub_id));
+	ret = nla_put_u16(msg, NAN_ATTRIBUTE_SUBSCRIBE_ID, event_data->sub_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put Sub Id, ret=%d\n", ret));
+		goto fail;
+	}
+	ret = nla_put_u32(msg, NAN_ATTRIBUTE_PUBLISH_ID, event_data->pub_id);
+	if (unlikely(ret)) {
+		WL_ERR(("Failed to put pub id, ret=%d\n", ret));
+		goto fail;
+	}
+fail:
+	return ret;
+}
+
+static int
 wl_cfgvendor_nan_tx_followup_ind_event_data_filler(struct sk_buff *msg,
 	nan_event_data_t *event_data) {
 	int ret = BCME_OK;
@@ -5988,6 +6009,7 @@ wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
 		break;
 	}
 	case GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH:
+	case GOOGLE_NAN_EVENT_MATCH_EXPIRY:
 	case GOOGLE_NAN_EVENT_FOLLOWUP: {
 		if (event_id == GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH) {
 			WL_DBG(("GOOGLE_NAN_EVENT_SUBSCRIBE_MATCH\n"));
@@ -6001,6 +6023,13 @@ wl_cfgvendor_send_nan_event(struct wiphy *wiphy, struct net_device *dev,
 			ret = wl_cfgvendor_nan_tx_followup_event_filler(msg, event_data);
 			if (unlikely(ret)) {
 				WL_ERR(("Failed to fill tx follow up event data, ret=%d\n", ret));
+				goto fail;
+			}
+		} else if (event_id == GOOGLE_NAN_EVENT_MATCH_EXPIRY) {
+			WL_DBG(("GOOGLE_NAN_EVENT_MATCH_EXPIRY\n"));
+			ret = wl_cfgvendor_nan_match_expiry_event_filler(msg, event_data);
+			if (unlikely(ret)) {
+				WL_ERR(("Failed to fill match expiry event data, ret=%d\n", ret));
 				goto fail;
 			}
 		}
@@ -13152,6 +13181,8 @@ static const struct  nl80211_vendor_cmd_info wl_vendor_events [] = {
 		{OUI_BRCM, BRCM_VENDOR_EVENT_RCC_INFO},
 		{OUI_BRCM, BRCM_VENDOR_EVENT_ACS},
 		{OUI_BRCM, BRCM_VENDOR_EVENT_TWT}, //43
+		{OUI_GOOGLE, BRCM_VENDOR_EVENT_TPUT_DUMP},
+		{OUI_GOOGLE, GOOGLE_NAN_EVENT_MATCH_EXPIRY},
 
 		// Leave it blank until index 100 to avoid conflict
 		{OUI_BRCM, BRCM_VENDOR_EVENT_UNSPEC},

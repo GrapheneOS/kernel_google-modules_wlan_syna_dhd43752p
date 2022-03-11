@@ -7848,6 +7848,21 @@ fail:
 	return ret;
 }
 
+static void
+wl_cfgnan_event_disc_cache_timeout(struct bcm_cfg80211 *cfg,
+	nan_event_data_t *nan_event_data)
+{
+	int ret = BCME_OK;
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 13, 0)) || defined(WL_VENDOR_EXT_SUPPORT)
+	ret = wl_cfgvendor_send_nan_event(cfg->wdev->wiphy, bcmcfg_to_prmry_ndev(cfg),
+		GOOGLE_NAN_EVENT_MATCH_EXPIRY, nan_event_data);
+	if (ret != BCME_OK) {
+		WL_ERR(("Failed to send event to nan hal\n"));
+	}
+#endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(3, 13, 0)) || defined(WL_VENDOR_EXT_SUPPORT) */
+	return;
+}
+
 #ifdef RTT_SUPPORT
 static int
 wl_cfgnan_event_disc_result(struct bcm_cfg80211 *cfg,
@@ -8696,6 +8711,9 @@ wl_cfgnan_notify_nan_status(struct bcm_cfg80211 *cfg,
 				WL_INFORM_MEM(("WL_NAN_EVENT_DISC_CACHE_TIMEOUT peer: " MACDBG
 					" l_id:%d r_id:%d\n", MAC2STRDBG(&cache_entry->r_nmi_addr),
 					cache_entry->l_sub_id, cache_entry->r_pub_id));
+				nan_event_data->sub_id = cache_entry->l_sub_id;
+				nan_event_data->pub_id = cache_entry->r_pub_id;
+				wl_cfgnan_event_disc_cache_timeout(cfg, nan_event_data);
 #ifdef RTT_SUPPORT
 				wl_cfgnan_ranging_clear_publish(cfg, &cache_entry->r_nmi_addr,
 					cache_entry->l_sub_id);
