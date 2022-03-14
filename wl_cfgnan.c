@@ -402,8 +402,7 @@ s32 wl_cfgnan_parse_sdea_data(osl_t *osh, const uint8 *p_attr,
 		WL_TRACE(("> svc_control: sdea svc specific info present\n"));
 		tlv_data->sde_svc_info.dlen = (p_attr[1] | (p_attr[2] << 8));
 		WL_TRACE(("> sdea svc info len: 0x%02x\n", tlv_data->sde_svc_info.dlen));
-		if (!tlv_data->sde_svc_info.dlen ||
-				tlv_data->sde_svc_info.dlen > NAN_MAX_SERVICE_SPECIFIC_INFO_LEN) {
+		if (tlv_data->sde_svc_info.dlen > NAN_MAX_SERVICE_SPECIFIC_INFO_LEN) {
 			/* must be able to handle null msg which is not error */
 			tlv_data->sde_svc_info.dlen = 0;
 			WL_ERR(("sde data length is invalid\n"));
