@@ -1145,6 +1145,8 @@ BCMFASTPATH(pktsetprio)(void *pkt, bool update_vtag)
 			priority = PRIO_8021D_BE;
 			break;
 		case DSCP_CS6:
+			priority = PRIO_8021D_VO;
+			break;
 		case DSCP_CS7:
 			priority = PRIO_8021D_NC;
 			break;

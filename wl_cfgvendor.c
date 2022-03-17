@@ -10391,21 +10391,25 @@ enum andr_user_ac {
 	VIDEO = 2,
 	VOICE = 3
 };
+
+/* Relative RFCs
+ * RFC 8325: AF11/AF12/AF13 (dscp: 10/12/14) => AC_BE: QoS mgmt 5.2.1
+ */
 const uint8 default_dscp_mapping_table[UP_TABLE_MAX] =
 {
 	PRIO_8021D_BE, UNUSED_PRIO, UNUSED_PRIO,   UNUSED_PRIO,		/* 00 ~ 03 */
 	UNUSED_PRIO,   UNUSED_PRIO, UNUSED_PRIO,   UNUSED_PRIO,		/* 04 ~ 07 */
 	PRIO_8021D_BK, UNUSED_PRIO, PRIO_8021D_BE, UNUSED_PRIO,		/* 08 ~ 11 */
 	PRIO_8021D_BE, UNUSED_PRIO, PRIO_8021D_BE, UNUSED_PRIO,		/* 12 ~ 15 */
-	PRIO_8021D_BE, UNUSED_PRIO, PRIO_8021D_EE, UNUSED_PRIO,		/* 16 ~ 19 */
-	PRIO_8021D_EE, UNUSED_PRIO, PRIO_8021D_EE, UNUSED_PRIO,		/* 20 ~ 23 */
-	PRIO_8021D_CL, UNUSED_PRIO, PRIO_8021D_CL, UNUSED_PRIO,		/* 24 ~ 27 */
-	PRIO_8021D_CL, UNUSED_PRIO, PRIO_8021D_CL, UNUSED_PRIO,		/* 28 ~ 31 */
+	PRIO_8021D_NONE, UNUSED_PRIO, PRIO_8021D_NONE, UNUSED_PRIO,	/* 16 ~ 19 */
+	PRIO_8021D_NONE, UNUSED_PRIO, PRIO_8021D_NONE, UNUSED_PRIO,	/* 20 ~ 23 */
+	PRIO_8021D_EE, UNUSED_PRIO, PRIO_8021D_EE, UNUSED_PRIO,		/* 24 ~ 27 */
+	PRIO_8021D_EE, UNUSED_PRIO, PRIO_8021D_CL, UNUSED_PRIO,		/* 28 ~ 31 */
 	PRIO_8021D_CL, UNUSED_PRIO, PRIO_8021D_CL, UNUSED_PRIO,		/* 32 ~ 35 */
 	PRIO_8021D_CL, UNUSED_PRIO, PRIO_8021D_CL, UNUSED_PRIO,		/* 36 ~ 39 */
 	PRIO_8021D_VI, UNUSED_PRIO, UNUSED_PRIO,   UNUSED_PRIO,		/* 40 ~ 43 */
-	PRIO_8021D_VO, UNUSED_PRIO, PRIO_8021D_VO, UNUSED_PRIO,		/* 44 ~ 47 */
-	PRIO_8021D_NC, UNUSED_PRIO, UNUSED_PRIO,   UNUSED_PRIO,		/* 48 ~ 51 */
+	PRIO_8021D_VI, UNUSED_PRIO, PRIO_8021D_VO, UNUSED_PRIO,		/* 44 ~ 47 */
+	PRIO_8021D_VO, UNUSED_PRIO, UNUSED_PRIO,   UNUSED_PRIO,		/* 48 ~ 51 */
 	UNUSED_PRIO,   UNUSED_PRIO, UNUSED_PRIO,   UNUSED_PRIO,		/* 52 ~ 55 */
 	PRIO_8021D_NC, UNUSED_PRIO, UNUSED_PRIO,   UNUSED_PRIO,		/* 56 ~ 59 */
 	UNUSED_PRIO,   UNUSED_PRIO, UNUSED_PRIO,   UNUSED_PRIO		/* 60 ~ 63 */
@@ -10414,7 +10418,7 @@ const uint8 default_dscp_mapping_table[UP_TABLE_MAX] =
 static uint8 custom_dscp2priomap[UP_TABLE_MAX];
 
 static int
-wl_set_dscp_deafult_priority(uint8* table)
+wl_set_dscp_default_priority(uint8* table)
 {
 	int err = BCME_ERROR;
 
@@ -10539,7 +10543,7 @@ wl_cfgvendor_custom_mapping_of_dscp_reset(struct wiphy *wiphy,
 		return BCME_NOTREADY;
 	}
 
-	return wl_set_dscp_deafult_priority(cfg->up_table);
+	return wl_set_dscp_default_priority(cfg->up_table);
 }
 #endif /* WL_CUSTOM_MAPPING_OF_DSCP */
 #endif /* WL_SAR_TX_POWER */
@@ -13264,7 +13268,7 @@ int wl_cfgvendor_attach(struct wiphy *wiphy, dhd_pub_t *dhd)
 	dhd_os_dbg_register_urgent_notifier(dhd, wl_cfgvendor_dbg_send_file_dump_evt);
 #endif /* DHD_LOG_DUMP */
 #ifdef WL_CUSTOM_MAPPING_OF_DSCP
-	(void)wl_set_dscp_deafult_priority(custom_dscp2priomap);
+	(void)wl_set_dscp_default_priority(custom_dscp2priomap);
 #endif
 #ifdef SUPPORT_OTA_UPDATE
 	(void)wl_set_ota_nvram_ext(dhd);
