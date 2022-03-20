@@ -1560,36 +1560,46 @@ dhd_rtt_get_version(dhd_pub_t *dhd, int *out_version)
 chanspec_t
 dhd_rtt_convert_to_chspec(wifi_channel_info channel)
 {
-	int bw;
-	chanspec_t chanspec = 0;
-	uint8 center_chan;
-	uint8 primary_chan;
-	/* set witdh to 20MHZ for 2.4G HZ */
-	if (channel.center_freq >= 2400 && channel.center_freq <= 2500) {
-		channel.width = WIFI_CHAN_WIDTH_20;
+	chanspec_bw_t bw = INVCHANSPEC;
+	chanspec_t chanspec = INVCHANSPEC;
+	int primary_chan;
+	chanspec_band_t band;
+	uint32 center_freq = channel.center_freq;
+
+	band = wf_mhz2chanspec_band(center_freq);
+	if (band == INVCHANSPEC) {
+		DHD_RTT_ERR(("Invalid centre frequency %x\n", center_freq));
+		goto done;
 	}
+
+	primary_chan = wf_mhz2channel(center_freq, 0);
+	if (primary_chan == -1) {
+		DHD_RTT_ERR(("Failed to get primary channel for frequency %x\n",
+				center_freq));
+		goto done;
+	}
+
 	switch (channel.width) {
 	case WIFI_CHAN_WIDTH_20:
 		bw = WL_CHANSPEC_BW_20;
-		primary_chan = wf_mhz2channel(channel.center_freq, 0);
-		chanspec = wf_channel2chspec(primary_chan, bw);
 		break;
 	case WIFI_CHAN_WIDTH_40:
 		bw = WL_CHANSPEC_BW_40;
-		primary_chan = wf_mhz2channel(channel.center_freq, 0);
-		chanspec = wf_channel2chspec(primary_chan, bw);
 		break;
 	case WIFI_CHAN_WIDTH_80:
 		bw = WL_CHANSPEC_BW_80;
-		primary_chan = wf_mhz2channel(channel.center_freq, 0);
-		center_chan = wf_mhz2channel(channel.center_freq0, 0);
-		chanspec = wf_chspec_80(center_chan, primary_chan);
 		break;
 	default:
-		DHD_RTT_ERR(("doesn't support this bandwith : %d", channel.width));
-		bw = -1;
+		DHD_RTT_ERR(("doesn't support this bandwidth : %d\n", channel.width));
+		bw = INVCHANSPEC;
 		break;
 	}
+
+	if ((bw != INVCHANSPEC)) {
+		chanspec = wf_create_chspec_from_primary(primary_chan, bw, band);
+	}
+
+done:
 	return chanspec;
 }
 
@@ -4766,7 +4776,7 @@ dhd_rtt_init(dhd_pub_t *dhd)
 		rtt_status->rtt_capa.preamble |= RTT_PREAMBLE_VHT;
 		rtt_status->rtt_capa.preamble |= RTT_PREAMBLE_HT;
 
-		/* indicate to set bandwith */
+		/* indicate to set bandwidth */
 		rtt_status->rtt_capa.feature |= RTT_FEATURE_BW;
 		rtt_status->rtt_capa.bw |= RTT_BW_20;
 		rtt_status->rtt_capa.bw |= RTT_BW_40;
