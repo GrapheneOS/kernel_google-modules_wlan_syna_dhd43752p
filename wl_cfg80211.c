@@ -9666,7 +9666,7 @@ wl_cfg80211_mgmt_auth_tx(struct net_device *dev, bcm_struct_cfgdev *cfgdev,
 
 	cmd = (wl_assoc_mgr_cmd_t*)ambuf;
 	cmd->version = WL_ASSOC_MGR_CURRENT_VERSION;
-	cmd->length = len;
+	cmd->length = htod16((uint16)len);
 	cmd->cmd = WL_ASSOC_MGR_CMD_SEND_AUTH;
 	err = memcpy_s(&cmd->params, len, buf, len);
 	if (err) {
@@ -9674,7 +9674,7 @@ wl_cfg80211_mgmt_auth_tx(struct net_device *dev, bcm_struct_cfgdev *cfgdev,
 		ack = false;
 	} else {
 		err = wldev_iovar_setbuf(dev, "assoc_mgr_cmd", ambuf, param_len,
-			cfg->ioctl_buf, WLC_IOCTL_SMLEN, &cfg->ioctl_buf_sync);
+			cfg->ioctl_buf, WLC_IOCTL_MEDLEN, &cfg->ioctl_buf_sync);
 		if (unlikely(err)) {
 			WL_ERR(("%s: Failed to send auth(%d)\n", __func__, err));
 			ack = false;
