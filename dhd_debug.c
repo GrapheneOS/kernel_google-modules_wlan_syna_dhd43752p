@@ -1192,7 +1192,13 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 		/* skip 4 bytes time stamp packet */
 		if (prcd_log_hdr.tag == EVENT_LOG_TAG_TS ||
 			prcd_log_hdr.tag == EVENT_LOG_TAG_ENHANCED_TS) {
-			datalen -= (log_pyld_len + log_hdr_len);
+			if (datalen >= (log_pyld_len + log_hdr_len)) {
+				datalen -= (log_pyld_len + log_hdr_len);
+			} else {
+				DHD_ERROR(("%s: invalid length : %d < %d + %d\n",
+					__FUNCTION__, datalen, log_pyld_len, log_hdr_len));
+				datalen = 0;
+			}
 			continue;
 		}
 		if (!(log_item = MALLOC(dhdp->osh, sizeof(*log_item)))) {
@@ -1212,7 +1218,13 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 		log_item->prcd_log_hdr.binary_payload = prcd_log_hdr.binary_payload;
 
 		dll_insert(&log_item->list, &list_head);
-		datalen -= (log_pyld_len + log_hdr_len);
+		if (datalen >= (log_pyld_len + log_hdr_len)) {
+			datalen -= (log_pyld_len + log_hdr_len);
+		} else {
+			DHD_ERROR(("%s: invalid length : %d < %d + %d\n",
+				__FUNCTION__, datalen, log_pyld_len, log_hdr_len));
+			datalen = 0;
+		}
 	}
 
 	while (!dll_empty(&list_head)) {
