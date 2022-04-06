@@ -436,6 +436,17 @@ struct wifi_platform_data dhd_wlan_control = {
 };
 EXPORT_SYMBOL(dhd_wlan_control);
 
+static inline void
+dhd_wlan_set_reg_off(void) {
+	if (gpio_is_valid(wlan_reg_on) && gpio_get_value(wlan_reg_on) != 0) {
+		if (gpio_direction_output(wlan_reg_on, 0)) {
+			DHD_ERROR(("%s: WL_REG_ON failed to pull down\n", __FUNCTION__));
+		} else {
+			DHD_ERROR(("%s: WL_REG_ON has been pulled down\n", __FUNCTION__));
+		}
+	}
+}
+
 int
 dhd_wlan_init(void)
 {
@@ -476,6 +487,11 @@ dhd_wlan_init(void)
 #endif /* SUPPORT_MULTIPLE_NVRAM || SUPPORT_MULTIPLE_CLMBLOB */
 
 fail:
+	if (ret < 0) {
+		/* wlan init failed, turn off WL_REG_ON */
+		dhd_wlan_set_reg_off();
+	}
+
 	DHD_ERROR(("%s: FINISH.......\n", __FUNCTION__));
 	return ret;
 }
@@ -487,6 +503,7 @@ dhd_wlan_deinit(void)
 		gpio_free(wlan_host_wake_up);
 	}
 	if (gpio_is_valid(wlan_reg_on)) {
+		dhd_wlan_set_reg_off();
 		gpio_free(wlan_reg_on);
 	}
 
