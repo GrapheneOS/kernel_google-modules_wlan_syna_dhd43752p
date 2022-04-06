@@ -660,7 +660,7 @@ static inline bool binary_sema_up(tsk_ctl_t *tsk)
 	if ((0 <= tsk->up_cnt) && (2 > tsk->up_cnt)) {
 		tsk->up_cnt++;
 		sem_up = true;
-	} else
+	} else if (tsk->up_cnt > 2)
 		DBG_THR(("dhd_sched_dpc: unexpected up cnt %d!\n", tsk->up_cnt));
 
 	TSK_UNLOCK(&tsk->spinlock, flags);
