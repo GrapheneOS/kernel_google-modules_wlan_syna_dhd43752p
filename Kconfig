@@ -76,6 +76,11 @@ config BCM43752
     depends on BCMDHD
     default n
 
+config BCM43756
+    bool "BCM43756 support"
+    depends on BCMDHD
+    default n
+
 config BCM4389
     bool "BCM4389 support"
     depends on BCMDHD
