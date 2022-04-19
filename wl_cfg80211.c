@@ -1099,7 +1099,8 @@ static struct ieee80211_channel available_5ghz_a_channels[] = {
 	CHAN5G(140, 0), CHAN5G(144, 0),
 	CHAN5G(149, 0), CHAN5G(153, 0),
 	CHAN5G(157, 0), CHAN5G(161, 0),
-	CHAN5G(165, 0),
+	CHAN5G(165, 0), CHAN5G(169, 0),
+	CHAN5G(173, 0), CHAN5G(177, 0),
 };
 
 static struct ieee80211_channel __wl_5ghz_a_channels[] = {
@@ -1117,7 +1118,8 @@ static struct ieee80211_channel __wl_5ghz_a_channels[] = {
 	CHAN5G(140, 0), CHAN5G(144, 0),
 	CHAN5G(149, 0), CHAN5G(153, 0),
 	CHAN5G(157, 0), CHAN5G(161, 0),
-	CHAN5G(165, 0),
+	CHAN5G(165, 0), CHAN5G(169, 0),
+	CHAN5G(173, 0), CHAN5G(177, 0),
 
 #if defined(WL_6G_BAND) && !defined(CFG80211_6G_SUPPORT)
 	/* 6GHz frequency starting 5935 */
@@ -17282,7 +17284,7 @@ static int wl_construct_reginfo(struct bcm_cfg80211 *cfg, s32 bw_cap_2g, s32 bw_
 						__func__, __LINE__, index, j, band_chan_arr[index].center_freq,
 						j-1,  band_chan_arr[j - 1].center_freq));
 			WL_DBG(("%d flag = %x, bw=%d, index=%d\n",
-						__LINE__, band_chan_arr[j].flags, wl_flag_to_bw(flags), index));
+						__LINE__, band_chan_arr[j - 1].flags, wl_flag_to_bw(flags), index));
 			if(index == 0) {
 				dhd_update_reg_rules(1, band_chan_arr[index].center_freq,
 						band_chan_arr[j - 1].center_freq,
