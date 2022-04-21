@@ -6830,6 +6830,11 @@ BCMFASTPATH(dhd_prot_process_msgbuf_rxcpl)(dhd_pub_t *dhd, uint bound, int ringt
 					DHD_ERROR(("Received non 802.11 packet, "
 						"when monitor mode is enabled\n"));
 				}
+			} else if (dhd->op_mode == DHD_FLAG_MFG_MODE &&
+					msg->flags & BCMPCIE_PKT_FLAGS_FRAME_802_11) {
+				DHD_TRACE(("Monitor disable, PKTFREE\n"));
+				PKTFREE(dhd->osh, pkt, TRUE);
+				continue;
 #ifdef DBG_PKT_MON
 			} else {
 				if (msg->flags & BCMPCIE_PKT_FLAGS_FRAME_802_11) {
