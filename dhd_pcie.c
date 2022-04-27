@@ -1463,6 +1463,12 @@ dhdpcie_bus_isr(dhd_bus_t *bus)
 			break;
 		}
 
+		/* Do not process any ISR after receiving D3_ACK */
+		if (__DHD_CHK_BUS_LPS_D3_ACKED(bus)) {
+			DHD_LOG_MEM(("%s: D3 Ack Received, skip\n", __FUNCTION__));
+			break;
+		}
+
 		if (PCIECTO_ENAB(bus)) {
 			/* read pci_intstatus */
 			intstatus = dhdpcie_bus_cfg_read_dword(bus, PCI_INT_STATUS, 4);
@@ -2460,8 +2466,8 @@ dhdpcie_bus_intr_enable(dhd_bus_t *bus)
 	DHD_TRACE(("%s Enter\n", __FUNCTION__));
 	if (bus) {
 		if (bus->sih && !bus->is_linkdown) {
-			/* Skip after recieving D3 ACK */
-			if (bus->bus_low_power_state == DHD_BUS_D3_ACK_RECIEVED) {
+			/* Skip after receiving D3 ACK */
+			if (__DHD_CHK_BUS_LPS_D3_ACKED(bus)) {
 				return;
 			}
 			if ((bus->sih->buscorerev == 2) || (bus->sih->buscorerev == 6) ||
@@ -2491,8 +2497,8 @@ dhdpcie_bus_intr_disable(dhd_bus_t *bus)
 {
 	DHD_TRACE(("%s Enter\n", __FUNCTION__));
 	if (bus && bus->sih && !bus->is_linkdown) {
-		/* Skip after recieving D3 ACK */
-		if (DHD_CHK_BUS_LPS_D3_ACKED(bus)) {
+		/* Skip after receiving D3 ACK */
+		if (__DHD_CHK_BUS_LPS_D3_ACKED(bus)) {
 			return;
 		}
 
@@ -9500,7 +9506,7 @@ void
 dhdpcie_bus_clear_intstatus(struct dhd_bus *bus)
 {
 	uint32 intstatus = 0;
-	/* Skip after recieving D3 ACK */
+	/* Skip after receiving D3 ACK */
 	if (DHD_CHK_BUS_LPS_D3_ACKED(bus)) {
 		return;
 	}
@@ -12668,12 +12674,6 @@ BCMFASTPATH(dhd_bus_dpc)(struct dhd_bus *bus)
 	DHD_BUS_BUSY_SET_IN_DPC(bus->dhd);
 	DHD_GENERAL_UNLOCK(bus->dhd, flags);
 
-	/* Do not process dpc after receiving D3_ACK */
-	if (DHD_CHK_BUS_LPS_D3_ACKED(bus)) {
-		DHD_ERROR(("%s: D3 Ack Recieved, skip dpc\n", __FUNCTION__));
-		goto exit;
-	}
-
 	resched = dhdpcie_bus_process_mailbox_intr(bus, bus->intstatus);
 	if (!resched) {
 		bus->intstatus = 0;
@@ -12703,7 +12703,6 @@ BCMFASTPATH(dhd_bus_dpc)(struct dhd_bus *bus)
 	}
 #endif /* DHD_FLOW_RING_STATUS_TRACE */
 
-exit:
 	DHD_GENERAL_LOCK(bus->dhd, flags);
 	DHD_BUS_BUSY_CLEAR_IN_DPC(bus->dhd);
 	dhd_os_busbusy_wake(bus->dhd);
@@ -13212,6 +13211,12 @@ static bool
 dhdpcie_bus_process_mailbox_intr(dhd_bus_t *bus, uint32 intstatus)
 {
 	bool resched = FALSE;
+
+	/* Do not process dpc after receiving D3_ACK */
+	if (DHD_CHK_BUS_LPS_D3_ACKED(bus)) {
+		DHD_PCIE_INFO(("%s: D3 Ack Received, skip dpc\n", __FUNCTION__));
+		return resched;
+	}
 
 	if (MULTIBP_ENAB(bus->sih)) {
 		dhd_bus_pcie_pwr_req(bus);
