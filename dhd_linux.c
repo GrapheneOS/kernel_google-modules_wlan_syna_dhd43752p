@@ -19028,7 +19028,9 @@ dhd_dev_get_feature_set(struct net_device *dev)
 	feature_set |= WIFI_FEATURE_USE_BODY_HEAD_SAR;
 #endif /* WL_SAR_TX_POWER */
 #ifdef WL_STATIC_IF
+#ifndef APSTA_NON_CONCURRENT
 	feature_set |= WIFI_FEATURE_AP_STA;
+#endif /* APSTA_NON_CONCURRENT */
 #endif /* WL_STATIC_IF */
 	return feature_set;
 }
