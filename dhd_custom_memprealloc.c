@@ -287,7 +287,7 @@ dhd_init_wlan_mem(void)
 	for (i = 0; i < PREALLOC_WLAN_SEC_NUM; i++) {
 		if (wlan_mem_array[i].size > 0) {
 			wlan_mem_array[i].mem_ptr =
-				kmalloc(wlan_mem_array[i].size, GFP_KERNEL);
+				DUMP_BUF_MALLOC(wlan_mem_array[i].size);
 
 			if (!wlan_mem_array[i].mem_ptr) {
 				pr_err("Failed to mem_alloc for WLAN\n");
@@ -296,13 +296,13 @@ dhd_init_wlan_mem(void)
 		}
 	}
 
-	wlan_static_scan_buf0 = kmalloc(WLAN_SCAN_BUF_SIZE, GFP_KERNEL);
+	wlan_static_scan_buf0 = DUMP_BUF_MALLOC(WLAN_SCAN_BUF_SIZE);
 	if (!wlan_static_scan_buf0) {
 		pr_err("Failed to alloc wlan_static_scan_buf0\n");
 		goto err_mem_alloc;
 	}
 
-	wlan_static_scan_buf1 = kmalloc(WLAN_SCAN_BUF_SIZE, GFP_KERNEL);
+	wlan_static_scan_buf1 = DUMP_BUF_MALLOC(WLAN_SCAN_BUF_SIZE);
 	if (!wlan_static_scan_buf1) {
 		pr_err("Failed to alloc wlan_static_scan_buf1\n");
 		goto err_mem_alloc;
@@ -320,29 +320,26 @@ dhd_init_wlan_mem(void)
 		goto err_mem_alloc;
 	}
 
-	wlan_static_dhd_info_buf = kmalloc(WLAN_DHD_INFO_BUF_SIZE, GFP_KERNEL);
+	wlan_static_dhd_info_buf = DUMP_BUF_MALLOC(WLAN_DHD_INFO_BUF_SIZE);
 	if (!wlan_static_dhd_info_buf) {
 		pr_err("Failed to alloc wlan_static_dhd_info_buf\n");
 		goto err_mem_alloc;
 	}
 
 #ifdef BCMPCIE
-	wlan_static_if_flow_lkup = kmalloc(WLAN_DHD_IF_FLOW_LKUP_SIZE,
-		GFP_KERNEL);
+	wlan_static_if_flow_lkup = DUMP_BUF_MALLOC(WLAN_DHD_IF_FLOW_LKUP_SIZE);
 	if (!wlan_static_if_flow_lkup) {
 		pr_err("Failed to alloc wlan_static_if_flow_lkup\n");
 		goto err_mem_alloc;
 	}
 #else
-	wlan_static_dhd_wlfc_buf = kmalloc(WLAN_DHD_WLFC_BUF_SIZE,
-		GFP_KERNEL);
+	wlan_static_dhd_wlfc_buf = DUMP_BUF_MALLOC(WLAN_DHD_WLFC_BUF_SIZE);
 	if (!wlan_static_dhd_wlfc_buf) {
 		pr_err("Failed to alloc wlan_static_dhd_wlfc_buf\n");
 		goto err_mem_alloc;
 	}
 
-	wlan_static_dhd_wlfc_hanger = kmalloc(WLAN_DHD_WLFC_HANGER_SIZE,
-		GFP_KERNEL);
+	wlan_static_dhd_wlfc_hanger = DUMP_BUF_MALLOC(WLAN_DHD_WLFC_HANGER_SIZE);
 	if (!wlan_static_dhd_wlfc_hanger) {
 		pr_err("Failed to alloc wlan_static_dhd_wlfc_hanger\n");
 		goto err_mem_alloc;
@@ -392,19 +389,19 @@ dhd_exit_wlan_mem(void)
 
 #ifdef BCMPCIE
 	if (wlan_static_if_flow_lkup) {
-		kfree(wlan_static_if_flow_lkup);
+		DUMP_BUF_MFREE(wlan_static_if_flow_lkup);
 	}
 #else
 	if (wlan_static_dhd_wlfc_buf) {
-		kfree(wlan_static_dhd_wlfc_buf);
+		DUMP_BUF_MFREE(wlan_static_dhd_wlfc_buf);
 	}
 
 	if (wlan_static_dhd_wlfc_hanger) {
-		kfree(wlan_static_dhd_wlfc_hanger);
+		DUMP_BUF_MFREE(wlan_static_dhd_wlfc_hanger);
 	}
 #endif /* BCMPCIE */
 	if (wlan_static_dhd_info_buf) {
-		kfree(wlan_static_dhd_info_buf);
+		DUMP_BUF_MFREE(wlan_static_dhd_info_buf);
 	}
 
 	if (wlan_static_dhd_log_dump_buf) {
@@ -416,16 +413,16 @@ dhd_exit_wlan_mem(void)
 	}
 
 	if (wlan_static_scan_buf1) {
-		kfree(wlan_static_scan_buf1);
+		DUMP_BUF_MFREE(wlan_static_scan_buf1);
 	}
 
 	if (wlan_static_scan_buf0) {
-		kfree(wlan_static_scan_buf0);
+		DUMP_BUF_MFREE(wlan_static_scan_buf0);
 	}
 
 	for (i = 0; i < PREALLOC_WLAN_SEC_NUM; i++) {
 		if (wlan_mem_array[i].mem_ptr) {
-			kfree(wlan_mem_array[i].mem_ptr);
+			DUMP_BUF_MFREE(wlan_mem_array[i].mem_ptr);
 		}
 	}
 
