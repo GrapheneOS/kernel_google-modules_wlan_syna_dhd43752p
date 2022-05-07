@@ -5092,7 +5092,7 @@ static void *wl_nan_bloom_alloc(void *ctx, uint size)
 	uint8 *buf;
 	BCM_REFERENCE(ctx);
 
-	buf = kmalloc(size, GFP_KERNEL);
+	buf = kvmalloc(size, GFP_KERNEL);
 	if (!buf) {
 		WL_ERR(("%s: memory allocation failed\n", __func__));
 		buf = NULL;
@@ -5105,7 +5105,7 @@ static void wl_nan_bloom_free(void *ctx, void *buf, uint size)
 	BCM_REFERENCE(ctx);
 	BCM_REFERENCE(size);
 	if (buf) {
-		kfree(buf);
+		kvfree(buf);
 	}
 }
 

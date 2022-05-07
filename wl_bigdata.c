@@ -216,7 +216,7 @@ wg_parse_ap_stadata(struct net_device *dev, struct ether_addr *sta_mac,
 	struct wl_rateset_args_v2 *rateset_adv_v2;
 #endif
 
-	ioctl_buf = (char*)kmalloc(WLC_IOCTL_MEDLEN, GFP_KERNEL);
+	ioctl_buf = (char*)kvmalloc(WLC_IOCTL_MEDLEN, GFP_KERNEL);
 	if (ioctl_buf == NULL) {
 		WL_ERR(("failed to allocated ioctl_buf \n"));
 		return BCME_ERROR;
@@ -292,7 +292,7 @@ wg_parse_ap_stadata(struct net_device *dev, struct ether_addr *sta_mac,
 
 done:
 	if (ioctl_buf) {
-		kfree(ioctl_buf);
+		kvfree(ioctl_buf);
 	}
 
 	return ret;
