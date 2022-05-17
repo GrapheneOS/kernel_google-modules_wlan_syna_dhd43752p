@@ -714,6 +714,11 @@ dhd_dbg_verboselog_handler(dhd_pub_t *dhdp, prcd_event_log_hdr_t *plog_hdr,
 		DHD_MSGTRACE_LOG(("EVENT_LOG_ROM[0x%08x]: %s",
 				log_ptr[plog_hdr->count - 1], fmtstr_loc_buf));
 
+		if (!strlen(fmtstr_loc_buf)) {
+			DHD_ERROR(("Invalid log pointer\n"));
+			return;
+		}
+
 		/* Add newline if missing */
 		if (fmtstr_loc_buf[strlen(fmtstr_loc_buf) - 1] != '\n')
 			DHD_MSGTRACE_LOG(("\n"));
@@ -1028,6 +1033,7 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 	uint32 event_log_max_sets;
 	uint min_expected_len = 0;
 	uint16 len_chk = 0;
+	uint32 datalen_tmp = datalen;
 
 	BCM_REFERENCE(ecntr_pushed);
 	BCM_REFERENCE(rtt_pushed);
@@ -1156,6 +1162,9 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 		if (!dhd_dbg_process_event_log_hdr(log_hdr, &prcd_log_hdr)) {
 			DHD_ERROR(("%s: Error while parsing event log header\n",
 				__FUNCTION__));
+			dhd_prhex("[event_data]", (char*)event_data, datalen_tmp,
+				DHD_ERROR_VAL);
+			break;
 		}
 
 		/* skip zero padding at end of frame */
@@ -1201,7 +1210,7 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 			}
 			continue;
 		}
-		if (!(log_item = MALLOC(dhdp->osh, sizeof(*log_item)))) {
+		if (!(log_item = VMALLOC(dhdp->osh, sizeof(*log_item)))) {
 			DHD_ERROR(("%s allocating log list item failed\n",
 				__FUNCTION__));
 			break;
@@ -1292,7 +1301,7 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 				logset, block, (uint32 *)data);
 		}
 		dll_delete(cur);
-		MFREE(dhdp->osh, log_item, sizeof(*log_item));
+		VMFREE(dhdp->osh, log_item, sizeof(*log_item));
 
 	}
 	BCM_REFERENCE(log_hdr);
@@ -1305,7 +1314,7 @@ exit:
 		GCC_DIAGNOSTIC_POP();
 
 		dll_delete(cur);
-		MFREE(dhdp->osh, log_item, sizeof(*log_item));
+		VMFREE(dhdp->osh, log_item, sizeof(*log_item));
 	}
 
 	VMFREE(dhdp->osh, logbuf, ring_data_len);
