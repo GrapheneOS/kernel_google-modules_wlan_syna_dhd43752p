@@ -45,7 +45,7 @@ CONFIG_BCMDHD=m
 CONFIG_BCMDHD_PCIE=y
 ifneq ($(filter y, $(CONFIG_SOC_GS101)),)
 CONFIG_BCM43752=y
-else ifneq ($(filter y, $(CONFIG_SOC_GS201)),)
+else
 CONFIG_BCM43756=y
 endif
 CONFIG_BCM4389=
