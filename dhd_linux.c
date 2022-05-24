@@ -19083,6 +19083,21 @@ dhd_dev_get_feature_set(struct net_device *dev)
 }
 
 int
+dhd_dev_indoor_cfg(struct net_device *dev, u8 enable)
+{
+	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(dev);
+	int ret = 0;
+	uint indoor = enable;
+
+	ret = dhd_wl_ioctl_cmd(&(dhd->pub), WLC_SET_INDOOR, (char *)&indoor,
+			sizeof(indoor), TRUE, 0);
+	if (ret != BCME_OK) {
+		DHD_ERROR(("%s: Unable to set INDOOR %d, ret=%d\n", __FUNCTION__, indoor, ret));
+	}
+	return ret;
+}
+
+int
 dhd_dev_get_feature_set_matrix(struct net_device *dev, int num)
 {
 	int feature_set_full;

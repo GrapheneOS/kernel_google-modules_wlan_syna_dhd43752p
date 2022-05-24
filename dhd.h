@@ -2586,6 +2586,7 @@ extern void dhd_bus_wakeup_work(dhd_pub_t *dhdp);
 #define MAX_FEATURE_SET_CONCURRRENT_GROUPS  3
 
 #if defined(linux) || defined(LINUX) || defined(OEM_ANDROID)
+extern int dhd_dev_indoor_cfg(struct net_device *dev, u8 enable);
 extern int dhd_dev_get_feature_set(struct net_device *dev);
 extern int dhd_dev_get_feature_set_matrix(struct net_device *dev, int num);
 extern int dhd_dev_cfg_rand_mac_oui(struct net_device *dev, uint8 *oui);
