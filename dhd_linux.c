@@ -4410,8 +4410,10 @@ BCMFASTPATH(dhd_start_xmit)(struct sk_buff *skb, struct net_device *net)
 			__FUNCTION__, dhd->pub.busstate, dhd->pub.dhd_bus_busy_state));
 		DHD_BUS_BUSY_CLEAR_IN_TX(&dhd->pub);
 #ifdef PCIE_FULL_DONGLE
-		/* Stop tx queues if suspend is in progress */
-		if (DHD_BUS_CHECK_ANY_SUSPEND_IN_PROGRESS(&dhd->pub)) {
+		/* Stop tx queues if suspend is in progress or suspended */
+		if (DHD_BUS_CHECK_ANY_SUSPEND_IN_PROGRESS(&dhd->pub) ||
+			(dhd->pub.busstate == DHD_BUS_SUSPEND &&
+			!DHD_BUS_BUSY_CHECK_RESUME_IN_PROGRESS(&dhd->pub))) {
 			dhd_bus_stop_queue(dhd->pub.bus);
 		}
 #endif /* PCIE_FULL_DONGLE */
@@ -18687,14 +18689,59 @@ int
 dhd_net_bus_suspend(struct net_device *dev)
 {
 	dhd_info_t *dhd = DHD_DEV_INFO(dev);
-	return dhd_bus_suspend(&dhd->pub);
+	uint bitmask = 0xFFFFFFFF;
+	int timeleft = 0;
+	unsigned long flags = 0;
+	int ret = 0;
+
+	DHD_GENERAL_LOCK(&dhd->pub, flags);
+	if (!DHD_BUS_BUSY_CHECK_IDLE(&dhd->pub)) {
+		DHD_BUS_BUSY_SET_SUSPEND_IN_PROGRESS(&dhd->pub);
+		DHD_GENERAL_UNLOCK(&dhd->pub, flags);
+		DHD_ERROR(("%s: wait to clear dhd_bus_busy_state: 0x%x\n",
+			__FUNCTION__, dhd->pub.dhd_bus_busy_state));
+		timeleft = dhd_os_busbusy_wait_bitmask(&dhd->pub,
+				&dhd->pub.dhd_bus_busy_state, bitmask,
+				DHD_BUS_BUSY_SUSPEND_IN_PROGRESS);
+		if ((timeleft == 0) || (timeleft == 1)) {
+			DHD_ERROR(("%s: Timed out dhd_bus_busy_state=0x%x\n",
+				__FUNCTION__, dhd->pub.dhd_bus_busy_state));
+			ASSERT(0);
+		}
+	} else {
+		DHD_BUS_BUSY_SET_SUSPEND_IN_PROGRESS(&dhd->pub);
+		DHD_GENERAL_UNLOCK(&dhd->pub, flags);
+	}
+
+	ret = dhd_bus_suspend(&dhd->pub);
+
+	DHD_GENERAL_LOCK(&dhd->pub, flags);
+	DHD_BUS_BUSY_CLEAR_SUSPEND_IN_PROGRESS(&dhd->pub);
+	dhd_os_busbusy_wake(&dhd->pub);
+	DHD_GENERAL_UNLOCK(&dhd->pub, flags);
+
+	return ret;
 }
 
 int
 dhd_net_bus_resume(struct net_device *dev, uint8 stage)
 {
 	dhd_info_t *dhd = DHD_DEV_INFO(dev);
-	return dhd_bus_resume(&dhd->pub, stage);
+	unsigned long flags = 0;
+	int ret = 0;
+
+	DHD_GENERAL_LOCK(&dhd->pub, flags);
+	DHD_BUS_BUSY_SET_RESUME_IN_PROGRESS(&dhd->pub);
+	DHD_GENERAL_UNLOCK(&dhd->pub, flags);
+
+	ret = dhd_bus_resume(&dhd->pub, stage);
+
+	DHD_GENERAL_LOCK(&dhd->pub, flags);
+	DHD_BUS_BUSY_CLEAR_RESUME_IN_PROGRESS(&dhd->pub);
+	dhd_os_busbusy_wake(&dhd->pub);
+	DHD_GENERAL_UNLOCK(&dhd->pub, flags);
+
+	return ret;
 }
 
 #endif /* BCMSDIO || BCMPCIE */
