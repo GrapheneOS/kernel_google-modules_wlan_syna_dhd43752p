@@ -9656,7 +9656,9 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 		/* As D3_INFORM will be sent after De-assert,
 		 * skip sending DS-ACK for DS-REQ.
 		 */
+		DHD_BUS_INB_DW_LOCK(bus->inb_lock, flags);
 		bus->skip_ds_ack = TRUE;
+		DHD_BUS_INB_DW_UNLOCK(bus->inb_lock, flags);
 #endif /* PCIE_INB_DW */
 
 #if defined(PCIE_OOB) || defined(PCIE_INB_DW)
@@ -9789,9 +9791,9 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 						DW_DEVICE_HOST_WAKE_WAIT);
 					dhd_bus_ds_trace(bus, 0, TRUE,
 						dhdpcie_bus_get_pcie_inband_dw_state(bus));
+					bus->skip_ds_ack = FALSE;
 					DHD_BUS_INB_DW_UNLOCK(bus->inb_lock, flags);
 				}
-				bus->skip_ds_ack = FALSE;
 #endif /* PCIE_INB_DW */
 				/* For Linux, Macos etc (otherthan NDIS) enable back the dongle
 				 * interrupts using intmask and host interrupts
@@ -9835,7 +9837,7 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 				/* Actual Suspend after no wakelock */
 #endif /* OEM_ANDROID */
 				/* At this time bus->bus_low_power_state will be
-				 * made to DHD_BUS_D3_ACK_RECIEVED after recieving D3_ACK
+				 * made to DHD_BUS_D3_ACK_RECEIVED after receiving D3_ACK
 				 * in dhd_bus_handle_d3_ack()
 				 */
 #ifdef PCIE_OOB
@@ -10040,9 +10042,9 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 				dhd_bus_ds_trace(bus, 0, TRUE);
 #endif /* PCIE_INB_DW */
 			}
+			bus->skip_ds_ack = FALSE;
 			DHD_BUS_INB_DW_UNLOCK(bus->inb_lock, flags);
 		}
-		bus->skip_ds_ack = FALSE;
 #endif /* PCIE_INB_DW */
 		rc = dhdpcie_pci_suspend_resume(bus, state);
 #if defined(LINUX) || defined(linux)
@@ -12207,7 +12209,7 @@ dhd_bus_inb_ack_pending_ds_req(dhd_bus_t *bus)
 	*/
 	if ((dhdpcie_bus_get_pcie_inband_dw_state(bus) ==
 		DW_DEVICE_DS_DEV_SLEEP_PEND) &&
-		(bus->host_active_cnt == 0)) {
+		(bus->host_active_cnt == 0) && (!bus->skip_ds_ack)) {
 		dhdpcie_bus_set_pcie_inband_dw_state(bus, DW_DEVICE_DS_DEV_SLEEP);
 		dhdpcie_send_mb_data(bus, H2D_HOST_DS_ACK);
 	}
@@ -12330,7 +12332,7 @@ dhd_bus_inb_set_device_wake(struct dhd_bus *bus, bool val)
 			bus->inband_dw_deassert_cnt++;
 		} else if ((dhdpcie_bus_get_pcie_inband_dw_state(bus) ==
 			DW_DEVICE_DS_DEV_SLEEP_PEND) &&
-			(bus->host_active_cnt == 0)) {
+			(bus->host_active_cnt == 0) && (!bus->skip_ds_ack)) {
 			dhdpcie_bus_set_pcie_inband_dw_state(bus, DW_DEVICE_DS_DEV_SLEEP);
 			dhdpcie_send_mb_data(bus, H2D_HOST_DS_ACK);
 		}
@@ -12907,8 +12909,8 @@ dhd_bus_handle_mb_data(dhd_bus_t *bus, uint32 d2h_mb_data)
 			/* As per inband state machine, host should not send DS-ACK
 			 * during suspend or suspend in progress, instead D3 inform will be sent.
 			 */
+			DHD_BUS_INB_DW_LOCK(bus->inb_lock, flags);
 			if (!bus->skip_ds_ack) {
-				DHD_BUS_INB_DW_LOCK(bus->inb_lock, flags);
 				if (dhdpcie_bus_get_pcie_inband_dw_state(bus)
 					== DW_DEVICE_DS_ACTIVE) {
 					dhdpcie_bus_set_pcie_inband_dw_state(bus,
@@ -12942,7 +12944,8 @@ dhd_bus_handle_mb_data(dhd_bus_t *bus, uint32 d2h_mb_data)
 				DHD_BUS_INB_DW_UNLOCK(bus->inb_lock, flags);
 				dhd_os_ds_enter_wake(bus->dhd);
 			} else {
-				DHD_PCIE_INFO(("%s: Skip DS-ACK due to "
+				DHD_BUS_INB_DW_UNLOCK(bus->inb_lock, flags);
+				DHD_INFO(("%s: Skip DS-ACK due to "
 					"suspend in progress\n", __FUNCTION__));
 			}
 #ifdef DHD_EFI
