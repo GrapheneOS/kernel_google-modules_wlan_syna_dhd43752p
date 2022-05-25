@@ -20189,7 +20189,7 @@ wl_vndr_ies_add_vendor_oui_list(struct bcm_cfg80211 *cfg,
 	wl_vndr_oui_entry_t *oui_entry = NULL;
 	unsigned long flags;
 
-	oui_entry = kmalloc(sizeof(*oui_entry), GFP_KERNEL);
+	oui_entry = kvmalloc(sizeof(*oui_entry), GFP_KERNEL);
 	if (oui_entry == NULL) {
 		WL_ERR(("alloc failed\n"));
 		return FALSE;
@@ -20218,7 +20218,7 @@ wl_vndr_ies_clear_vendor_oui_list(struct bcm_cfg80211 *cfg)
 		GCC_DIAGNOSTIC_POP();
 		if (oui_entry) {
 			list_del(&oui_entry->list);
-			kfree(oui_entry);
+			kvfree(oui_entry);
 		}
 	}
 	WL_CFG_VNDR_OUI_SYNC_UNLOCK(&cfg->vndr_oui_sync, flags);

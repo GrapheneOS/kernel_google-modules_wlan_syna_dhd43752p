@@ -55,12 +55,6 @@
 
 #define DUMPBUFSZ 1024
 
-/* kvmalloc was added from kernel ver 4.12 */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0))
-#define kvmalloc kmalloc
-#define kvfree kfree
-#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0) */
-
 #ifdef CUSTOMER_HW4_DEBUG
 uint32 g_assert_type = 1; /* By Default not cause Kernel Panic */
 #else
