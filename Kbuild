@@ -154,8 +154,8 @@ DHDCFLAGS += -DPCIE_INB_DW
 # Hikey sched is not so optimized and hence need a higher timeout
 DHDCFLAGS += -DWAIT_FOR_DISCONNECT_MAX=20
 
-#static if
-DHDCFLAGS += -DWL_STATIC_IF
+# no DBS
+DHDCFLAGS += -DAPSTA_NON_CONCURRENT
 
 # Wapi
 #DHDCFLAGS += -DBCMWAPI_WPI -DBCMWAPI_WAI

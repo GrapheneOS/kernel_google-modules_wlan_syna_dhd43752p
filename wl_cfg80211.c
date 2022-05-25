@@ -10811,6 +10811,107 @@ wl_config_autocountry(struct bcm_cfg80211 *cfg,
 }
 #endif /* WL_AUTO_COUNTRY */
 
+static void wl_copy_regd(struct ieee80211_regdomain *regd_copy,
+		const struct ieee80211_regdomain *regd_orig)
+{
+	int i;
+
+	memcpy_s(regd_copy, sizeof(struct ieee80211_regdomain),
+		regd_orig, sizeof(struct ieee80211_regdomain));
+	for (i = 0; i < regd_orig->n_reg_rules; i++) {
+		memcpy_s(&regd_copy->reg_rules[i], sizeof(struct ieee80211_reg_rule),
+			&regd_orig->reg_rules[i], sizeof(struct ieee80211_reg_rule));
+	}
+
+}
+
+#if defined(CUSTOMER_HW6) || defined(WIPHY_DYNAMIC_UPDATE)
+static void
+wl_check_brcm_specifc_country_code(char *country_code)
+{
+	/* If a country code is Brcm specific change the domain to world domain */
+	if (!strcmp("AA", country_code) ||	/* AA */
+		!strcmp("ZZ", country_code) ||	/* ZZ */
+		country_code[0] == 'X' ||		/* XA - XZ */
+		(country_code[0] == 'Q' &&		/* QM - QZ */
+		(country_code[1] >= 'M' && country_code[1] <= 'Z'))) {
+			country_code[0] = '0';
+			country_code[1] = '0';
+	}
+}
+
+static s32
+wl_cfg80211_update_self_regd(struct bcm_cfg80211 *cfg, char *ccode)
+{
+	s32 err = BCME_OK;
+	struct wiphy *wiphy = bcmcfg_to_wiphy(cfg);
+	struct net_device *dev = bcmcfg_to_prmry_ndev(cfg);
+	int regd_len = 0;
+	struct ieee80211_regdomain *regd_copy = NULL;
+	s32 clm_flags = 0;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0))
+	int need_rtnl_lock = 0;
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0) */
+
+	wl_check_brcm_specifc_country_code(ccode);
+
+	WL_DBG(("Updating new country %s\n", ccode));
+
+	if (!IS_REGDOM_SELF_MANAGED(wiphy)) {
+		err = regulatory_hint(wiphy, ccode);
+		if (err) {
+			WL_ERR(("%s: update country change to upper layers failed\n", __FUNCTION__));
+		}
+	}
+	else {
+
+		regd_len = sizeof(struct ieee80211_regdomain) +
+			(global_regd_copy->n_reg_rules * sizeof(struct ieee80211_reg_rule));
+		regd_copy = kzalloc(regd_len, GFP_ATOMIC);
+
+		if (!regd_copy) {
+			return BCME_NOMEM;
+		}
+		wl_copy_regd(regd_copy, global_regd_copy);
+
+		/* Set country code for REGDOM_SELF_MANAGED  */
+		regd_copy->alpha2[0] = ccode[0];
+		regd_copy->alpha2[1] = ccode[1];
+		err = wldev_iovar_getint(dev, "clm_flags", &clm_flags);
+		if (unlikely(err)) {
+			WL_ERR(("error reading clm_flags(%d)\n", err));
+		} else {
+			WL_ERR(("clm_flags(%d)\n", clm_flags));
+			if (memcmp(regd_copy->alpha2, "JP", 2) == 0) {
+				regd_copy->dfs_region = NL80211_DFS_JP;
+			} else if (clm_flags & WL_CLM_DFS_TPC) {
+				if(clm_flags & WL_CLM_RADAR_TYPE_EU) {
+					regd_copy->dfs_region = NL80211_DFS_ETSI;
+				} else {
+					regd_copy->dfs_region = NL80211_DFS_FCC;
+				}
+			} else {
+				regd_copy->dfs_region = NL80211_DFS_UNSET;
+			}
+		}
+		if (wiphy) {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0))
+			need_rtnl_lock = !rtnl_is_locked();
+			if (need_rtnl_lock)
+				rtnl_lock();
+			regulatory_set_wiphy_regd_sync_rtnl(wiphy, regd_copy);
+			if (need_rtnl_lock)
+				rtnl_unlock();
+#else
+			regulatory_set_wiphy_regd_sync(wiphy, regd_copy);
+#endif /* LINUX_VERSION < VERSION(5, 12, 0) */
+		}
+		kfree(regd_copy);
+	}
+	return err;
+}
+#endif /* defined(CUSTOMER_HW6) || defined(WIPHY_DYNAMIC_UPDATE) */
+
 s32
 wl_cfg80211_set_country_code(struct net_device *net, char *country_code,
 	bool notify, bool user_enforced, int revinfo)
@@ -10869,9 +10970,7 @@ wl_cfg80211_set_country_code(struct net_device *net, char *country_code,
 	 * can refresh the channel
 	 * list
 	 */
-	if (!IS_REGDOM_SELF_MANAGED(wiphy)) {
-		regulatory_hint(wiphy, country_code);
-	}
+	ret = wl_cfg80211_update_self_regd(cfg, country_code);
 
 exit:
 	return ret;
@@ -10955,20 +11054,6 @@ int wl_features_set(u8 *array, uint8 len, u32 ftidx)
 	ft_byte = &array[ftidx / 8u];
 	*ft_byte |= BIT(ftidx % 8u);
 	return BCME_OK;
-}
-
-static void wl_copy_regd(struct ieee80211_regdomain *regd_copy,
-		const struct ieee80211_regdomain *regd_orig)
-{
-	int i;
-
-	memcpy_s(regd_copy, sizeof(struct ieee80211_regdomain),
-		regd_orig, sizeof(struct ieee80211_regdomain));
-	for (i = 0; i < regd_orig->n_reg_rules; i++) {
-		memcpy_s(&regd_copy->reg_rules[i], sizeof(struct ieee80211_reg_rule),
-			&regd_orig->reg_rules[i], sizeof(struct ieee80211_reg_rule));
-	}
-
 }
 
 static
@@ -15014,91 +15099,6 @@ exit:
 }
 
 #if defined(CUSTOMER_HW6) || defined(WIPHY_DYNAMIC_UPDATE)
-static void
-wl_check_brcm_specifc_country_code(char *country_code)
-{
-	/* If a country code is Brcm specific change the domain to world domain */
-	if (!strcmp("AA", country_code) ||	/* AA */
-		!strcmp("ZZ", country_code) ||	/* ZZ */
-		country_code[0] == 'X' ||		/* XA - XZ */
-		(country_code[0] == 'Q' &&		/* QM - QZ */
-		(country_code[1] >= 'M' && country_code[1] <= 'Z'))) {
-			country_code[0] = '0';
-			country_code[1] = '0';
-	}
-}
-
-static s32
-wl_cfg80211_update_self_regd(struct bcm_cfg80211 *cfg, char *ccode)
-{
-	s32 err = BCME_OK;
-	struct wiphy *wiphy = bcmcfg_to_wiphy(cfg);
-	struct net_device *dev = bcmcfg_to_prmry_ndev(cfg);
-	int regd_len = 0;
-	struct ieee80211_regdomain *regd_copy = NULL;
-	s32 clm_flags = 0;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0))
-	int need_rtnl_lock = 0;
-#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0) */
-
-	wl_check_brcm_specifc_country_code(ccode);
-
-	WL_DBG(("Updating new country %s\n", ccode));
-
-	if (!IS_REGDOM_SELF_MANAGED(wiphy)) {
-		err = regulatory_hint(wiphy, ccode);
-		if (err) {
-			WL_ERR(("%s: update country change to upper layers failed\n", __FUNCTION__));
-		}
-	}
-	else {
-
-		regd_len = sizeof(struct ieee80211_regdomain) +
-			(global_regd_copy->n_reg_rules * sizeof(struct ieee80211_reg_rule));
-		regd_copy = kzalloc(regd_len, GFP_ATOMIC);
-
-		if (!regd_copy) {
-			return BCME_NOMEM;
-		}
-		wl_copy_regd(regd_copy, global_regd_copy);
-
-		/* Set country code for REGDOM_SELF_MANAGED  */
-		regd_copy->alpha2[0] = ccode[0];
-		regd_copy->alpha2[1] = ccode[1];
-		err = wldev_iovar_getint(dev, "clm_flags", &clm_flags);
-		if (unlikely(err)) {
-			WL_ERR(("error reading clm_flags(%d)\n", err));
-		} else {
-			WL_ERR(("clm_flags(%d)\n", clm_flags));
-			if (memcmp(regd_copy->alpha2, "JP", 2) == 0) {
-				regd_copy->dfs_region = NL80211_DFS_JP;
-			} else if (clm_flags & WL_CLM_DFS_TPC) {
-				if(clm_flags & WL_CLM_RADAR_TYPE_EU) {
-					regd_copy->dfs_region = NL80211_DFS_ETSI;
-				} else {
-					regd_copy->dfs_region = NL80211_DFS_FCC;
-				}
-			} else {
-				regd_copy->dfs_region = NL80211_DFS_UNSET;
-			}
-		}
-		if (wiphy) {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0))
-			need_rtnl_lock = !rtnl_is_locked();
-			if (need_rtnl_lock)
-				rtnl_lock();
-			regulatory_set_wiphy_regd_sync_rtnl(wiphy, regd_copy);
-			if (need_rtnl_lock)
-				rtnl_unlock();
-#else
-			regulatory_set_wiphy_regd_sync(wiphy, regd_copy);
-#endif /* LINUX_VERSION < VERSION(5, 12, 0) */
-		}
-		kfree(regd_copy);
-	}
-	return err;
-}
-
 static s32
 wl_cfg80211_ccode_evt_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	const wl_event_msg_t *event, void *data)

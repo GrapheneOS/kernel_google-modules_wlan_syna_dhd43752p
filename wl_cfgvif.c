@@ -1005,6 +1005,7 @@ wl_cfg80211_add_virtual_iface(struct wiphy *wiphy,
 	struct net_device *primary_ndev;
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	struct wireless_dev *wdev;
+	int ret = BCME_OK;
 
 	WL_DBG(("Enter iftype: %d\n", type));
 	if (!cfg) {
@@ -1014,8 +1015,20 @@ wl_cfg80211_add_virtual_iface(struct wiphy *wiphy,
 	/* Use primary I/F for sending cmds down to firmware */
 	primary_ndev = bcmcfg_to_prmry_ndev(cfg);
 	if (unlikely(!wl_get_drv_status(cfg, READY, primary_ndev))) {
-		WL_ERR(("device is not ready\n"));
-		return ERR_PTR(-ENODEV);
+#if !defined(WL_STATIC_IF) && defined(APSTA_NON_CONCURRENT)
+		if (type == NL80211_IFTYPE_AP) {
+			ret = dhd_open(primary_ndev);
+			if (ret != BCME_OK) {
+				WL_ERR(("%s, dhd_open failed\n", __FUNCTION__));
+				return ERR_PTR(-ENODEV);
+			}
+		}
+		else
+#endif /* !WL_STATIC_IF && APSTA_NON_CONCURRENT */
+		{
+			WL_ERR(("device is not ready\n"));
+			return ERR_PTR(-ENODEV);
+		}
 	}
 
 	if (!name) {
