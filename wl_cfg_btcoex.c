@@ -387,7 +387,7 @@ void* wl_cfg80211_btcoex_init(struct net_device *ndev)
 {
 	struct btcoex_info *btco_inf = NULL;
 
-	btco_inf = kmalloc(sizeof(struct btcoex_info), GFP_KERNEL);
+	btco_inf = kvmalloc(sizeof(struct btcoex_info), GFP_KERNEL);
 	if (!btco_inf)
 		return NULL;
 
@@ -418,7 +418,7 @@ void wl_cfg80211_btcoex_deinit()
 
 	cancel_work_sync(&btcoex_info_loc->work);
 
-	kfree(btcoex_info_loc);
+	kvfree(btcoex_info_loc);
 }
 
 int wl_cfg80211_set_btcoex_dhcp(struct net_device *dev, dhd_pub_t *dhd, char *command)

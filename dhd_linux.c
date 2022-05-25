@@ -4745,7 +4745,7 @@ void dhd_rx_wq_wakeup(struct work_struct *ptr)
 		pm_runtime_put_autosuspend(dhd_bus_to_dev(pub->bus));
 	}
 	DHD_OS_WAKE_UNLOCK(pub);
-	kfree(work);
+	kvfree(work);
 }
 
 void dhd_start_xmit_wq_adapter(struct work_struct *ptr)
@@ -4763,7 +4763,7 @@ void dhd_start_xmit_wq_adapter(struct work_struct *ptr)
 
 	if (atomic_read(&dhd->pub.block_bus)) {
 		kfree_skb(work->skb);
-		kfree(work);
+		kvfree(work);
 		dhd_netif_start_queue(bus);
 		return;
 	}
@@ -4773,7 +4773,7 @@ void dhd_start_xmit_wq_adapter(struct work_struct *ptr)
 		pm_runtime_mark_last_busy(dhd_bus_to_dev(bus));
 		pm_runtime_put_autosuspend(dhd_bus_to_dev(bus));
 	}
-	kfree(work);
+	kvfree(work);
 	dhd_netif_start_queue(bus);
 
 	if (ret)
@@ -4794,7 +4794,7 @@ BCMFASTPATH(dhd_start_xmit_wrapper)(struct sk_buff *skb, struct net_device *net)
 		dhd_netif_stop_queue(dhd->pub.bus);
 
 		start_xmit_work = (struct dhd_rx_tx_work*)
-			kmalloc(sizeof(*start_xmit_work), GFP_ATOMIC);
+			kvmalloc(sizeof(*start_xmit_work), GFP_KERNEL);
 
 		if (!start_xmit_work) {
 			netdev_err(net,
@@ -4825,7 +4825,7 @@ dhd_bus_wakeup_work(dhd_pub_t *dhdp)
 	struct dhd_rx_tx_work *rx_work;
 	dhd_info_t *dhd = (dhd_info_t *)dhdp->info;
 
-	rx_work = kmalloc(sizeof(*rx_work), GFP_ATOMIC);
+	rx_work = kvmalloc(sizeof(*rx_work), GFP_KERNEL);
 	if (!rx_work) {
 		DHD_ERROR(("%s: start_rx_work alloc error. \n", __FUNCTION__));
 		return;
@@ -25519,7 +25519,7 @@ void* dhd_os_create_buzzz_thread(void)
 {
 	tsk_ctl_t *thr_buzzz_ctl = NULL;
 
-	thr_buzzz_ctl = kmalloc(sizeof(tsk_ctl_t), GFP_KERNEL);
+	thr_buzzz_ctl = kvmalloc(sizeof(tsk_ctl_t), GFP_KERNEL);
 	if (!thr_buzzz_ctl) {
 		return NULL;
 	}
@@ -25538,7 +25538,7 @@ void dhd_os_destroy_buzzz_thread(void *thr_hdl)
 	}
 
 	PROC_STOP(thr_buzzz_ctl);
-	kfree(thr_buzzz_ctl);
+	kvfree(thr_buzzz_ctl);
 }
 
 void dhd_os_sched_buzzz_thread(void *thr_hdl)

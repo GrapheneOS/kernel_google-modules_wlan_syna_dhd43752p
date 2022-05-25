@@ -229,7 +229,7 @@ dhd_read_proc_ts_fw_clk_dump(struct file *file, char *user_buf, size_t count, lo
 		DHD_ERROR(("%s rmmod in progress\n", __func__));
 		return -ENOENT;
 	}
-	buf = kmalloc(count, GFP_KERNEL);
+	buf = kvmalloc(count, GFP_KERNEL);
 	if (buf == NULL) {
 		DHD_ERROR(("%s failed to allocate buf with size %zu\n", __func__, count));
 		return -ENOMEM;
@@ -239,7 +239,7 @@ dhd_read_proc_ts_fw_clk_dump(struct file *file, char *user_buf, size_t count, lo
 		return 0;
 	}
 	ret = simple_read_from_buffer(user_buf, count, loff, buf, (count - ret));
-	kfree(buf);
+	kvfree(buf);
 	return ret;
 }
 static int dhd_open_proc_ts_tx_dump(struct inode *inode, struct file *file)
@@ -266,7 +266,7 @@ dhd_read_proc_ts_tx_dump(struct file *file, char *user_buf, size_t count, loff_t
 		DHD_ERROR(("%s rmmod in progress\n", __func__));
 		return -ENOENT;
 	}
-	buf = kmalloc(count, GFP_KERNEL);
+	buf = kvmalloc(count, GFP_KERNEL);
 	if (buf == NULL) {
 		DHD_ERROR(("%s failed to allocate buf with size %zu\n", __func__, count));
 		return -ENOMEM;
@@ -275,7 +275,7 @@ dhd_read_proc_ts_tx_dump(struct file *file, char *user_buf, size_t count, loff_t
 	bcm_bprintf(&strbuf, "Tx Log dump\n");
 	dhd_timesync_ts_log_dump_item(&ts->tx_timestamps, &strbuf);
 	ret = simple_read_from_buffer(user_buf, count, loff, buf, (count - strbuf.size));
-	kfree(buf);
+	kvfree(buf);
 	return ret;
 }
 
@@ -304,7 +304,7 @@ dhd_read_proc_ts_rx_dump(struct file *file, char *user_buf, size_t count, loff_t
 		DHD_ERROR(("%s rmmod in progress\n", __func__));
 		return -ENOENT;
 	}
-	buf = kmalloc(count, GFP_KERNEL);
+	buf = kvmalloc(count, GFP_KERNEL);
 	if (buf == NULL) {
 		DHD_ERROR(("%s failed to allocate buf with size %zu\n", __func__, count));
 		return -ENOMEM;
@@ -313,7 +313,7 @@ dhd_read_proc_ts_rx_dump(struct file *file, char *user_buf, size_t count, loff_t
 	bcm_bprintf(&strbuf, "Rx Log dump\n");
 	dhd_timesync_ts_log_dump_item(&ts->rx_timestamps, &strbuf);
 	ret = simple_read_from_buffer(user_buf, count, loff, buf, (count - strbuf.size));
-	kfree(buf);
+	kvfree(buf);
 	return ret;
 }
 
