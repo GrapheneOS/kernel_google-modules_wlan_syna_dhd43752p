@@ -10848,7 +10848,7 @@ wl_cfg80211_update_self_regd(struct bcm_cfg80211 *cfg, char *ccode)
 	struct net_device *dev = bcmcfg_to_prmry_ndev(cfg);
 	int regd_len = 0;
 	struct ieee80211_regdomain *regd_copy = NULL;
-	s32 clm_flags = 0;
+	s32 clm_flags = WLC_BAND_5G;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0))
 	int need_rtnl_lock = 0;
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0) */
