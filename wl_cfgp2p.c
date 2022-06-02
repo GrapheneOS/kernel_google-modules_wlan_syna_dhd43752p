@@ -745,6 +745,7 @@ wl_cfgp2p_init_discovery(struct bcm_cfg80211 *cfg)
 	if (unlikely(ret != 0)) {
 		CFGP2P_ERR(("unable to set WL_P2P_DISC_ST_SCAN\n"));
 		wl_cfgp2p_set_discovery(cfg, 0);
+		wl_dealloc_netinfo_by_wdev(cfg, cfg->p2p_wdev);
 		wl_to_p2p_bss_bssidx(cfg, P2PAPI_BSSCFG_DEVICE) = 0;
 		wl_to_p2p_bss_ndev(cfg, P2PAPI_BSSCFG_DEVICE) = NULL;
 		ret = 0;
