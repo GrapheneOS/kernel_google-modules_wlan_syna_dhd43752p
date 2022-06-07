@@ -1731,8 +1731,6 @@ __dhd_dbg_free_tx_pkts(dhd_pub_t *dhdp, dhd_dbg_tx_info_t *tx_pkts,
 	while ((count < pkt_count) && tx_pkts) {
 		if (tx_pkts->info.pkt) {
 			PKTFREE(dhdp->osh, tx_pkts->info.pkt, TRUE);
-			/* Set NULL pointer after freeing for preventing dangling pointer problem */
-			tx_pkts->info.pkt = NULL;
 		}
 		tx_pkts++;
 		count++;
@@ -1751,8 +1749,6 @@ __dhd_dbg_free_rx_pkts(dhd_pub_t *dhdp, dhd_dbg_rx_info_t *rx_pkts,
 	while ((count < pkt_count) && rx_pkts) {
 		if (rx_pkts->info.pkt) {
 			PKTFREE(dhdp->osh, rx_pkts->info.pkt, TRUE);
-			/* Set NULL pointer after freeing for preventing dangling pointer problem */
-			rx_pkts->info.pkt = NULL;
 		}
 		rx_pkts++;
 		count++;
