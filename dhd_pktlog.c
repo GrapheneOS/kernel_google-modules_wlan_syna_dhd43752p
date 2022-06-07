@@ -323,8 +323,6 @@ dhd_pktlog_ring_deinit(dhd_pub_t *dhdp, dhd_pktlog_ring_t *ring)
 
 		if (ring_info->info.pkt) {
 			PKTFREE(ring->dhdp->osh, ring_info->info.pkt, TRUE);
-			/* Set NULL pointer after freeing for preventing dangling pointer problem */
-			ring_info->info.pkt = NULL;
 			DHD_PKT_LOG(("%s(): pkt free pos %p\n",
 					__FUNCTION__, ring_info->info.pkt));
 		}
@@ -410,11 +408,7 @@ dhd_pktlog_ring_add_pkts(dhd_pub_t *dhdp, void *pkt, void *pktdata, uint32 pktid
 		pkts = (dhd_pktlog_ring_info_t *)dll_head_p(&pktlog_ring->ring_info_head);
 		dll_delete((dll_t *)pkts);
 		/* free the oldest packet */
-		if (pkts->info.pkt) {
-			PKTFREE(pktlog_ring->dhdp->osh, pkts->info.pkt, TRUE);
-			/* Set NULL pointer after freeing for preventing dangling pointer problem */
-			pkts->info.pkt = NULL;
-		}
+		PKTFREE(pktlog_ring->dhdp->osh, pkts->info.pkt, TRUE);
 		pktlog_ring->pktcount--;
 	} else {
 		pkts = (dhd_pktlog_ring_info_t *)dll_tail_p(&pktlog_ring->ring_info_free);
@@ -1193,7 +1187,6 @@ dhd_pktlog_dump_write(dhd_pub_t *dhdp, void *file, const void *user_buf, uint32 
 	int bytes_user_data = 0;
 	int ret = BCME_OK;
 	dll_t *item_p, *next_p;
-	unsigned long flags = 0;
 
 	if (!dhdp || !dhdp->pktlog) {
 		DHD_PKT_LOG(("%s(): dhdp=%p pktlog=%p\n",
@@ -1239,8 +1232,6 @@ dhd_pktlog_dump_write(dhd_pub_t *dhdp, void *file, const void *user_buf, uint32 
 	ret = dhd_export_debug_data((char *)&pcap_h, file, user_buf, sizeof(pcap_h), &pos);
 	len = sizeof(pcap_h);
 #endif /* !DHD_PKT_LOGGING_DBGRING */
-
-	DHD_PKT_LOG_LOCK(pktlog_ring->pktlog_ring_lock, flags);
 	for (item_p = dll_head_p(&pktlog_ring->ring_info_head);
 			!dll_end(&pktlog_ring->ring_info_head, item_p);
 			item_p = next_p) {
@@ -1306,12 +1297,9 @@ dhd_pktlog_dump_write(dhd_pub_t *dhdp, void *file, const void *user_buf, uint32 
 
 		ret = memcpy_s((void*)(user_buf + len), size - len, buf, bytes_user_data);
 		len += bytes_user_data;
+
 		dll_delete((dll_t *)report_ptr);
-		if (report_ptr->info.pkt) {
-			PKTFREE(pktlog_ring->dhdp->osh, report_ptr->info.pkt, TRUE);
-			/* Set NULL pointer after freeing for preventing dangling pointer problem */
-			report_ptr->info.pkt = NULL;
-		}
+		PKTFREE(pktlog_ring->dhdp->osh, report_ptr->info.pkt, TRUE);
 		pktlog_ring->pktcount--;
 		dll_append(&pktlog_ring->ring_info_free, (dll_t *)report_ptr);
 #else
@@ -1366,7 +1354,6 @@ dhd_pktlog_dump_write(dhd_pub_t *dhdp, void *file, const void *user_buf, uint32 
 #ifdef DHD_PKT_LOGGING_DBGRING
 	*written_bytes = len;
 #endif /* DHD_PKT_LOGGING_DBGRING */
-	DHD_PKT_LOG_UNLOCK(pktlog_ring->pktlog_ring_lock, flags);
 	OSL_ATOMIC_SET(dhdp->osh, &pktlog_ring->start, TRUE);
 
 	return ret;
