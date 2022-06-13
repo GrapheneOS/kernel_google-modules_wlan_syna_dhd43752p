@@ -323,6 +323,8 @@ dhd_pktlog_ring_deinit(dhd_pub_t *dhdp, dhd_pktlog_ring_t *ring)
 
 		if (ring_info->info.pkt) {
 			PKTFREE(ring->dhdp->osh, ring_info->info.pkt, TRUE);
+			/* Set NULL pointer after freeing for preventing dangling pointer problem */
+			ring_info->info.pkt = NULL;
 			DHD_PKT_LOG(("%s(): pkt free pos %p\n",
 					__FUNCTION__, ring_info->info.pkt));
 		}
@@ -408,7 +410,11 @@ dhd_pktlog_ring_add_pkts(dhd_pub_t *dhdp, void *pkt, void *pktdata, uint32 pktid
 		pkts = (dhd_pktlog_ring_info_t *)dll_head_p(&pktlog_ring->ring_info_head);
 		dll_delete((dll_t *)pkts);
 		/* free the oldest packet */
-		PKTFREE(pktlog_ring->dhdp->osh, pkts->info.pkt, TRUE);
+		if (pkts->info.pkt) {
+			PKTFREE(pktlog_ring->dhdp->osh, pkts->info.pkt, TRUE);
+			/* Set NULL pointer after freeing for preventing dangling pointer problem */
+			pkts->info.pkt = NULL;
+		}
 		pktlog_ring->pktcount--;
 	} else {
 		pkts = (dhd_pktlog_ring_info_t *)dll_tail_p(&pktlog_ring->ring_info_free);
@@ -430,6 +436,16 @@ dhd_pktlog_ring_add_pkts(dhd_pub_t *dhdp, void *pkt, void *pktdata, uint32 pktid
 #endif /* DHD_PKT_LOGGING_DBGRING */
 
 	pkts->info.pkt = PKTDUP(dhdp->osh, pkt);
+
+	/*
+	 * skb clone can be NULL, but pktlog feature assume it always can be cloned
+	 * The pkt info will be added in the list to fit pktcount & list items
+	 * and handled in the dhd_pktlog_dump_write() with ignoring info.pkt
+	 */
+	if (pkts->info.pkt == NULL) {
+		DHD_ERROR(("%s : skb clone fail, returns NULL \n", __FUNCTION__));
+	}
+
 	pkts->info.pkt_len = PKTLEN(dhdp->osh, pkt);
 	pkts->info.firmware_ts = 0U;
 	pkts->info.payload_type = FRAME_TYPE_ETHERNET_II;
@@ -1180,6 +1196,7 @@ dhd_pktlog_dump_write(dhd_pub_t *dhdp, void *file, const void *user_buf, uint32 
 	loff_t pos = 0;
 #else
 	uint32 size = 0;
+	unsigned long flags = 0;
 #endif /* !DHD_PKT_LOGGING_DBGRING */
 	uint32 write_frame_len;
 	uint32 frame_len;
@@ -1232,6 +1249,9 @@ dhd_pktlog_dump_write(dhd_pub_t *dhdp, void *file, const void *user_buf, uint32 
 	ret = dhd_export_debug_data((char *)&pcap_h, file, user_buf, sizeof(pcap_h), &pos);
 	len = sizeof(pcap_h);
 #endif /* !DHD_PKT_LOGGING_DBGRING */
+#ifdef DHD_PKT_LOGGING_DBGRING
+	DHD_PKT_LOG_LOCK(pktlog_ring->pktlog_ring_lock, flags);
+#endif
 	for (item_p = dll_head_p(&pktlog_ring->ring_info_head);
 			!dll_end(&pktlog_ring->ring_info_head, item_p);
 			item_p = next_p) {
@@ -1253,6 +1273,16 @@ dhd_pktlog_dump_write(dhd_pub_t *dhdp, void *file, const void *user_buf, uint32 
 			(len + dhd_pktlog_get_item_length(report_ptr) > size)) {
 			DHD_ERROR(("overflowed pkt logs are dropped\n"));
 			break;
+		}
+
+		if (report_ptr->info.pkt == NULL) {
+			/*
+			 * info.pkt is NULL means PKTDUP fail in dhd_pktlog_ring_add_pkts function
+			 * there is no malloc happened, report_ptr->info.pkt don't need to PKTFREE
+			 * and this pktlog_ring entery will be reused/release when pktlog_ring->ring_info_free is empty
+			 */
+			DHD_ERROR(("%s : pkt isn't located skip it\n", __FUNCTION__));
+			continue;
 		}
 
 #ifdef DHD_PKT_LOGGING_DBGRING
@@ -1352,6 +1382,7 @@ dhd_pktlog_dump_write(dhd_pub_t *dhdp, void *file, const void *user_buf, uint32 
 #endif /* DHD_PKT_LOGGING_DBGRING */
 	}
 #ifdef DHD_PKT_LOGGING_DBGRING
+	DHD_PKT_LOG_UNLOCK(pktlog_ring->pktlog_ring_lock, flags);
 	*written_bytes = len;
 #endif /* DHD_PKT_LOGGING_DBGRING */
 	OSL_ATOMIC_SET(dhdp->osh, &pktlog_ring->start, TRUE);
