@@ -1181,6 +1181,14 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 		if (prcd_log_hdr.count == 0) {
 			break;
 		}
+
+#ifdef DHD_WAKE_STATUS
+		if (dhdp->evtlog_cnt > 0) {
+			DHD_ERROR(("%s: [%d] prcd_log_hdr.tag = %d\n", __func__, dhdp->evtlog_cnt, prcd_log_hdr.tag));
+			dhdp->evtlog_cnt--;
+		}
+#endif
+
 		/* Both tag_stats and proxd are binary payloads so skip
 		 * argument count check for these.
 		 */
