@@ -985,7 +985,9 @@
 #define WLC_GET_RSSI_QDB			321 /* qdB portion of the RSSI */
 #define WLC_DUMP_RATESET			322
 #define WLC_ECHO				323
-#define WLC_LAST				324	/* The last ioctl. Also push this
+#define WLC_SET_INDOOR				324
+#define WLC_GET_INDOOR				325
+#define WLC_LAST				326	/* The last ioctl. Also push this
 							 * number when adding new ioctls
 							 */
 /*
