@@ -3842,7 +3842,7 @@ dhd_rtt_create_failure_result(rtt_status_info_t *rtt_status,
 	}
 	/* fill out the results from the configuration param */
 	rtt_result->report.ftm_num = rtt_target_info->num_frames_per_burst;
-	rtt_result->report.type = RTT_TWO_WAY;
+	rtt_result->report.type = rtt_target_info->type;
 	DHD_RTT(("report->ftm_num : %d\n", rtt_result->report.ftm_num));
 	rtt_result->report_len = RTT_REPORT_SIZE;
 	rtt_result->report.status = RTT_STATUS_FAIL_NO_RSP;
@@ -3958,10 +3958,12 @@ dhd_rtt_handle_directed_rtt_burst_end(dhd_pub_t *dhd, struct ether_addr *peer_ad
 	rtt_status_info_t *rtt_status;
 	bool is_new = TRUE;
 	rtt_results_header_t *rtt_results_header = NULL;
+	rtt_target_info_t *target;
 #endif /* WL_CFG80211 */
 
 #ifdef WL_CFG80211
 	rtt_status = GET_RTTSTATE(dhd);
+
 	is_new = !dhd_rtt_get_report_header(rtt_status,
 		&rtt_results_header, peer_addr);
 
@@ -3986,6 +3988,8 @@ dhd_rtt_handle_directed_rtt_burst_end(dhd_pub_t *dhd, struct ether_addr *peer_ad
 
 		ret = dhd_rtt_parse_result_event(proxd_ev_data, tlvs_len, rtt_result);
 #ifdef WL_CFG80211
+		target = &rtt_status->rtt_config.target_info[rtt_status->cur_idx];
+		rtt_result->report.type = target->type;
 		if (ret == BCME_OK) {
 			list_add_tail(&rtt_result->list, &rtt_results_header->result_list);
 			rtt_results_header->result_cnt++;
