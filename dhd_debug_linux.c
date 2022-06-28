@@ -148,6 +148,12 @@ dbg_ring_poll_worker(struct work_struct *work)
 		DHD_DBG_RING_UNLOCK(ring->lock, flags);
 	}
 
+	if (!CAN_SLEEP()) {
+		DHD_ERROR(("this context should be sleepable\n"));
+		sched = FALSE;
+		goto exit;
+	}
+
 	buf = MALLOCZ(dhdp->osh, buflen);
 	if (!buf) {
 		DHD_ERROR(("%s failed to allocate read buf\n", __FUNCTION__));
