@@ -141,6 +141,7 @@ typedef struct dhdpcie_info
 	unsigned int	total_wake_count;
 	int		pkt_wake;
 	int		wake_irq;
+	int		evtlog_wake;
 #endif /* DHD_WAKE_STATUS */
 #ifdef USE_SMMU_ARCH_MSM
 	void *smmu_cxt;
@@ -1209,8 +1210,21 @@ int bcmpcie_set_get_wake(struct dhd_bus *bus, int flag)
 	ret = pch->pkt_wake;
 	pch->total_wake_count += flag;
 	pch->pkt_wake = flag;
+	pch->evtlog_wake = flag;
 
 	DHD_PKT_WAKE_UNLOCK(&pch->pkt_wake_lock, flags);
+	return ret;
+}
+
+int
+bcmpcie_get_evtlog_wake(struct dhd_bus *bus)
+{
+	int ret;
+	dhdpcie_info_t *pch = pci_get_drvdata(bus->dev);
+
+	ret = pch->evtlog_wake;
+	pch->evtlog_wake = 0;
+
 	return ret;
 }
 #endif /* DHD_WAKE_STATUS */

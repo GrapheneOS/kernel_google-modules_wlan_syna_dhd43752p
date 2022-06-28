@@ -818,7 +818,7 @@ static void* dhd_prot_get_ring_space(msgbuf_ring_t *ring, uint16 nitems,
 
 /* Consumer: Determine the location where the next message may be consumed */
 static uint8* dhd_prot_get_read_addr(dhd_pub_t *dhd, msgbuf_ring_t *ring,
-	uint32 *available_len);
+	uint32 *available_len, uint32 *msg);
 
 /* Producer (WR index update) or Consumer (RD index update) indication */
 static void dhd_prot_ring_write_complete(dhd_pub_t *dhd, msgbuf_ring_t *ring,
@@ -6174,10 +6174,11 @@ dhd_msgbuf_rxbuf_post_ts_bufs(dhd_pub_t *dhd)
 }
 
 bool
-BCMFASTPATH(dhd_prot_process_msgbuf_infocpl)(dhd_pub_t *dhd, uint bound)
+BCMFASTPATH(dhd_prot_process_msgbuf_infocpl)(dhd_pub_t *dhd, uint bound, uint32 *msg)
 {
 	dhd_prot_t *prot = dhd->prot;
 	bool more = TRUE;
+	uint32 items = 0;
 	uint n = 0;
 	msgbuf_ring_t *ring = prot->d2hring_info_cpln;
 	unsigned long flags;
@@ -6204,12 +6205,13 @@ BCMFASTPATH(dhd_prot_process_msgbuf_infocpl)(dhd_pub_t *dhd, uint bound)
 
 		DHD_RING_LOCK(ring->ring_lock, flags);
 		/* Get the message from ring */
-		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len);
+		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len, &items);
 		DHD_RING_UNLOCK(ring->ring_lock, flags);
 		if (msg_addr == NULL) {
 			more = FALSE;
 			break;
 		}
+		*msg = items;
 
 		/* Prefetch data to populate the cache */
 		OSL_PREFETCH(msg_addr);
@@ -6267,7 +6269,7 @@ BCMFASTPATH(dhd_prot_process_msgbuf_btlogcpl)(dhd_pub_t *dhd, uint bound)
 		}
 
 		/* Get the message from ring */
-		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len);
+		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len, NULL);
 		if (msg_addr == NULL) {
 			more = FALSE;
 			break;
@@ -6688,7 +6690,7 @@ BCMFASTPATH(dhd_prot_process_msgbuf_rxcpl)(dhd_pub_t *dhd, uint bound, int ringt
 		DHD_RING_LOCK(ring->ring_lock, flags);
 
 		/* Get the address of the next message to be read from ring */
-		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len);
+		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len, NULL);
 		if (msg_addr == NULL) {
 			DHD_RING_UNLOCK(ring->ring_lock, flags);
 			break;
@@ -7014,7 +7016,7 @@ BCMFASTPATH(dhd_prot_process_msgbuf_txcpl)(dhd_pub_t *dhd, uint bound, int ringt
 
 		DHD_RING_LOCK(ring->ring_lock, flags);
 		/* Get the address of the next message to be read from ring */
-		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len);
+		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len, NULL);
 		DHD_RING_UNLOCK(ring->ring_lock, flags);
 
 		if (msg_addr == NULL) {
@@ -7126,7 +7128,7 @@ BCMFASTPATH(dhd_prot_process_ctrlbuf)(dhd_pub_t *dhd)
 
 		DHD_RING_LOCK(ring->ring_lock, flags);
 		/* Get the address of the next message to be read from ring */
-		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len);
+		msg_addr = dhd_prot_get_read_addr(dhd, ring, &msg_len, NULL);
 		DHD_RING_UNLOCK(ring->ring_lock, flags);
 
 		if (msg_addr == NULL) {
@@ -12186,7 +12188,7 @@ ret_no_mem:
  * from, or NULL if there are no more messages to read.
  */
 static uint8*
-dhd_prot_get_read_addr(dhd_pub_t *dhd, msgbuf_ring_t *ring, uint32 *available_len)
+dhd_prot_get_read_addr(dhd_pub_t *dhd, msgbuf_ring_t *ring, uint32 *available_len, uint32 *msg)
 {
 	uint16 wr;
 	uint16 rd;
@@ -12224,6 +12226,8 @@ dhd_prot_get_read_addr(dhd_pub_t *dhd, msgbuf_ring_t *ring, uint32 *available_le
 	if (items == 0)
 		return NULL;
 
+	if (msg != NULL)
+		*msg = items;
 	/*
 	 * Note that there are builds where Assert translates to just printk
 	 * so, even if we had hit this condition we would never halt. Now
