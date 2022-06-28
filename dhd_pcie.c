@@ -13295,6 +13295,7 @@ static bool
 dhdpci_bus_read_frames(dhd_bus_t *bus)
 {
 	bool more = FALSE;
+	uint32 msg = 0;
 
 	/* First check if there a FW trap */
 	if ((bus->api.fw_rev >= PCIE_SHARED_VERSION_6) &&
@@ -13356,7 +13357,7 @@ dhdpci_bus_read_frames(dhd_bus_t *bus)
 	if (!bus->dhd->dongle_edl_support)
 #endif
 	{
-		more |= dhd_prot_process_msgbuf_infocpl(bus->dhd, DHD_INFORING_BOUND);
+		more |= dhd_prot_process_msgbuf_infocpl(bus->dhd, DHD_INFORING_BOUND, &msg);
 		bus->last_process_infocpl_time = OSL_LOCALTIME_NS();
 	}
 #ifdef EWP_EDL
@@ -13433,6 +13434,13 @@ dhdpci_bus_read_frames(dhd_bus_t *bus)
 #if defined(DHD_H2D_LOG_TIME_SYNC)
 	dhdpci_bus_rte_log_time_sync_poll(bus);
 #endif /* DHD_H2D_LOG_TIME_SYNC */
+#ifdef DHD_WAKE_STATUS
+	if ((msg > 0) && (bcmpcie_get_evtlog_wake(bus) > 0)) {
+		bus->dhd->evtlog_cnt = 2;
+		DHD_ERROR(("##### dhdpcie_host_wake caused by Event Logs, msg %d, dbg event log cnt %d\n",
+				msg, bus->dhd->evtlog_cnt));
+	}
+#endif
 	return more;
 }
 

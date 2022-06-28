@@ -154,7 +154,7 @@ extern int dhd_process_pkt_reorder_info(dhd_pub_t *dhd, uchar *reorder_info_buf,
 #ifdef BCMPCIE
 extern bool dhd_prot_process_msgbuf_txcpl(dhd_pub_t *dhd, uint bound, int ringtype);
 extern bool dhd_prot_process_msgbuf_rxcpl(dhd_pub_t *dhd, uint bound, int ringtype);
-extern bool dhd_prot_process_msgbuf_infocpl(dhd_pub_t *dhd, uint bound);
+extern bool dhd_prot_process_msgbuf_infocpl(dhd_pub_t *dhd, uint bound, uint32 *msg);
 #ifdef BTLOG
 extern bool dhd_prot_process_msgbuf_btlogcpl(dhd_pub_t *dhd, uint bound);
 #endif	/* BTLOG */

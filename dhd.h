@@ -1978,6 +1978,9 @@ typedef struct dhd_pub {
 #ifdef SUPPORT_OTA_UPDATE
 	ota_update_info_t ota_update_info;
 #endif /* SUPPORT_OTA_UPDATE */
+#ifdef DHD_WAKE_STATUS
+	int evtlog_cnt;
+#endif /* DHD_WAKE_STATUS */
 } dhd_pub_t;
 
 #if defined(__linux__)
