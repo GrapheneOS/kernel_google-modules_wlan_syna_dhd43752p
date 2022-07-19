@@ -224,6 +224,56 @@ dhd_os_detach_pktlog(dhd_pub_t *dhdp)
 	return BCME_OK;
 }
 
+#ifdef DHD_PKT_LOGGING_DBGRING
+void dhd_pktlog_resume(dhd_pub_t *dhdp)
+{
+	struct dhd_pktlog_ring *pktlog_ring;
+
+	if (!dhdp || !dhdp->pktlog) {
+		DHD_ERROR(("%s(): dhdp=%p pktlog=%p\n",
+			__FUNCTION__, dhdp, (dhdp ? dhdp->pktlog : NULL)));
+		return;
+	}
+
+	if (!dhdp->pktlog->pktlog_ring) {
+		DHD_ERROR(("%s(): pktlog_ring=%p\n",
+			__FUNCTION__, dhdp->pktlog->pktlog_ring));
+		return;
+	}
+
+	pktlog_ring = dhdp->pktlog->pktlog_ring;
+	if (!OSL_ATOMIC_READ(dhdp->osh, &dhdp->pktlog->enable)) {
+		OSL_ATOMIC_SET(dhdp->osh, &dhdp->pktlog->enable, TRUE);
+		DHD_ERROR(("pktlog ring is resumed. pktcount(%d)\n",
+			pktlog_ring->pktcount));
+	}
+}
+
+void dhd_pktlog_suspend(dhd_pub_t *dhdp)
+{
+	struct dhd_pktlog_ring *pktlog_ring;
+
+	if (!dhdp || !dhdp->pktlog) {
+		DHD_ERROR(("%s(): dhdp=%p pktlog=%p\n",
+			__FUNCTION__, dhdp, (dhdp ? dhdp->pktlog : NULL)));
+		return;
+	}
+
+	if (!dhdp->pktlog->pktlog_ring) {
+		DHD_ERROR(("%s(): pktlog_ring=%p\n",
+			__FUNCTION__, dhdp->pktlog->pktlog_ring));
+		return;
+	}
+
+	pktlog_ring = dhdp->pktlog->pktlog_ring;
+	if (OSL_ATOMIC_READ(dhdp->osh, &dhdp->pktlog->enable)) {
+		OSL_ATOMIC_SET(dhdp->osh, &dhdp->pktlog->enable, FALSE);
+		DHD_ERROR(("pktlog ring is suspended. pktcount(%d)\n",
+			pktlog_ring->pktcount));
+	}
+}
+#endif /* DHD_PKT_LOGGING_DBGRING */
+
 dhd_pktlog_ring_t*
 dhd_pktlog_ring_init(dhd_pub_t *dhdp, int size)
 {
@@ -264,6 +314,9 @@ dhd_pktlog_ring_init(dhd_pub_t *dhdp, int size)
 	ring->pktcount = 0;
 	ring->dhdp = dhdp;
 	ring->pktlog_ring_lock = osl_spin_lock_init(dhdp->osh);
+#ifdef DHD_PKT_LOGGING_DBGRING
+	OSL_ATOMIC_SET(dhdp->osh, &dhdp->pktlog->enable, TRUE);
+#endif /* DHD_PKT_LOGGING_DBGRING */
 
 	DHD_INFO(("%s(): pktlog ring init success\n", __FUNCTION__));
 
@@ -345,6 +398,79 @@ dhd_pktlog_ring_deinit(dhd_pub_t *dhdp, dhd_pktlog_ring_t *ring)
 
 	return ret;
 }
+
+#ifdef DHD_PKT_LOGGING_DBGRING
+int
+dhd_pktlog_ring_reinit(dhd_pub_t *dhdp)
+{
+	dhd_pktlog_ring_info_t *ring_info;
+	dhd_pktlog_ring_t *pktlog_ring;
+	dll_t *item, *next_p;
+	int waitcounts = 0;
+	dhd_dbg_ring_t *ring;
+
+	DHD_ERROR(("%s: ENTER\n", __FUNCTION__));
+
+	if (!dhdp) {
+		DHD_ERROR(("%s(): dhdp is NULL\n", __FUNCTION__));
+		return -EINVAL;
+	}
+	pktlog_ring = dhdp->pktlog->pktlog_ring;
+	ring = &dhdp->dbg->dbg_rings[PACKET_LOG_RING_ID];
+
+	if (!ring) {
+		DHD_ERROR(("%s(): ring is NULL\n", __FUNCTION__));
+		return -EINVAL;
+	}
+
+	/* stop pkt log */
+	OSL_ATOMIC_SET(dhdp->osh, &pktlog_ring->start, FALSE);
+
+	/* waiting TX/RX/TXS context is done, max timeout 1 second */
+	while ((waitcounts++ < DHD_PKTLOG_WAIT_MAXCOUNT)) {
+		if (!OSL_ATOMIC_READ(dhdp->osh, &dhdp->pktlog->pktlog_status))
+			break;
+		OSL_SLEEP(1);
+	}
+
+	if (waitcounts >= DHD_PKTLOG_WAIT_MAXCOUNT) {
+		DHD_ERROR(("%s(): pktlog wait timeout pktlog_status : 0x%x \n",
+			__FUNCTION__,
+			OSL_ATOMIC_READ(dhdp->osh, &dhdp->pktlog->pktlog_status)));
+		ASSERT(0);
+		return -EINVAL;
+	}
+
+	/* free ring_info->info.pkt */
+	for (item = dll_head_p(&pktlog_ring->ring_info_head);
+		!dll_end(&pktlog_ring->ring_info_head, item);
+		item = next_p) {
+		next_p = dll_next_p(item);
+
+		ring_info = (dhd_pktlog_ring_info_t *)item;
+
+		dll_delete((dll_t *)item);
+		if (ring_info->info.pkt) {
+			PKTFREE(pktlog_ring->dhdp->osh, ring_info->info.pkt, TRUE);
+			DHD_PKT_LOG(("%s(): pkt free pos %p\n",
+				__FUNCTION__, ring_info->info.pkt));
+		}
+		dll_append(&pktlog_ring->ring_info_free, (dll_t *)item);
+	}
+
+	/* reset stats and pktcount */
+	pktlog_ring->pktcount = 0;
+	memset(&ring->stat, 0, sizeof(struct ring_statistics));
+	/* start pkt log */
+	OSL_ATOMIC_SET(dhdp->osh, &pktlog_ring->start, TRUE);
+#ifdef DHD_PKT_LOGGING_DBGRING
+	OSL_ATOMIC_SET(dhdp->osh, &dhdp->pktlog->enable, TRUE);
+#endif /* DHD_PKT_LOGGING_DBGRING */
+	DHD_ERROR(("%s: EXIT\n", __FUNCTION__));
+
+	return BCME_OK;
+}
+#endif /* DHD_PKT_LOGGING_DBGRING */
 
 /*
  * dhd_pktlog_ring_add_pkts : add filtered packets into pktlog ring
