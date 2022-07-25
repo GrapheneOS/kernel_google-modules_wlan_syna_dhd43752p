@@ -128,6 +128,9 @@ ifneq ($(CONFIG_BCMDHD_PCIE),)
 	DHDCFLAGS += -DEWP_ETD_PRSRV_LOGS
 	DHDCFLAGS += -DEWP_EDL
 	DHDCFLAGS += -DEVENT_LOG_RATE_HC
+ifneq ($(CONFIG_SOC_GS201),)
+	DHDCFLAGS += -DCPL_TIMEOUT_RECOVERY
+endif
 endif
 
 # Enable wakelock debug function

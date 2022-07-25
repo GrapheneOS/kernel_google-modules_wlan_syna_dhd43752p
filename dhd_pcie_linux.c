@@ -2170,7 +2170,11 @@ int dhdpcie_init(struct pci_dev *pdev)
 		bus->no_cfg_restore = FALSE;
 #endif /* CONFIG_ARCH_MSM */
 #ifdef CONFIG_ARCH_EXYNOS
+#ifdef CPL_TIMEOUT_RECOVERY
+		bus->pcie_event.events = EXYNOS_PCIE_EVENT_LINKDOWN | EXYNOS_PCIE_EVENT_CPL_TIMEOUT;
+#else
 		bus->pcie_event.events = EXYNOS_PCIE_EVENT_LINKDOWN;
+#endif /* CPL_TIMEOUT_RECOVERY */
 		bus->pcie_event.user = pdev;
 		bus->pcie_event.mode = EXYNOS_PCIE_TRIGGER_CALLBACK;
 		bus->pcie_event.callback = dhdpcie_linkdown_cb;
