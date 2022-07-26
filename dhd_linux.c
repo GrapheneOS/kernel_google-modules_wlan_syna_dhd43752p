@@ -3927,55 +3927,76 @@ dhd_handle_pktdata(dhd_pub_t *dhdp, int ifidx, void *pkt, uint8 *pktdata, uint32
 		pkt_type = PKT_TYPE_EAP;
 	}
 #ifdef DHD_PKT_LOGGING_DBGRING
-	/* Allow logging for all packets without pktlog filter */
-	if (ring->log_level == RING_LOG_LEVEL_EXCESSIVE) {
-		verbose_logging = TRUE;
-		pkt_log = TRUE;
-	/* Not allow logging for any packets */
-	} else if (ring->log_level == RING_LOG_LEVEL_NONE) {
-		verbose_logging = FALSE;
-		pkt_log = FALSE;
-	}
+	do {
+		if (!OSL_ATOMIC_READ(dhdp->osh, &dhdp->pktlog->enable)) {
+			struct dhd_pktlog_ring *pktlog_ring;
+
+			pktlog_ring = dhdp->pktlog->pktlog_ring;
+			if (pktlog_ring->pktcount <= DHD_PACKET_LOG_RING_RESUME_THRESHOLD) {
+				dhd_pktlog_resume(dhdp);
+			} else {
+				/* If pktlog disabled(suspended), only allowed TXS update */
+				if (tx && pktfate) {
+					DHD_PKTLOG_TXS(dhdp, pkt, pktdata, pktid, *pktfate);
+					pkthash = __dhd_dbg_pkt_hash((uintptr_t)pkt, pktid);
+				}
+				dhd_os_dbg_urgent_pullreq(dhdp->dbg->private,
+					PACKET_LOG_RING_ID);
+				break;
+			}
+		}
+		/* Allow logging for all packets without pktlog filter */
+		if (ring->log_level == RING_LOG_LEVEL_EXCESSIVE) {
+			verbose_logging = TRUE;
+			pkt_log = TRUE;
+		/* Not allow logging for any packets */
+		} else if (ring->log_level == RING_LOG_LEVEL_NONE) {
+			verbose_logging = FALSE;
+			pkt_log = FALSE;
+		}
 #endif /* DHD_PKT_LOGGING_DBGRING */
 #ifdef DHD_SBN
-	/* Set UDR based on packet type */
-	if (dhd_udr && (pkt_type == PKT_TYPE_DHCP ||
-		pkt_type == PKT_TYPE_DNS ||
-		pkt_type == PKT_TYPE_ARP)) {
-		*dhd_udr = TRUE;
-	}
+		/* Set UDR based on packet type */
+		if (dhd_udr && (pkt_type == PKT_TYPE_DHCP ||
+			pkt_type == PKT_TYPE_DNS ||
+			pkt_type == PKT_TYPE_ARP)) {
+			*dhd_udr = TRUE;
+		}
 #endif /* DHD_SBN */
 
 #ifdef DHD_PKT_LOGGING
 #ifdef DHD_SKIP_PKTLOGGING_FOR_DATA_PKTS
-	if (pkt_type != PKT_TYPE_DATA)
+		if (pkt_type != PKT_TYPE_DATA)
 #else
 #ifdef DHD_PKT_LOGGING_DBGRING
-	if ((verbose_logging == TRUE) || (pkt_type != PKT_TYPE_DATA))
+		if ((verbose_logging == TRUE) || (pkt_type != PKT_TYPE_DATA))
 #endif /* DHD_PKT_LOGGING_DBGRING */
 #endif /* DHD_PKT_LOGGING */
-	{
-		if (pkt_log) {
-			if (tx) {
-				if (pktfate) {
-					/* Tx status */
-					DHD_PKTLOG_TXS(dhdp, pkt, pktdata, pktid, *pktfate);
+		{
+			if (pkt_log) {
+				if (tx) {
+					if (pktfate) {
+						/* Tx status */
+						DHD_PKTLOG_TXS(dhdp, pkt, pktdata, pktid, *pktfate);
+					} else {
+						/* Tx packet */
+						DHD_PKTLOG_TX(dhdp, pkt, pktdata, pktid);
+					}
+					pkthash = __dhd_dbg_pkt_hash((uintptr_t)pkt, pktid);
 				} else {
-					/* Tx packet */
-					DHD_PKTLOG_TX(dhdp, pkt, pktdata, pktid);
-				}
-				pkthash = __dhd_dbg_pkt_hash((uintptr_t)pkt, pktid);
-			} else {
-				struct sk_buff *skb = (struct sk_buff *)pkt;
-				if (pkt_wake) {
-					DHD_PKTLOG_WAKERX(dhdp, skb, pktdata);
-				} else {
-					DHD_PKTLOG_RX(dhdp, skb, pktdata);
+					struct sk_buff *skb = (struct sk_buff *)pkt;
+					if (pkt_wake) {
+						DHD_PKTLOG_WAKERX(dhdp, skb, pktdata);
+					} else {
+						DHD_PKTLOG_RX(dhdp, skb, pktdata);
+					}
 				}
 			}
 		}
-	}
 #endif /* DHD_PKT_LOGGING */
+#ifdef DHD_PKT_LOGGING_DBGRING
+	} while (FALSE);
+#endif /* DHD_PKT_LOGGING_DBGRING */
 
 	/* Dump packet data */
 	switch (pkt_type) {
@@ -9191,6 +9212,11 @@ dhd_stop(struct net_device *net)
 	/* Stop all ring buffer */
 	dhd_os_reset_logging(&dhd->pub);
 #endif
+#ifdef DHD_PKT_LOGGING_DBGRING
+	if (dhd_pktlog_ring_reinit(&dhd->pub) != BCME_OK) {
+		DHD_ERROR(("%s: dhd_pktlog_ring_reinit() error.\n", __FUNCTION__));
+	}
+#endif /* DHD_PKT_LOGGING_DBGRING */
 #ifdef APF
 	dhd_dev_apf_delete_filter(net);
 #endif /* APF */
