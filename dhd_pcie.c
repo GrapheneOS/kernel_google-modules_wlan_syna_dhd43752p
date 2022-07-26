@@ -13437,8 +13437,6 @@ dhdpci_bus_read_frames(dhd_bus_t *bus)
 #ifdef DHD_WAKE_STATUS
 	if ((msg > 0) && (bcmpcie_get_evtlog_wake(bus) > 0)) {
 		bus->dhd->evtlog_cnt = 2;
-		DHD_ERROR(("##### dhdpcie_host_wake caused by Event Logs, msg %d, dbg event log cnt %d\n",
-				msg, bus->dhd->evtlog_cnt));
 	}
 #endif
 	return more;
