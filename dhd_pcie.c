@@ -2008,13 +2008,17 @@ dhdpcie_dongle_attach(dhd_bus_t *bus)
 
 	DHD_TRACE(("%s: ENTER\n", __FUNCTION__));
 
+	chipid = dhd_get_chipid(bus);
+
+	if (chipid == (uint16)-1)
+		goto fail;
+
 	/* Configure CTO Prevention functionality */
 #if defined(BCMFPGA_HW) || defined(BCMQT_HW)
 	DHD_ERROR(("Disable CTO\n"));
 	bus->cto_enable = FALSE;
 #else
 #if defined(BCMPCIE_CTO_PREVENTION)
-	chipid = dhd_get_chipid(bus);
 
 	if (BCM4349_CHIP(chipid) || BCM4350_CHIP(chipid) || BCM4345_CHIP(chipid)) {
 		DHD_ERROR(("Disable CTO\n"));
@@ -2030,7 +2034,9 @@ dhdpcie_dongle_attach(dhd_bus_t *bus)
 #endif /* BCMFPGA_HW || BCMQT_HW */
 
 	if (PCIECTO_ENAB(bus)) {
-		dhdpcie_cto_init(bus, TRUE);
+		if (!(BCM4362_CHIP(chipid) && dhd_get_chiprev(bus) == 4)) {
+			dhdpcie_cto_init(bus, TRUE);
+		}
 	}
 
 #ifdef CONFIG_ARCH_EXYNOS
@@ -2180,15 +2186,10 @@ dhdpcie_dongle_attach(dhd_bus_t *bus)
 			((PMU_CC18_WL_P_CHAN_TIMER_SEL_8ms << PMU_CC18_WL_P_CHAN_TIMER_SEL_OFF) &
 			PMU_CC18_WL_P_CHAN_TIMER_SEL_MASK)));
 		si_setcore(bus->sih, origidx, 0);
-	}
-
-	/*
-	 * Issue dongle to reset all the cores on the chip - similar to rmmod dhd
-	 * This is required to avoid spurious interrupts to the Host and bring back
-	 * dongle to a sane state (on host soft-reboot / watchdog-reboot).
-	 */
-	if (dongle_reset_needed) {
-		dhdpcie_dongle_reset(bus);
+	} else if (BCM4362_CHIP(bus->sih->chip) && (bus->sih->chiprev == 4)) {
+		if (PCIECTO_ENAB(bus)) {
+			dhdpcie_cto_init(bus, TRUE);
+		}
 	}
 
 	/* need to set the force_bt_quiesce flag here
@@ -2201,6 +2202,15 @@ dhdpcie_dongle_attach(dhd_bus_t *bus)
 	 */
 	if (bus->sih->buscorerev >= 66) {
 		bus->force_bt_quiesce = FALSE;
+	}
+
+	/*
+	 * Issue dongle to reset all the cores on the chip - similar to rmmod dhd
+	 * This is required to avoid spurious interrupts to the Host and bring back
+	 * dongle to a sane state (on host soft-reboot / watchdog-reboot).
+	 */
+	if (dongle_reset_needed) {
+		dhdpcie_dongle_reset(bus);
 	}
 
 	dhdpcie_dongle_flr_or_pwr_toggle(bus);
