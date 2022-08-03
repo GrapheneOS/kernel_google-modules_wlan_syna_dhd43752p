@@ -1411,6 +1411,7 @@ wl_cfgscan_populate_scan_channels(struct bcm_cfg80211 *cfg,
 #ifdef P2P_SKIP_DFS
 	int is_printed = false;
 #endif /* P2P_SKIP_DFS */
+	u32 support_chanspec = 0;
 
 	if (!channels || !n_channels) {
 		/* Do full channel scan */
@@ -1439,6 +1440,11 @@ wl_cfgscan_populate_scan_channels(struct bcm_cfg80211 *cfg,
 			WL_ERR(("Invalid chanspec! Skipping channel\n"));
 			continue;
 		}
+
+		support_chanspec = wl_channel_to_chanspec(cfg->wdev->wiphy,
+			bcmcfg_to_prmry_ndev(cfg), CHSPEC_CHANNEL(chanspec), WL_CHANSPEC_BW_80);
+		if (!support_chanspec)
+			continue;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
 		if (channels[i]->band == IEEE80211_BAND_60GHZ) {

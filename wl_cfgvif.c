@@ -1257,6 +1257,14 @@ wl_cfg80211_change_virtual_iface(struct wiphy *wiphy, struct net_device *ndev,
 	wl_cfg80211_iface_state_ops(ndev->ieee80211_ptr,
 		WL_IF_CHANGE_REQ, wl_iftype, wl_mode);
 
+#if defined (BCMDONGLEHOST)
+	if (dhd_query_bus_erros(dhd)) {
+		WL_ERR(("bus error before changing role!\n"));
+		err = -EINVAL;
+		goto fail;
+	}
+#endif /* BCMDONGLEHOST */
+
 	switch (type) {
 	case NL80211_IFTYPE_ADHOC:
 		infra = 0;
