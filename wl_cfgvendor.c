@@ -3099,6 +3099,7 @@ wl_cfgvendor_set_sae_password(struct wiphy *wiphy,
 		WL_INFORM_MEM(("sae passphrase set successfully\n"));
 	}
 done:
+	bzero(&pmk, sizeof(pmk));
 	return err;
 }
 #endif /* WL_SAE || WL_CLIENT_SAE */
@@ -9228,7 +9229,7 @@ static int wl_cfgvendor_set_pmk(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void *data, int len)
 {
 	int ret = 0;
-	wsec_pmk_t pmk;
+	wsec_pmk_t pmk = {0};
 	const struct nlattr *iter;
 	int rem, type;
 	struct net_device *ndev = wdev_to_ndev(wdev);
@@ -9271,6 +9272,7 @@ static int wl_cfgvendor_set_pmk(struct wiphy *wiphy,
 	ret = wldev_ioctl_set(ndev, WLC_SET_WSEC_PMK, &pmk, sizeof(pmk));
 	WL_INFORM_MEM(("IOVAR set_pmk ret:%d", ret));
 exit:
+	bzero(&pmk, sizeof(pmk));
 	return ret;
 }
 #endif /* !BCMSUP_4WAY_HANDSHAKE || LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0) */
