@@ -5063,7 +5063,7 @@ wl_cfg80211_set_wsec_info(struct net_device *dev, uint32 *data,
 		return BCME_ERROR;
 	}
 
-	if (data_len > WLC_IOCTL_SMLEN) {
+	if (data_len > WLC_IOCTL_MEDLEN) {
 		err = BCME_BADLEN;
 		goto exit;
 	}
@@ -5098,8 +5098,10 @@ wl_cfg80211_set_wsec_info(struct net_device *dev, uint32 *data,
 	}
 
 exit:
-	if (buf)
+	if (buf) {
+		bzero(buf, sizeof(wl_wsec_info_t) + data_len);
 		MFREE(cfg->osh, buf, sizeof(wl_wsec_info_t) + data_len);
+	}
 	return err;
 }
 #endif /* SAE */
@@ -5586,10 +5588,11 @@ wl_set_set_sharedkey(struct net_device *dev,
 {
 	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
 	struct wl_security *sec;
-	struct wl_wsec_key key;
+	struct wl_wsec_key key = {0};
 	s32 val;
 	s32 err = 0;
 	s32 bssidx;
+	uint8 iov_buf[WLC_IOCTL_SMLEN] = {0};
 
 	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
 		WL_ERR(("Find p2p index from wdev(%p) failed\n", dev->ieee80211_ptr));
@@ -5616,16 +5619,22 @@ wl_set_set_sharedkey(struct net_device *dev,
 			key.index = (u32) sme->key_idx;
 			if (unlikely(key.len > sizeof(key.data))) {
 				WL_ERR(("Too long key length (%u)\n", key.len));
-				return -EINVAL;
+				err = -EINVAL;
+				goto exit;
 			}
-			memcpy(key.data, sme->key, key.len);
+			if (memcpy_s(key.data, sizeof(key.data), sme->key,
+				key.len) != BCME_OK) {
+				err = -EINVAL;
+				goto exit;
+			}
 			if ((sec->cipher_pairwise == WLAN_CIPHER_SUITE_WEP40) ||
 			    (sec->cipher_pairwise == WLAN_CIPHER_SUITE_WEP104)) {
 				key.algo = wl_rsn_cipher_wsec_key_algo_lookup(sec->cipher_pairwise);
 			} else {
 				WL_ERR(("Invalid algorithm (%d)\n",
 					sme->crypto.ciphers_pairwise[0]));
-				return -EINVAL;
+				err = -EINVAL;
+				goto exit;
 			}
 			/* Set the new key/index */
 			WL_DBG(("key length (%d) key index (%d) algo (%d)\n",
@@ -5633,10 +5642,11 @@ wl_set_set_sharedkey(struct net_device *dev,
 			WL_DBG(("key \"%s\"\n", key.data));
 			swap_key_from_BE(&key);
 			err = wldev_iovar_setbuf_bsscfg(dev, "wsec_key", &key, sizeof(key),
-				cfg->ioctl_buf, WLC_IOCTL_MAXLEN, bssidx, &cfg->ioctl_buf_sync);
+				iov_buf, WLC_IOCTL_SMLEN, bssidx, NULL);
 			if (unlikely(err)) {
 				WL_ERR(("WLC_SET_KEY error (%d)\n", err));
-				return err;
+				err = -EINVAL;
+				goto exit;
 			}
 			WL_INFORM_MEM(("key applied to fw\n"));
 			if (sec->auth_type == NL80211_AUTHTYPE_SHARED_KEY) {
@@ -5645,11 +5655,16 @@ wl_set_set_sharedkey(struct net_device *dev,
 				err = wldev_iovar_setint_bsscfg(dev, "auth", val, bssidx);
 				if (unlikely(err)) {
 					WL_ERR(("set auth failed (%d)\n", err));
-					return err;
+					err = -EINVAL;
+					goto exit;
 				}
 			}
 		}
 	}
+exit:
+	bzero(&key, sizeof(key));
+	bzero(iov_buf, sizeof(iov_buf));
+
 	return err;
 }
 
@@ -6887,10 +6902,11 @@ wl_add_keyext(struct wiphy *wiphy, struct net_device *dev,
 	u8 key_idx, const u8 *mac_addr, struct key_params *params)
 {
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
-	struct wl_wsec_key key;
+	struct wl_wsec_key key = {0};
 	s32 err = 0;
 	s32 bssidx;
 	s32 mode = wl_get_mode_by_netdev(cfg, dev);
+	uint8 iov_buf[WLC_IOCTL_SMLEN] = {0};
 
 	WL_ERR(("key index (%d)\n", key_idx));
 	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
@@ -6909,15 +6925,17 @@ wl_add_keyext(struct wiphy *wiphy, struct net_device *dev,
 		/* key delete */
 		swap_key_from_BE(&key);
 		err = wldev_iovar_setbuf_bsscfg(dev, "wsec_key", &key, sizeof(key),
-			cfg->ioctl_buf, WLC_IOCTL_MAXLEN, bssidx, &cfg->ioctl_buf_sync);
+			iov_buf, WLC_IOCTL_SMLEN, bssidx, NULL);
 		if (unlikely(err)) {
 			WL_ERR(("key delete error (%d)\n", err));
-			return err;
+			err = -EINVAL;
+			goto exit;
 		}
 	} else {
 		if (key.len > sizeof(key.data)) {
 			WL_ERR(("Invalid key length (%d)\n", key.len));
-			return -EINVAL;
+			err = -EINVAL;
+			goto exit;
 		}
 		WL_DBG(("Setting the key index %d\n", key.index));
 		memcpy(key.data, params->key, key.len);
@@ -6928,6 +6946,7 @@ wl_add_keyext(struct wiphy *wiphy, struct net_device *dev,
 			memcpy(keybuf, &key.data[24], sizeof(keybuf));
 			memcpy(&key.data[24], &key.data[16], sizeof(keybuf));
 			memcpy(&key.data[16], keybuf, sizeof(keybuf));
+			bzero(keybuf, sizeof(keybuf));
 		}
 
 		/* if IW_ENCODE_EXT_RX_SEQ_VALID set */
@@ -6943,8 +6962,8 @@ wl_add_keyext(struct wiphy *wiphy, struct net_device *dev,
 		key.algo = wl_rsn_cipher_wsec_key_algo_lookup(params->cipher);
 		if (key.algo == CRYPTO_ALGO_OFF) { //not found.
 			WL_ERR(("Invalid cipher (0x%x)\n", params->cipher));
-			bzero(&key, sizeof(key));
-			return -EINVAL;
+			err = -EINVAL;
+			goto exit;
 		}
 		swap_key_from_BE(&key);
 #if defined(BCMDONGLEHOST) && !defined(CUSTOMER_HW4)
@@ -6952,15 +6971,19 @@ wl_add_keyext(struct wiphy *wiphy, struct net_device *dev,
 		dhd_wait_pend8021x(dev);
 #endif /* BCMDONGLEHOST && !CUSTOMER_HW4 */
 		err = wldev_iovar_setbuf_bsscfg(dev, "wsec_key", &key, sizeof(key),
-			cfg->ioctl_buf, WLC_IOCTL_MAXLEN, bssidx, &cfg->ioctl_buf_sync);
+			iov_buf, WLC_IOCTL_SMLEN, bssidx, NULL);
 		if (unlikely(err)) {
 			WL_ERR(("WLC_SET_KEY error (%d)\n", err));
-			bzero(&key, sizeof(key));
-			return err;
+			err = -EINVAL;
+			goto exit;
 		}
 		WL_INFORM_MEM(("[%s] wsec key set\n", dev->name));
 	}
+exit:
+	/* clear buffers that held the keys */
 	bzero(&key, sizeof(key));
+	bzero(iov_buf, sizeof(iov_buf));
+
 	return err;
 }
 
@@ -7065,7 +7088,7 @@ wl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 	u8 key_idx, bool pairwise, const u8 *mac_addr,
 	struct key_params *params)
 {
-	struct wl_wsec_key key;
+	struct wl_wsec_key key = {0};
 	s32 val = 0;
 	s32 wsec = 0;
 	s32 err = 0;
@@ -7073,11 +7096,12 @@ wl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 	s32 bssidx = 0;
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	s32 mode = wl_get_mode_by_netdev(cfg, dev);
+	uint8 iov_buf[WLC_IOCTL_SMLEN] = {0};
 #ifdef WL_GCMP
 	uint32 algos = 0, mask = 0;
 #endif /* WL_GCMP */
 #if defined(WLAN_CIPHER_SUITE_PMK)
-	wsec_pmk_t pmk;
+	wsec_pmk_t pmk = {0};
 	struct wl_security *sec;
 #endif /* defined(WLAN_CIPHER_SUITE_PMK) */
 #ifdef BCMDONGLEHOST
@@ -7122,7 +7146,8 @@ wl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 
 	if (unlikely(key.len > sizeof(key.data))) {
 		WL_ERR(("Too long key length (%u)\n", key.len));
-		return -EINVAL;
+		err = -EINVAL;
+		goto exit;
 	}
 	memcpy(key.data, params->key, key.len);
 
@@ -7140,20 +7165,23 @@ wl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 #endif /* defined(WLAN_CIPHER_SUITE_PMK) */
 			1 ) {
 			WL_ERR(("Invalid cipher (0x%x), key.len = %d\n", params->cipher, key.len));
-			return -EINVAL;
+			err = -EINVAL;
+			goto exit;
 		}
 	}
 	switch (params->cipher) {
 	case WLAN_CIPHER_SUITE_TKIP:
 		if (params->key_len != TKIP_KEY_SIZE) {
 			WL_ERR(("wrong TKIP Key length:%d", params->key_len));
-			return -EINVAL;
+			err = -EINVAL;
+			goto exit;
 		}
 		/* wpa_supplicant switches the third and fourth quarters of the TKIP key */
 		if (mode == WL_MODE_BSS) {
 			bcopy(&key.data[24], keybuf, sizeof(keybuf));
 			bcopy(&key.data[16], &key.data[24], sizeof(keybuf));
 			bcopy(keybuf, &key.data[16], sizeof(keybuf));
+			bzero(keybuf, sizeof(keybuf));
 		}
 		WL_DBG(("WLAN_CIPHER_SUITE_TKIP\n"));
 		break;
@@ -7169,8 +7197,9 @@ wl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 		}
 
 		if (params->key_len > sizeof(pmk.key)) {
-			WL_ERR(("Worng PMK key length:%d", params->key_len));
-			return -EINVAL;
+			WL_ERR(("Wrong PMK key length:%d", params->key_len));
+			err = -EINVAL;
+			goto exit;
 		}
 		bzero(&pmk, sizeof(pmk));
 		bcopy(params->key, &pmk.key, params->key_len);
@@ -7180,23 +7209,31 @@ wl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 		if ((sec->wpa_auth == WLAN_AKM_SUITE_8021X) ||
 			(sec->wpa_auth == WL_AKM_SUITE_SHA256_1X)) {
 			err = wldev_iovar_setbuf_bsscfg(dev, "okc_info_pmk", pmk.key, pmk.key_len,
-				cfg->ioctl_buf, WLC_IOCTL_SMLEN, bssidx, &cfg->ioctl_buf_sync);
+				iov_buf, WLC_IOCTL_SMLEN, bssidx, NULL);
 			if (err) {
 				/* could fail in case that 'okc' is not supported */
-				WL_INFORM_MEM(("okc_info_pmk failed, err=%d (ignore)\n", err));
+				if (err == BCME_UNSUPPORTED) {
+					WL_DBG_MEM(("okc_info_pmk not supported. Ignore.\n"));
+				} else {
+					WL_INFORM_MEM(("okc_info_pmk failed, err=%d (ignore)\n", err));
+				}
+				/* OKC failure is not fatal */
+				err = BCME_OK;
 			}
 		}
 
 		err = wldev_ioctl_set(dev, WLC_SET_WSEC_PMK, &pmk, sizeof(pmk));
 		if (err) {
 			WL_ERR(("pmk failed, err=%d (ignore)\n", err));
-			bzero(&pmk, sizeof(pmk));
-			bzero(&key, sizeof(key));
-			return err;
+			/* PMK failure is not fatal, the connection could still go through
+			 * by handling EAPOL at supplicant level. so print error reason and
+			 * make an attempt to proceed.
+			 */
+			err = BCME_OK;
+			goto exit;
 		} else {
 			WL_DBG(("pmk set. flags:0x%x\n", pmk.flags));
 		}
-		bzero(&pmk, sizeof(pmk));
 		/* Clear key length to delete key */
 		key.len = 0;
 		break;
@@ -7244,15 +7281,24 @@ wl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 		key.rxiv.lo = (ivptr[1] << 8) | ivptr[0];
 		key.iv_initialized = true;
 	}
-	err = wldev_iovar_setbuf_bsscfg(dev, "wsec_key", &key, sizeof(key), cfg->ioctl_buf,
-		WLC_IOCTL_MAXLEN, bssidx, &cfg->ioctl_buf_sync);
-	bzero(&key, sizeof(key));
+	err = wldev_iovar_setbuf_bsscfg(dev, "wsec_key", &key, sizeof(key), iov_buf,
+		WLC_IOCTL_SMLEN, bssidx, NULL);
 	if (unlikely(err)) {
 		WL_ERR(("WLC_SET_KEY error (%d)\n", err));
-		return err;
 	}
 
 exit:
+	/* clear buffer used for setting pmk/keys */
+	bzero(&key, sizeof(key));
+	bzero(iov_buf, sizeof(iov_buf));
+	bzero(&pmk, sizeof(pmk));
+
+	if (err) {
+		WL_ERR(("add_key failed. err:%d key_idx:%d cipher:0x%x\n",
+				err, key_idx, params->cipher));
+		return err;
+	}
+
 	err = wldev_iovar_getint_bsscfg(dev, "wsec", &wsec, bssidx);
 	if (unlikely(err)) {
 		WL_ERR(("get wsec error (%d)\n", err));
@@ -7277,13 +7323,14 @@ static s32
 wl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *dev,
 	u8 key_idx, bool pairwise, const u8 *mac_addr)
 {
-	struct wl_wsec_key key;
+	struct wl_wsec_key key = {0};
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	s32 err = 0;
 	s32 bssidx;
 #ifdef BCMDONGLEHOST
 	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
 #endif /* BCMDONGLEHOST */
+	uint8 iov_buf[WLC_IOCTL_SMLEN] = {0};
 
 #if defined (BCMDONGLEHOST)
 	if (dhd_query_bus_erros(dhdp)) {
@@ -7318,8 +7365,10 @@ wl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *dev,
 	WL_DBG(("key index (%d)\n", key_idx));
 	/* Set the new key/index */
 	swap_key_from_BE(&key);
-	err = wldev_iovar_setbuf_bsscfg(dev, "wsec_key", &key, sizeof(key), cfg->ioctl_buf,
-		WLC_IOCTL_MAXLEN, bssidx, &cfg->ioctl_buf_sync);
+	err = wldev_iovar_setbuf_bsscfg(dev, "wsec_key", &key, sizeof(key), iov_buf,
+		WLC_IOCTL_SMLEN, bssidx, NULL);
+	bzero(iov_buf, sizeof(iov_buf));
+	bzero(&key, sizeof(key));
 	if (unlikely(err)) {
 		if (err == -EINVAL) {
 			if (key.index >= DOT11_MAX_DEFAULT_KEYS) {
@@ -7329,7 +7378,6 @@ wl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *dev,
 		} else {
 			WL_ERR(("WLC_SET_KEY error (%d)\n", err));
 		}
-		return err;
 	}
 	return err;
 }
@@ -7341,7 +7389,7 @@ wl_cfg80211_get_key(struct wiphy *wiphy, struct net_device *dev,
 	void (*callback) (void *cookie, struct key_params * params))
 {
 	struct key_params params;
-	struct wl_wsec_key key;
+	struct wl_wsec_key key = {0};
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	struct wl_security *sec;
 	s32 wsec;
@@ -8964,6 +9012,7 @@ wl_cfg80211_del_pmksa(struct wiphy *wiphy, struct net_device *dev,
 #endif /* WL_FILS */
 	}
 	if ((npmkids > 0) && (i < npmkids)) {
+		bzero(&cfg->pmk_list->pmkids.pmkid[i], sizeof(pmkid_v3_t));
 		for (; i < (npmkids - 1); i++) {
 			(void)memcpy_s(&cfg->pmk_list->pmkids.pmkid[i],
 				sizeof(pmkid_v3_t),
@@ -11607,9 +11656,14 @@ wl_bss_handle_sae_auth_v1(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 {
 	int err = BCME_OK;
 	wl_auth_event_t *auth_data;
-	wl_sae_key_info_t sae_key;
+	wl_sae_key_info_t sae_key = {0};
 	uint16 tlv_buf_len;
+
 	auth_data = (wl_auth_event_t *)data;
+	if (!auth_data) {
+		WL_ERR(("Invalid param"));
+		return BCME_ERROR;
+	}
 
 	tlv_buf_len = auth_data->length - WL_AUTH_EVENT_FIXED_LEN_V1;
 
@@ -11635,6 +11689,7 @@ wl_bss_handle_sae_auth_v1(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		WL_ERR(("Failed to event sae key info\n"));
 	}
 done:
+	bzero(&sae_key, sizeof(sae_key));
 	return err;
 }
 
@@ -11644,7 +11699,7 @@ wl_bss_handle_sae_auth_v2(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 {
 	int err = BCME_OK;
 	wl_auth_event_t *auth_data;
-	wl_sae_key_info_t sae_key;
+	wl_sae_key_info_t sae_key = {0};
 	uint16 tlv_buf_len;
 	uint8 ssid[DOT11_MAX_SSID_LEN];
 	const uint8 *tmp_buf;
@@ -11654,6 +11709,10 @@ wl_bss_handle_sae_auth_v2(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	pmkid_v3_t *t_pmkid = NULL;
 
 	auth_data = (wl_auth_event_t *)data;
+	if (!auth_data) {
+		WL_ERR(("Invalid param"));
+		return BCME_ERROR;
+	}
 
 	tlv_buf_len = auth_data->length - WL_AUTH_EVENT_FIXED_LEN_V2;
 
@@ -11678,7 +11737,7 @@ wl_bss_handle_sae_auth_v2(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	tmp_buf = bcm_get_data_from_xtlv_buf(auth_data->xtlvs, tlv_buf_len,
 		WL_AUTH_PMKID_TYPE_TLV_ID, &type_len, BCM_XTLV_OPTION_ALIGN32);
 
-	memcpy(&type, tmp_buf, MIN(type_len, sizeof(type)));
+	memcpy_s(&type, sizeof(type), tmp_buf, MIN(type_len, sizeof(type)));
 	if (type == WL_AUTH_PMKID_TYPE_SSID) {
 		int idx;
 		int idx2;
@@ -11715,17 +11774,35 @@ wl_bss_handle_sae_auth_v2(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			return BCME_NOTFOUND;
 		}
 		bzero(t_pmkid, sizeof(pmkid_v3_t));
-		memcpy(&t_pmkid->bssid, event->addr.octet, 6);
+		memcpy_s(&t_pmkid->bssid, sizeof(t_pmkid->bssid), event->addr.octet,
+			ETHER_ADDR_LEN);
+
+		if (ssid_len > (uint8)sizeof(t_pmkid->ssid)) {
+			WL_ERR(("insufficient ssid buffer\n"));
+			err = BCME_BUFTOOSHORT;
+			goto done;
+		}
 		t_pmkid->ssid_len = ssid_len;
 		err = memcpy_s(t_pmkid->ssid, sizeof(t_pmkid->ssid), ssid, ssid_len);
 		if (err != BCME_OK) {
 			goto done;
 		}
 		/* COPY but not used */
-		t_pmkid->pmkid_len = sae_key.pmkid_len;
-		memcpy(t_pmkid->pmkid, sae_key.pmkid, sae_key.pmkid_len);
+		if (sae_key.pmkid_len > (uint16)sizeof(t_pmkid->pmkid)) {
+			WL_ERR(("insufficient pmkid buffer\n"));
+			err = BCME_BUFTOOSHORT;
+			goto done;
+		}
+		t_pmkid->pmkid_len = MIN(sizeof(t_pmkid->pmkid), sae_key.pmkid_len);
+		memcpy_s(t_pmkid->pmkid, sizeof(t_pmkid->pmkid), sae_key.pmkid, sae_key.pmkid_len);
+
+		if (sae_key.pmk_len > (uint16)sizeof(t_pmkid->pmk)) {
+			WL_ERR(("insufficient pmk buffer\n"));
+			err = BCME_BUFTOOSHORT;
+			goto done;
+		}
 		t_pmkid->pmk_len = sae_key.pmk_len;
-		memcpy(t_pmkid->pmk, sae_key.pmk, sae_key.pmk_len);
+		memcpy_s(t_pmkid->pmk, sizeof(t_pmkid->pmk), sae_key.pmk, sae_key.pmk_len);
 	}
 
 	err = wl_cfg80211_event_sae_key(cfg, ndev, &sae_key);
@@ -11733,6 +11810,7 @@ wl_bss_handle_sae_auth_v2(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		WL_ERR(("Failed to event sae key info\n"));
 	}
 done:
+	bzero(&sae_key, sizeof(sae_key));
 	return err;
 }
 
@@ -12407,7 +12485,7 @@ wl_cfg80211_handle_deauth_ind(struct bcm_cfg80211 *cfg, wl_assoc_status_t *as)
 	struct net_device *ndev = as->ndev;
 	const wl_event_msg_t *e = as->event_msg;
 	uint8 bssid[ETHER_ADDR_LEN];
-	struct cfg80211_pmksa pmksa;
+	struct cfg80211_pmksa pmksa = {0};
 	s32 val = 0;
 	struct wlc_ssid *curssid;
 	pmkid_list_v3_t *spmk_list = &cfg->spmk_info_list->pmkids;
@@ -12451,6 +12529,7 @@ wl_cfg80211_handle_deauth_ind(struct bcm_cfg80211 *cfg, wl_assoc_status_t *as)
 		if (!bFound) {
 			goto done;
 		}
+		bzero(&spmk_list->pmkid[idx], sizeof(pmkid_v3_t));
 		for (; idx < spmk_list->count - 1; idx++) {
 			memcpy_s(&spmk_list->pmkid[idx], sizeof(pmkid_v3_t),
 				&spmk_list->pmkid[idx + 1], sizeof(pmkid_v3_t));
@@ -12459,6 +12538,7 @@ wl_cfg80211_handle_deauth_ind(struct bcm_cfg80211 *cfg, wl_assoc_status_t *as)
 		spmk_list->count--;
 	}
 done:
+	bzero(&pmksa, sizeof(pmksa));
 #endif /* WL_SAE */
 	return err;
 }
@@ -20746,7 +20826,7 @@ wl_cfg80211_set_rekey_data(struct wiphy *wiphy, struct net_device *dev,
 {
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	s32 err = 0;
-	gtk_keyinfo_t keyinfo;
+	gtk_keyinfo_t keyinfo = {0};
 
 	WL_DBG(("Enter\n"));
 	if (data == NULL || cfg->p2p_net == dev) {
@@ -20777,7 +20857,7 @@ static int wl_cfg80211_set_pmk(struct wiphy *wiphy, struct net_device *dev,
 	const struct cfg80211_pmk_conf *conf)
 {
 	int ret = 0;
-	wsec_pmk_t pmk;
+	wsec_pmk_t pmk = {0};
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	struct wl_security *sec;
 	s32 bssidx;
@@ -20785,19 +20865,19 @@ static int wl_cfg80211_set_pmk(struct wiphy *wiphy, struct net_device *dev,
 	pmk.key_len = conf->pmk_len;
 	if (pmk.key_len > sizeof(pmk.key)) {
 		ret = -EINVAL;
-		return ret;
+		goto exit;
 	}
 	pmk.flags = 0;
 	ret = memcpy_s(&pmk.key, sizeof(pmk.key), conf->pmk, conf->pmk_len);
 	if (ret) {
 		ret = -EINVAL;
-		return ret;
+		goto exit;
 	}
 
 	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) < 0) {
 		WL_ERR(("Find index failed\n"));
 		ret = -EINVAL;
-		return ret;
+		goto exit;
 	}
 
 	sec = wl_read_prof(cfg, dev, WL_PROF_SEC);
@@ -20815,18 +20895,20 @@ static int wl_cfg80211_set_pmk(struct wiphy *wiphy, struct net_device *dev,
 	if (ret) {
 		WL_ERR(("wl_cfg80211_set_pmk error:%d", ret));
 		ret = -EINVAL;
-		return ret;
+		goto exit;
 	} else {
 		WL_DBG(("pmk added for mac:"MACDBG"\n", MAC2STRDBG(conf->aa)));
 	}
-	return 0;
+exit:
+	bzero(&pmk, sizeof(pmk));
+	return ret;
 }
 
 static int wl_cfg80211_del_pmk(struct wiphy *wiphy, struct net_device *dev,
 	const u8 *aa)
 {
 	int err = BCME_OK;
-	struct cfg80211_pmksa pmksa;
+	struct cfg80211_pmksa pmksa = {0};
 
 	/* build up cfg80211_pmksa structure to use existing wl_cfg80211_update_pmksa API */
 	bzero(&pmksa, sizeof(pmksa));
@@ -23376,6 +23458,7 @@ wl_cfg80211_spmk_pmkdb_del_spmk(struct bcm_cfg80211 *cfg, struct cfg80211_pmksa 
 		return;
 	}
 
+	bzero(&spmk_list->pmkid[i], sizeof(pmkid_v3_t));
 	for (; i < spmk_list->count - 1; i++) {
 		memcpy_s(&spmk_list->pmkid[i], sizeof(pmkid_v3_t),
 			&spmk_list->pmkid[i + 1], sizeof(pmkid_v3_t));
