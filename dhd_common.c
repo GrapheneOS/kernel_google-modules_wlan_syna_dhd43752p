@@ -968,7 +968,7 @@ dhd_dump_sssr_reg_info_v3(dhd_pub_t *dhd)
 		sssr_reg_info->hwa_regs.wrapper_regs.resetctrl));
 	DHD_ERROR(("HWA regs value seq for reset \n"));
 	for (i = 0; i < SSSR_HWA_RESET_SEQ_STEPS; i++) {
-		DHD_ERROR(("hwa_resetseq_val[%d] 0x%x", i,
+		DHD_ERROR(("hwa_resetseq_val[%d] 0x%x\n", i,
 			sssr_reg_info->hwa_regs.hwa_resetseq_val[i]));
 	}
 }
@@ -1061,10 +1061,19 @@ dhd_dump_sssr_reg_info(dhd_pub_t *dhd)
 #endif /* DHD_PCIE_REG_ACCESS */
 }
 
+void dhdpcie_fill_sssr_reg_info(dhd_pub_t *dhd);
+
 int
 dhd_get_sssr_reg_info(dhd_pub_t *dhd)
 {
 	int ret;
+
+	if (dhd->force_sssr_init) {
+		dhdpcie_fill_sssr_reg_info(dhd);
+		dhd->force_sssr_init = FALSE;
+		goto done;
+	}
+
 	/* get sssr_reg_info from firmware */
 	ret = dhd_iovar(dhd, 0, "sssr_reg_info", NULL, 0,  (char *)dhd->sssr_reg_info,
 		sizeof(sssr_reg_info_cmn_t), FALSE);
@@ -1074,6 +1083,7 @@ dhd_get_sssr_reg_info(dhd_pub_t *dhd)
 		return BCME_ERROR;
 	}
 
+done:
 	dhd_dump_sssr_reg_info(dhd);
 	return BCME_OK;
 }

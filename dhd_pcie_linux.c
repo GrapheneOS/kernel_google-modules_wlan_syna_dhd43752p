@@ -2932,6 +2932,7 @@ int dhdpcie_oob_intr_register(dhd_bus_t *bus)
 		if (err) {
 			DHD_ERROR(("%s: request_irq failed with %d\n",
 				__FUNCTION__, err));
+			free_irq(dhdpcie_osinfo->oob_irq_num, bus);
 			return err;
 		}
 		err = enable_irq_wake(dhdpcie_osinfo->oob_irq_num);

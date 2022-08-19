@@ -17874,3 +17874,84 @@ dhdpcie_induce_cbp_hang(dhd_pub_t *dhd)
 	val = 1;
 	dhd_sbreg_op(dhd, addr, &val, FALSE);
 }
+
+#ifdef DHD_SSSR_DUMP
+void
+dhd_fill_sssr_reg_info_4362(dhd_pub_t *dhd)
+{
+	sssr_reg_info_cmn_t *sssr_reg_info_cmn = dhd->sssr_reg_info;
+	sssr_reg_info_v1_t *sssr_reg_info;
+
+	sssr_reg_info = (sssr_reg_info_v1_t *)&sssr_reg_info_cmn->rev1;
+
+	DHD_ERROR(("%s:\n", __FUNCTION__));
+	sssr_reg_info->version = SSSR_REG_INFO_VER_1;
+	sssr_reg_info->length = sizeof(sssr_reg_info_v1_t);
+
+	sssr_reg_info->pmu_regs.base_regs.pmuintmask0 = 0x18012700;
+	sssr_reg_info->pmu_regs.base_regs.pmuintmask1 = 0x18012704;
+	sssr_reg_info->pmu_regs.base_regs.resreqtimer = 0x18012644;
+	sssr_reg_info->pmu_regs.base_regs.macresreqtimer = 0x18012688;
+	sssr_reg_info->pmu_regs.base_regs.macresreqtimer1 = 0x180126f0;
+
+	sssr_reg_info->chipcommon_regs.base_regs.intmask = 0x18000024;
+	sssr_reg_info->chipcommon_regs.base_regs.powerctrl = 0x180001e8;
+	sssr_reg_info->chipcommon_regs.base_regs.clockcontrolstatus = 0x180001e0;
+	sssr_reg_info->chipcommon_regs.base_regs.powerctrl_mask = 0xf00;
+
+	sssr_reg_info->arm_regs.base_regs.clockcontrolstatus = 0x180021e0;
+	sssr_reg_info->arm_regs.base_regs.clockcontrolstatus_val = 0x20;
+	sssr_reg_info->arm_regs.wrapper_regs.resetctrl = 0x18102800;
+	sssr_reg_info->arm_regs.wrapper_regs.itopoobb = 0x18102f34;
+
+	sssr_reg_info->pcie_regs.base_regs.ltrstate = 0x18003c38;
+	sssr_reg_info->pcie_regs.base_regs.clockcontrolstatus = 0x180031e0;
+	sssr_reg_info->pcie_regs.base_regs.clockcontrolstatus_val = 0x0;
+	sssr_reg_info->pcie_regs.wrapper_regs.itopoobb = 0x18103f34;
+
+	sssr_reg_info->vasip_regs.wrapper_regs.ioctrl = 0x0;
+	sssr_reg_info->vasip_regs.vasip_sr_addr = 0x0;
+	sssr_reg_info->vasip_regs.vasip_sr_size = 0x8000;
+
+	sssr_reg_info->mac_regs[0].base_regs.xmtaddress = 0x18001130;
+	sssr_reg_info->mac_regs[0].base_regs.xmtdata = 0x18001134;
+	sssr_reg_info->mac_regs[0].base_regs.clockcontrolstatus = 0x180011e0;
+	sssr_reg_info->mac_regs[0].base_regs.clockcontrolstatus_val = 0x20;
+	sssr_reg_info->mac_regs[0].wrapper_regs.resetctrl = 0x18101800;
+	sssr_reg_info->mac_regs[0].wrapper_regs.itopoobb = 0x18101f34;
+	sssr_reg_info->mac_regs[0].wrapper_regs.ioctrl = 0x18101408;
+	sssr_reg_info->mac_regs[0].wrapper_regs.ioctrl_resetseq_val[0] = 0xc7;
+	sssr_reg_info->mac_regs[0].wrapper_regs.ioctrl_resetseq_val[1] = 0x15f;
+	sssr_reg_info->mac_regs[0].wrapper_regs.ioctrl_resetseq_val[2] = 0x151;
+	sssr_reg_info->mac_regs[0].wrapper_regs.ioctrl_resetseq_val[3] = 0x155;
+	sssr_reg_info->mac_regs[0].wrapper_regs.ioctrl_resetseq_val[4] = 0xc5;
+	sssr_reg_info->mac_regs[0].sr_size = 0x90000;
+
+	sssr_reg_info->mac_regs[1].base_regs.xmtaddress = 0x0;
+	sssr_reg_info->mac_regs[1].base_regs.xmtdata = 0x0;
+	sssr_reg_info->mac_regs[1].base_regs.clockcontrolstatus = 0x0;
+	sssr_reg_info->mac_regs[1].base_regs.clockcontrolstatus_val = 0x0;
+	sssr_reg_info->mac_regs[1].wrapper_regs.resetctrl = 0x0;
+	sssr_reg_info->mac_regs[1].wrapper_regs.itopoobb = 0x0;
+	sssr_reg_info->mac_regs[1].wrapper_regs.ioctrl = 0x0;
+	sssr_reg_info->mac_regs[1].wrapper_regs.ioctrl_resetseq_val[0] = 0x0;
+	sssr_reg_info->mac_regs[1].wrapper_regs.ioctrl_resetseq_val[1] = 0x0;
+	sssr_reg_info->mac_regs[1].wrapper_regs.ioctrl_resetseq_val[2] = 0x0;
+	sssr_reg_info->mac_regs[1].wrapper_regs.ioctrl_resetseq_val[3] = 0x0;
+	sssr_reg_info->mac_regs[1].wrapper_regs.ioctrl_resetseq_val[4] = 0x0;
+	sssr_reg_info->mac_regs[1].sr_size = 0x0;
+
+	sssr_reg_info->dig_mem_info.dig_sr_addr = 0x0;
+	sssr_reg_info->dig_mem_info.dig_sr_size = 0x0;
+
+	dhd->sssr_inited = TRUE;
+}
+
+void
+dhdpcie_fill_sssr_reg_info(dhd_pub_t *dhd)
+{
+	if (BCM4362_CHIP(dhd_get_chipid(dhd->bus))) {
+		dhd_fill_sssr_reg_info_4362(dhd);
+	}
+}
+#endif /* DHD_SSSR_DUMP */
