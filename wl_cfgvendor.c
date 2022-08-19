@@ -10475,6 +10475,8 @@ wl_cfgvendor_tx_power_scenario(struct wiphy *wiphy,
 exit:
 	return err;
 }
+#endif /* WL_SAR_TX_POWER */
+
 #ifdef WL_CUSTOM_MAPPING_OF_DSCP
 #define UNUSED_PRIO	0xffu
 enum andr_user_ac {
@@ -10638,7 +10640,6 @@ wl_cfgvendor_custom_mapping_of_dscp_reset(struct wiphy *wiphy,
 	return wl_set_dscp_default_priority(cfg->up_table);
 }
 #endif /* WL_CUSTOM_MAPPING_OF_DSCP */
-#endif /* WL_SAR_TX_POWER */
 
 #ifdef SUPPORT_OTA_UPDATE
 static void
