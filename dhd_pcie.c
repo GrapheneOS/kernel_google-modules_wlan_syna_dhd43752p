@@ -2602,6 +2602,41 @@ dhdpcie_advertise_bus_cleanup(dhd_pub_t *dhdp)
 	return;
 }
 
+/*
+ * dhdpcie_busbusy_wait mark busstate as DHD_BUS_DOWN_IN_PROGRESS and waits
+ * for all the contexts to garacefully exit. All the bus usage contexts before
+ * marking busstate as busy, will check for whether the busstate is DHD_BUS_DOWN
+ * or DHD_BUS_DOWN_IN_PROGRESS, if so they will exit from there itself without
+ * marking dhd_bus_busy_state as BUSY.
+ */
+void
+dhdpcie_busbusy_wait(dhd_pub_t *dhdp)
+{
+	unsigned long flags;
+	int timeleft;
+
+	dhdp->dhd_watchdog_ms_backup = dhd_watchdog_ms;
+	if (dhdp->dhd_watchdog_ms_backup) {
+		DHD_ERROR(("%s: Disabling wdtick\n", __FUNCTION__));
+		dhd_os_wd_timer(dhdp, 0);
+	}
+
+	DHD_GENERAL_LOCK(dhdp, flags);
+	dhdp->busstate = DHD_BUS_DOWN_IN_PROGRESS;
+	DHD_GENERAL_UNLOCK(dhdp, flags);
+
+	timeleft = dhd_os_busbusy_wait_negation(dhdp, &dhdp->dhd_bus_busy_state);
+	if ((timeleft == 0) || (timeleft == 1)) {
+		DHD_ERROR(("%s : Timeout due to dhd_bus_busy_state=0x%x\n",
+				__FUNCTION__, dhdp->dhd_bus_busy_state));
+	}
+
+	DHD_GENERAL_LOCK(dhdp, flags);
+	dhdp->busstate = DHD_BUS_DOWN;
+	DHD_GENERAL_UNLOCK(dhdp, flags);
+	return;
+}
+
 static void
 dhdpcie_bus_remove_prep(dhd_bus_t *bus)
 {

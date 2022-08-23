@@ -360,6 +360,7 @@ int dhd_bus_perform_flr_with_quiesce(dhd_pub_t *dhdp, struct dhd_bus *bus,
 extern void dhdpcie_advertise_bus_cleanup(dhd_pub_t  *dhdp);
 extern void dhd_msgbuf_iovar_timeout_dump(dhd_pub_t *dhd);
 extern void dhdpcie_induce_cbp_hang(dhd_pub_t *dhd);
+extern void dhdpcie_busbusy_wait(dhd_pub_t *dhdp);
 #endif /* BCMPCIE */
 
 extern bool dhd_bus_force_bt_quiesce_enabled(struct dhd_bus *bus);

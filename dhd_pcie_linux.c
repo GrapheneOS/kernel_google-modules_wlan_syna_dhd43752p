@@ -185,8 +185,9 @@ typedef struct dhdpcie_smmu_info {
 /* function declarations */
 static int __devinit
 dhdpcie_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
-static void __devexit
-dhdpcie_pci_remove(struct pci_dev *pdev);
+static void __devexit dhdpcie_pci_remove(struct pci_dev *pdev);
+static void __devexit dhdpcie_pci_shutdown(struct pci_dev *pdev);
+static void __devexit dhdpcie_pci_stop(struct pci_dev *pdev);
 static int dhdpcie_init(struct pci_dev *pdev);
 static irqreturn_t dhdpcie_isr(int irq, void *arg);
 /* OS Routine functions for PCI suspend/resume */
@@ -291,6 +292,7 @@ static struct pci_driver dhdpcie_driver = {
 	resume_early: dhdpcie_pci_resume_early,
 #endif /* BT_OVER_PCIE */
 #endif /* DHD_PCIE_RUNTIMEPM || DHD_PCIE_NATIVE_RUNTIMEPM */
+	shutdown:	dhdpcie_pci_shutdown,
 };
 
 int dhdpcie_init_succeeded = FALSE;
@@ -1625,7 +1627,7 @@ dhdpcie_detach(dhdpcie_info_t *pch)
 }
 
 void __devexit
-dhdpcie_pci_remove(struct pci_dev *pdev)
+dhdpcie_pci_stop(struct pci_dev *pdev)
 {
 	osl_t *osh = NULL;
 	dhdpcie_info_t *pch = NULL;
@@ -1690,6 +1692,36 @@ dhdpcie_pci_remove(struct pci_dev *pdev)
 
 	DHD_TRACE(("%s Exit\n", __FUNCTION__));
 
+	return;
+}
+
+void __devexit
+dhdpcie_pci_remove(struct pci_dev *pdev)
+{
+	DHD_ERROR(("%s Enter\n", __FUNCTION__));
+	dhdpcie_pci_stop(pdev);
+	return;
+}
+
+void __devexit
+dhdpcie_pci_shutdown(struct pci_dev *pdev)
+{
+	dhdpcie_info_t *pch = NULL;
+	dhd_bus_t *bus = NULL;
+
+	pch = pci_get_drvdata(pdev);
+	bus = pch->bus;
+	DHD_ERROR(("%s Enter\n", __FUNCTION__));
+
+	/* Stop all interface network queue */
+	dhd_bus_stop_queue(bus);
+	/* Disable IRQ */
+	dhdpcie_disable_irq(bus);
+	/* Kill dpc */
+	dhd_dpc_kill(bus->dhd);
+	/* Stop RPM timer */
+	DHD_STOP_RPM_TIMER(bus->dhd);
+	dhdpcie_busbusy_wait(bus->dhd);
 	return;
 }
 
