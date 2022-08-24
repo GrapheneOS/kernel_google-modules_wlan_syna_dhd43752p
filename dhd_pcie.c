@@ -3387,7 +3387,14 @@ concate_revision_from_cisinfo(dhd_bus_t *bus, char *fw_path, char *nv_path)
 		}
 #endif /* BCM4361_CHIP */
 		strncat(nv_path, info->nvram_ext, strlen(info->nvram_ext));
+#if defined(SUPPORT_MULTIPLE_NVRAM) || defined(SUPPORT_MULTIPLE_CLMBLOB)
+		dhd_set_platform_ext_name_for_chip_version(info->nvram_ext);
+#endif /* SUPPORT_MULTIPLE_NVRAM || SUPPORT_MULTIPLE_CLMBLOB */
 		strncat(fw_path, info->fw_ext, strlen(info->fw_ext));
+#if defined(DHD_COREDUMP) && defined(SUPPORT_MULTIPLE_REVISION_MAP)
+		if (!bcmstrnstr(map_path, PATH_MAX, info->fw_ext, strlen(info->fw_ext)))
+			strncat(map_path, info->fw_ext, strlen(info->fw_ext));
+#endif /* DHD_COREDUMP  && SUPPORT_MULTIPLE_REVISION_MAP */
 	} else {
 		DHD_ERROR(("%s:failed to find extension for nvram and firmware\n", __FUNCTION__));
 		ret = BCME_ERROR;
@@ -3540,6 +3547,12 @@ dhd_bus_download_firmware(struct dhd_bus *bus, osl_t *osh,
 	}
 #endif /* SUPPORT_MULTIPLE_REVISION */
 
+#if defined(SUPPORT_MULTIPLE_NVRAM)
+	if (dhd_get_platform_naming_for_nvram_clmblob_file(bus->nv_path) != BCME_OK) {
+		DHD_ERROR(("%s: Platform's NVRAMs file don't exist."
+			" Download default NVRAM file.\n", __FUNCTION__));
+	}
+#endif /* SUPPORT_MULTIPLE_NVRAM */
 #if defined(DHD_BLOB_EXISTENCE_CHECK)
 	dhd_set_blob_support(bus->dhd, bus->fw_path);
 #endif /* DHD_BLOB_EXISTENCE_CHECK */

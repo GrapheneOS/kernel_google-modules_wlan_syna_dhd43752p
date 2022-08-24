@@ -195,57 +195,271 @@ dhd_wlan_init_mac_addr(void)
 #endif /* GET_CUSTOM_MAC_ENABLE */
 
 #if defined(SUPPORT_MULTIPLE_NVRAM) || defined(SUPPORT_MULTIPLE_CLMBLOB)
+enum {
+	CHIP_REV_SKU = 0,
+	CHIP_REV = 1,
+	CHIP_SKU = 2,
+	CHIP = 3,
+	REV_SKU = 4,
+	REV_ONLY = 5,
+	SKU_ONLY = 6,
+	NO_EXT_NAME = 7,
+	MAX_FILE_COUNT
+};
 
-#define CMDLINE_REVISION_KEY "androidboot.revision="
-#define CMDLINE_SKU_KEY "androidboot.hardware.sku="
+#define PLT_PATH "/chosen/plat"
 
-char val_revision[MAX_HW_INFO_LEN] = {0};
-char val_sku[MAX_HW_INFO_LEN] = {0};
+#ifndef CDB_PATH
+#define CDB_PATH "/chosen/config"
+#endif /* CDB_PATH */
+
+#define HW_SKU    "sku"
+#define HW_STAGE  "stage"
+#define HW_MAJOR  "major"
+#define HW_MINOR  "minor"
+
+char val_revision[MAX_HW_INFO_LEN] = "NA";
+char val_sku[MAX_HW_INFO_LEN] = "NA";
+
+typedef struct {
+    char hw_id[MAX_HW_INFO_LEN];
+    char sku[MAX_HW_INFO_LEN];
+} sku_info_t;
+
+sku_info_t sku_table[] = {
+	0
+};
+
+enum hw_stage_attr {
+	DEV = 1,
+	PROTO = 2,
+	EVT = 3,
+	DVT = 4,
+	PVT = 5,
+	MP = 6,
+	HW_STAGE_MAX
+};
+typedef struct platform_hw_info {
+	uint8 avail_bmap;
+	char ext_name[MAX_FILE_COUNT][MAX_HW_EXT_LEN];
+} platform_hw_info_t;
+platform_hw_info_t platform_hw_info;
+
+static void
+dhd_set_platform_ext_name(char *hw_rev, char* hw_sku)
+{
+	bzero(&platform_hw_info, sizeof(platform_hw_info_t));
+
+	if (strncmp(hw_rev, "NA", MAX_HW_INFO_LEN) != 0) {
+		if (strncmp(hw_sku, "NA", MAX_HW_INFO_LEN) != 0) {
+			snprintf(platform_hw_info.ext_name[REV_SKU], MAX_HW_EXT_LEN, "_%s_%s",
+				hw_rev, hw_sku);
+			setbit(&platform_hw_info.avail_bmap, REV_SKU);
+		}
+		snprintf(platform_hw_info.ext_name[REV_ONLY], MAX_HW_EXT_LEN, "_%s", hw_rev);
+		setbit(&platform_hw_info.avail_bmap, REV_ONLY);
+	}
+
+	if (strncmp(hw_sku, "NA", MAX_HW_INFO_LEN) != 0) {
+		snprintf(platform_hw_info.ext_name[SKU_ONLY], MAX_HW_EXT_LEN, "_%s", hw_sku);
+		setbit(&platform_hw_info.avail_bmap, SKU_ONLY);
+	}
+
+#ifdef USE_CID_CHECK
+	setbit(&platform_hw_info.avail_bmap, NO_EXT_NAME);
+#endif /* USE_CID_CHECK */
+
+	return;
+}
+
+void
+dhd_set_platform_ext_name_for_chip_version(char* chip_version)
+{
+	if (strncmp(val_revision, "NA", MAX_HW_INFO_LEN) != 0) {
+		if (strncmp(val_sku, "NA", MAX_HW_INFO_LEN) != 0) {
+			snprintf(platform_hw_info.ext_name[CHIP_REV_SKU], MAX_HW_EXT_LEN,
+				"%s_%s_%s", chip_version, val_revision, val_sku);
+			setbit(&platform_hw_info.avail_bmap, CHIP_REV_SKU);
+		}
+
+		snprintf(platform_hw_info.ext_name[CHIP_REV], MAX_HW_EXT_LEN, "%s_%s",
+			chip_version, val_revision);
+		setbit(&platform_hw_info.avail_bmap, CHIP_REV);
+	}
+	if (strncmp(val_sku, "NA", MAX_HW_INFO_LEN) != 0) {
+		snprintf(platform_hw_info.ext_name[CHIP_SKU], MAX_HW_EXT_LEN, "%s_%s",
+			chip_version, val_sku);
+		setbit(&platform_hw_info.avail_bmap, CHIP_SKU);
+	}
+
+	snprintf(platform_hw_info.ext_name[CHIP], MAX_HW_EXT_LEN, "%s", chip_version);
+	setbit(&platform_hw_info.avail_bmap, CHIP);
+
+	return;
+}
+
+static int
+dhd_check_file_exist(char* fname)
+{
+	int err = BCME_OK;
+#ifdef DHD_LINUX_STD_FW_API
+	const struct firmware *fw = NULL;
+#else
+	struct file *filep = NULL;
+	mm_segment_t fs;
+#endif /* DHD_LINUX_STD_FW_API */
+
+	if (fname == NULL) {
+		DHD_ERROR(("%s: ERROR fname is NULL \n", __FUNCTION__));
+		return BCME_ERROR;
+	}
+
+#ifdef DHD_LINUX_STD_FW_API
+	err = dhd_os_get_img_fwreq(&fw, fname);
+	if (err < 0) {
+		DHD_LOG_MEM(("dhd_os_get_img(Request Firmware API) error : %d\n",
+			err));
+		goto fail;
+	}
+#else
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	filep = dhd_filp_open(fname, O_RDONLY, 0);
+	if (IS_ERR(filep) || (filep == NULL)) {
+		DHD_LOG_MEM(("%s: Failed to open %s \n",  __FUNCTION__, fname));
+		err = BCME_NOTFOUND;
+		goto fail;
+	}
+#endif /* DHD_LINUX_STD_FW_API */
+
+fail:
+#ifdef DHD_LINUX_STD_FW_API
+	if (fw) {
+		dhd_os_close_img_fwreq(fw);
+	}
+#else
+	if (!IS_ERR(filep))
+		dhd_filp_close(filep, NULL);
+
+	set_fs(fs);
+#endif /* DHD_LINUX_STD_FW_API */
+	return err;
+}
+
+int
+dhd_get_platform_naming_for_nvram_clmblob_file(char *file_name)
+{
+	int i, error = BCME_OK;
+	char tmp_fname[MAX_FILE_LEN] = {0};
+
+	if (!platform_hw_info.avail_bmap) {
+		DHD_ERROR(("ext_name is not composed.\n"));
+		return BCME_ERROR;
+	}
+
+	for (i = 0; i < MAX_FILE_COUNT; i++) {
+		if (!isset(&platform_hw_info.avail_bmap, i)) {
+			continue;
+		}
+		memset_s(tmp_fname, MAX_FILE_LEN, 0, MAX_FILE_LEN);
+		snprintf(tmp_fname, MAX_FILE_LEN,
+			"%s%s", file_name, platform_hw_info.ext_name[i]);
+		error = dhd_check_file_exist(tmp_fname);
+		if (error == BCME_OK) {
+			DHD_LOG_MEM(("%02d path[%s]\n", i, tmp_fname));
+			strlcpy(file_name, tmp_fname, MAX_FILE_LEN);
+			break;
+		}
+	}
+	return error;
+}
 
 static int
 dhd_wlan_init_hardware_info(void)
 {
 
-	struct device_node *node;
-	char *cp;
-	const char *command_line = NULL;
-	char match_str[MAX_HW_INFO_LEN] = {0};
-	size_t len;
+	struct device_node *node = NULL;
+	const char *hw_sku = NULL;
+	int hw_stage = -1;
+	int hw_major = -1;
+	int hw_minor = -1;
+	int i;
 
-	node = of_find_node_by_path("/chosen");
+	node = of_find_node_by_path(PLT_PATH);
 	if (!node) {
-		DHD_ERROR(("Node not created under chosen\n"));
-		return -ENODEV;
+		DHD_ERROR(("Node not created under %s\n", PLT_PATH));
+		goto exit;
 	} else {
 
-		of_property_read_string(node, "bootargs", &command_line);
-		len = strlen(command_line);
-
-		cp = strnstr(command_line, CMDLINE_REVISION_KEY, len);
-		if (cp) {
-			sscanf(cp, CMDLINE_REVISION_KEY"%s", val_revision);
+		if (of_property_read_u32(node, HW_STAGE, &hw_stage)) {
+			DHD_ERROR(("%s: Failed to get hw stage\n", __FUNCTION__));
+			goto exit;
 		}
 
-		cp = strnstr(command_line, CMDLINE_SKU_KEY, len);
-		if (cp) {
-			sscanf(cp, CMDLINE_SKU_KEY"%s", match_str);
-			if (strcmp(match_str, "G9S9B") == 0 ||
-				strcmp(match_str, "G8V0U") == 0 ||
-				strcmp(match_str, "GFQM1") == 0) {
-				strcpy(val_sku, "MMW");
-			} else if (strcmp(match_str, "GR1YH") == 0 ||
-				strcmp(match_str, "GF5KQ") == 0 ||
-				strcmp(match_str, "GPQ72") == 0) {
-				strcpy(val_sku, "JPN");
-			} else if (strcmp(match_str, "GB7N6") == 0 ||
-				strcmp(match_str, "GLU0G") == 0 ||
-				strcmp(match_str, "GNA8F") == 0) {
-				strcpy(val_sku, "ROW");
-			} else {
-				strcpy(val_sku, "NA");
-			}
+		if (of_property_read_u32(node, HW_MAJOR, &hw_major)) {
+			DHD_ERROR(("%s: Failed to get hw major\n", __FUNCTION__));
+			goto exit;
+		}
+
+		if (of_property_read_u32(node, HW_MINOR, &hw_minor)) {
+			DHD_ERROR(("%s: Failed to get hw minor\n", __FUNCTION__));
+			goto exit;
+		}
+
+		switch (hw_stage) {
+			case DEV:
+				snprintf(val_revision, MAX_HW_INFO_LEN, "DEV%d.%d",
+					hw_major, hw_minor);
+				break;
+			case PROTO:
+				snprintf(val_revision, MAX_HW_INFO_LEN, "PROTO%d.%d",
+					hw_major, hw_minor);
+				break;
+			case EVT:
+				snprintf(val_revision, MAX_HW_INFO_LEN, "EVT%d.%d",
+					hw_major, hw_minor);
+				break;
+			case DVT:
+				snprintf(val_revision, MAX_HW_INFO_LEN, "DVT%d.%d",
+					hw_major, hw_minor);
+				break;
+			case PVT:
+				snprintf(val_revision, MAX_HW_INFO_LEN, "PVT%d.%d",
+					hw_major, hw_minor);
+				break;
+			case MP:
+				snprintf(val_revision, MAX_HW_INFO_LEN, "MP%d.%d",
+					hw_major, hw_minor);
+				break;
+			default:
+				strcpy(val_revision, "NA");
+				break;
 		}
 	}
+
+	node = of_find_node_by_path(CDB_PATH);
+	if (!node) {
+		DHD_ERROR(("Node not created under %s\n", CDB_PATH));
+		goto exit;
+	} else {
+
+		if (of_property_read_string(node, HW_SKU, &hw_sku)) {
+			DHD_ERROR(("%s: Failed to get hw sku\n", __FUNCTION__));
+			goto exit;
+		}
+
+		for (i = 0; i < ARRAYSIZE(sku_table); i ++) {
+			if (strcmp(hw_sku, sku_table[i].hw_id) == 0) {
+				strcpy(val_sku, sku_table[i].sku);
+				break;
+			}
+		}
+		DHD_ERROR(("%s: hw_sku is %s, val_sku is %s\n", __FUNCTION__, hw_sku, val_sku));
+	}
+
+exit:
+	dhd_set_platform_ext_name(val_revision, val_sku);
 
 	return 0;
 }

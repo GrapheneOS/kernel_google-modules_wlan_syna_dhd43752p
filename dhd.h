@@ -3361,6 +3361,12 @@ extern int dngl_xtalfreq;
 extern char fw_path2[MOD_PARAM_PATHLEN];
 #endif
 
+#if defined(SUPPORT_MULTIPLE_NVRAM) || defined(SUPPORT_MULTIPLE_CLMBLOB)
+#define MAX_HW_INFO_LEN   10u
+#define MAX_HW_EXT_LEN    (MAX_HW_INFO_LEN * 2)
+#define MAX_FILE_LEN      90u
+#endif /* SUPPORT_MULTIPLE_NVRAM || SUPPORT_MULTIPLE_CLMBLOB */
+
 #if defined(CUSTOMER_HW4)
 #define VENDOR_PATH "/vendor"
 #else

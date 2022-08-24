@@ -524,4 +524,10 @@ int dhd_get_fw_capabilities(dhd_pub_t * dhd);
 #ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
 void dhd_alert_process(struct work_struct *work_data);
 #endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
+#if defined(SUPPORT_MULTIPLE_NVRAM) || defined(SUPPORT_MULTIPLE_CLMBLOB)
+int dhd_get_platform_naming_for_nvram_clmblob_file(char* file_name);
+#ifdef USE_CID_CHECK
+void dhd_set_platform_ext_name_for_chip_version(char* chip_version);
+#endif /* USE_CID_CHECK */
+#endif /* SUPPORT_MULTIPLE_NVRAM || SUPPORT_MULTIPLE_CLMBLOB */
 #endif /* __DHD_LINUX_H__ */

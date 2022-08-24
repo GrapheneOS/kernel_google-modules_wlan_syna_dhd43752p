@@ -977,3 +977,9 @@ void __attribute__ ((weak)) dhd_plat_l1_exit_io(void)
 {
 	return;
 }
+
+int
+__attribute__ ((weak)) dhd_get_platform_naming_for_nvram_clmblob_file(char *file_name)
+{
+	return BCME_ERROR;
+}

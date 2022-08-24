@@ -13542,6 +13542,15 @@ dhd_optimised_preinit_ioctls(dhd_pub_t * dhd)
 	uint32 rrm_bcn_req_thrtl_win = RRM_BCNREQ_MAX_CHAN_TIME * 2;
 	uint32 rrm_bcn_req_max_off_chan_time = RRM_BCNREQ_MAX_CHAN_TIME;
 #endif /* WBTEXT && RRM_BCNREQ_MAX_CHAN_TIME */
+#ifdef SUPPORT_MULTIPLE_CLMBLOB
+#ifdef DHD_LINUX_STD_FW_API
+	char customer_clm_file_name[MAX_FILE_LEN] = DHD_CLM_NAME;
+#else
+	char customer_clm_file_name[MAX_FILE_LEN] = VENDOR_PATH CONFIG_BCMDHD_CLM_PATH;
+#endif /* DHD_LINUX_STD_FW_API */
+#endif /* SUPPORT_MULTIPLE_CLMBLOB */
+	char* apply_clm;
+
 #ifdef PKT_FILTER_SUPPORT
 	dhd_pkt_filter_enable = TRUE;
 #endif /* PKT_FILTER_SUPPORT */
@@ -13775,9 +13784,25 @@ dhd_optimised_preinit_ioctls(dhd_pub_t * dhd)
 			dhd->mac.octet, ETHER_ADDR_LEN);
 	}
 
-	if ((ret = dhd_apply_default_clm(dhd, clm_path)) < 0) {
-		DHD_ERROR(("%s: CLM set failed. Ignore and continue initialization.\n", __FUNCTION__));
-		// goto done;
+#ifdef SUPPORT_MULTIPLE_CLMBLOB
+	if (clm_path[0] != '\0') {
+		if (clm_path[strlen(clm_path)-1] == '\n') {
+			clm_path[strlen(clm_path)-1] = '\0';
+		}
+		snprintf(customer_clm_file_name, MAX_FILE_LEN, "%s", clm_path);
+	}
+	if (dhd_get_platform_naming_for_nvram_clmblob_file(customer_clm_file_name) == BCME_OK) {
+		apply_clm = customer_clm_file_name;
+	}
+	else
+#endif /* SUPPORT_MULTIPLE_CLMBLOB */
+	{
+		apply_clm = clm_path;
+	}
+
+	if ((ret = dhd_apply_default_clm(dhd, apply_clm)) < 0) {
+		DHD_ERROR(("%s: CLM set failed. Abort initialization.\n", __FUNCTION__));
+		goto done;
 	}
 
 	DHD_ERROR(("Firmware up: op_mode=0x%04x, MAC="MACDBG"\n",
@@ -14377,6 +14402,14 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 #if defined(SUPPORT_2G_VHT) || defined(SUPPORT_5G_1024QAM_VHT)
 	uint32 vht_features = 0; /* init to 0, will be set based on each support */
 #endif /* SUPPORT_2G_VHT || SUPPORT_5G_1024QAM_VHT */
+#ifdef SUPPORT_MULTIPLE_CLMBLOB
+#ifdef DHD_LINUX_STD_FW_API
+	char customer_clm_file_name[MAX_FILE_LEN] = DHD_CLM_NAME;
+#else
+	char customer_clm_file_name[MAX_FILE_LEN] = VENDOR_PATH CONFIG_BCMDHD_CLM_PATH;
+#endif /* DHD_LINUX_STD_FW_API */
+#endif /* SUPPORT_MULTIPLE_CLMBLOB */
+	char* apply_clm;
 
 #ifdef OEM_ANDROID
 #ifdef DHD_ENABLE_LPC
@@ -14711,7 +14744,22 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 	}
 #endif /* WL_STA_ASSOC_RAND && WL_STA_INIT_RAND */
 
-	if ((ret = dhd_apply_default_clm(dhd, clm_path)) < 0) {
+#ifdef SUPPORT_MULTIPLE_CLMBLOB
+	if (clm_path[0] != '\0') {
+		if (clm_path[strlen(clm_path)-1] == '\n') {
+			clm_path[strlen(clm_path)-1] = '\0';
+		}
+		snprintf(customer_clm_file_name, MAX_FILE_LEN, "%s", clm_path);
+	}
+	if (dhd_get_platform_naming_for_nvram_clmblob_file(customer_clm_file_name) == BCME_OK) {
+		apply_clm = customer_clm_file_name;
+	}
+	else
+#endif /* SUPPORT_MULTIPLE_CLMBLOB */
+	{
+		apply_clm = clm_path;
+	}
+	if ((ret = dhd_apply_default_clm(dhd, apply_clm)) < 0) {
 		DHD_ERROR(("%s: CLM set failed. Ignore and continue initialization.\n", __FUNCTION__));
 		// goto done;
 	}
@@ -21925,6 +21973,10 @@ void dhd_set_version_info(dhd_pub_t *dhdp, char *fw)
 	i += snprintf(&info_string[i], sizeof(info_string) - i,
 		"\n  Chip: %x Rev %x Pkg %x", dhd_bus_chip_id(dhdp),
 		dhd_bus_chiprev_id(dhdp), dhd_bus_chippkg_id(dhdp));
+#if defined(USE_CID_CHECK)
+	i += snprintf(&info_string[i], sizeof(info_string) - i,
+		" VID %x", cur_vid_info);
+#endif /* USE_CID_CHECK */
 }
 #endif /* BCMSDIO || BCMPCIE */
 int dhd_ioctl_entry_local(struct net_device *net, wl_ioctl_t *ioc, int cmd)
