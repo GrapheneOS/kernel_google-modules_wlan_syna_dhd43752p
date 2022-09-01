@@ -14465,7 +14465,9 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 	uint roamvar = 1;
 #endif /* DISABLE_BUILTIN_ROAM */
 #endif /* ROAM_ENABLE */
-
+#ifdef DISABLE_TXACK_ALIVE
+	uint txack_alive = 0;
+#endif
 #if defined(SOFTAP)
 	uint dtim = 1;
 #endif
@@ -14985,6 +14987,12 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 		DHD_ERROR(("%s roam_off failed %d\n", __FUNCTION__, ret));
 	}
 #endif /* ROAM_ENABLE || DISABLE_BUILTIN_ROAM */
+#ifdef DISABLE_TXACK_ALIVE
+	ret = dhd_iovar(dhd, 0, "txack_alive", (char *)&txack_alive, sizeof(txack_alive), NULL, 0, TRUE);
+	if (ret < 0) {
+		DHD_ERROR(("%s txack_alive failed %d\n", __FUNCTION__, ret));
+	}
+#endif
 #if defined(ROAM_ENABLE)
 #ifdef DISABLE_BCNLOSS_ROAM
 	ret = dhd_iovar(dhd, 0, "roam_bcnloss_off", (char *)&roam_bcnloss_off,
