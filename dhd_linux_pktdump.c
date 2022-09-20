@@ -187,7 +187,7 @@ const char tx_pktfate[][30] = {
 				((const eapol_key_hdr_t *)(key))->replay[5], \
 				((const eapol_key_hdr_t *)(key))->replay[6], \
 				((const eapol_key_hdr_t *)(key))->replay[7]
-#define TXFATE_FMT		" TX_PKTHASH:0x%X TX_PKT_FATE:%s"
+#define TXFATE_FMT		" TX_PKTHASH:0x%X TX_PKT_FATE:%s (%d)"
 #define TX_PKTHASH(pkthash)		((pkthash) ? (*pkthash) : (0))
 #define TX_FATE_STR(fate)	(((*fate) <= (WLFC_CTL_PKTFLAG_MKTFREE)) ? \
 				(tx_pktfate[(*fate)]) : "TX_PKT_FATE_FW_DROP_OTHER")
@@ -199,7 +199,9 @@ const char tx_pktfate[][30] = {
 		if (tx) { \
 			DHD_PKTDUMP(("ETHER_TYPE_802_1X[%s] [TX]: " \
 				str TXFATE_FMT "\n", ifname, \
-				TX_PKTHASH(pkthash), TX_FATE(pktfate))); \
+				TX_PKTHASH(pkthash), TX_FATE(pktfate), \
+				((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+				(*pktfate) : (0))); \
 		} else { \
 			DHD_PKTDUMP(("ETHER_TYPE_802_1X[%s] [RX]: " \
 				str "\n", ifname)); \
@@ -212,7 +214,9 @@ const char tx_pktfate[][30] = {
 			DHD_PKTDUMP(("ETHER_TYPE_802_1X[%s] [TX]: " \
 				str DBGREPLAY TXFATE_FMT "\n", ifname, \
 				REPLAY_FMT(eap_key), TX_PKTHASH(pkthash), \
-				TX_FATE(pktfate))); \
+				TX_FATE(pktfate), \
+				((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+				(*pktfate) : (0))); \
 		} else { \
 			DHD_PKTDUMP(("ETHER_TYPE_802_1X[%s] [RX]: " \
 				str DBGREPLAY "\n", ifname, \
@@ -226,7 +230,9 @@ const char tx_pktfate[][30] = {
 			DHD_PKTDUMP(("ETHER_TYPE_802_1X[%s] [TX]: " \
 				str "ver %d, type %d" TXFATE_FMT "\n", ifname, \
 				eapol_hdr->version, eapol_hdr->type, \
-				TX_PKTHASH(pkthash), TX_FATE(pktfate))); \
+				TX_PKTHASH(pkthash), TX_FATE(pktfate), \
+				((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+				(*pktfate) : (0))); \
 		} else { \
 			DHD_PKTDUMP(("ETHER_TYPE_802_1X[%s] [RX]: " \
 				str "ver %d, type %d\n", ifname, \
@@ -242,7 +248,9 @@ const char tx_pktfate[][30] = {
 				TXFATE_FMT "\n", ifname, eapol_hdr->version, \
 				eapol_hdr->type, eap_key->type, \
 				(uint32)hton16(eap_key->key_info), \
-				TX_PKTHASH(pkthash), TX_FATE(pktfate))); \
+				TX_PKTHASH(pkthash), TX_FATE(pktfate), \
+				((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+				(*pktfate) : (0))); \
 		} else { \
 			DHD_PKTDUMP(("ETHER_TYPE_802_1X[%s] [RX]: " str \
 				"ver %d type %d keytype %d keyinfo 0x%02X\n", \
@@ -894,7 +902,9 @@ dhd_check_dhcp(uint8 *pktdata)
 		if (tx) { \
 			DHD_PKTDUMP((str " %s[%s][%s] [TX] -" TXFATE_FMT "\n", \
 				typestr, opstr, ifname, \
-				TX_PKTHASH(pkthash), TX_FATE(pktfate))); \
+				TX_PKTHASH(pkthash), TX_FATE(pktfate), \
+				((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+				(*pktfate) : (0))); \
 		} else { \
 			DHD_PKTDUMP((str " %s[%s][%s] [RX]\n", \
 				typestr, opstr, ifname)); \
@@ -1025,7 +1035,9 @@ dhd_check_icmpv6(uint8 *pktdata, uint32 plen)
 		if (tx) { \
 			DHD_PKTDUMP_MEM((str "[%s][TX] : SEQNUM=%d" \
 				TXFATE_FMT "\n", ifname, seqnum, \
-				TX_PKTHASH(pkthash), TX_FATE(pktfate))); \
+				TX_PKTHASH(pkthash), TX_FATE(pktfate), \
+				((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+				(*pktfate) : (0))); \
 		} else { \
 			DHD_PKTDUMP_MEM((str "[%s][RX] : SEQNUM=%d\n", \
 				ifname, seqnum)); \
@@ -1037,7 +1049,9 @@ dhd_check_icmpv6(uint8 *pktdata, uint32 plen)
 		if (tx) { \
 			DHD_PKTDUMP_MEM((str "[%s][TX] : TYPE=%d, CODE=%d" \
 				TXFATE_FMT "\n", ifname, type, code, \
-				TX_PKTHASH(pkthash), TX_FATE(pktfate))); \
+				TX_PKTHASH(pkthash), TX_FATE(pktfate), \
+				((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+				(*pktfate) : (0))); \
 		} else { \
 			DHD_PKTDUMP_MEM((str "[%s][RX] : TYPE=%d," \
 				" CODE=%d\n", ifname, type, code)); \
@@ -1110,11 +1124,15 @@ dhd_check_arp(uint8 *pktdata, uint16 ether_type)
 			if (dump_enabled && pktfate && !TX_FATE_ACKED(pktfate)) { \
 				DHD_PKTDUMP_ARP((str "[%s] [TX]" TXFATE_FMT "\n", \
 					ifname, TX_PKTHASH(pkthash), \
-					TX_FATE(pktfate))); \
+					TX_FATE(pktfate), \
+					((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+					(*pktfate) : (0))); \
 			} else { \
 				DHD_PKTDUMP_MEM((str "[%s] [TX]" TXFATE_FMT "\n", \
 					ifname, TX_PKTHASH(pkthash), \
-					TX_FATE(pktfate))); \
+					TX_FATE(pktfate), \
+					((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+					(*pktfate) : (0))); \
 			} \
 		} else { \
 			DHD_PKTDUMP_MEM((str "[%s] [RX]\n", ifname)); \
@@ -1128,11 +1146,15 @@ dhd_check_arp(uint8 *pktdata, uint16 ether_type)
 				DHD_PKTDUMP_ARP((str "[%s] [TX] op_code=%d" \
 					TXFATE_FMT "\n", ifname, opcode, \
 					TX_PKTHASH(pkthash), \
-					TX_FATE(pktfate))); \
+					TX_FATE(pktfate), \
+					((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+					(*pktfate) : (0))); \
 			} else { \
 				DHD_PKTDUMP_MEM((str "[%s] [TX] op_code=%d" \
 				TXFATE_FMT "\n", ifname, opcode, \
-				TX_PKTHASH(pkthash), TX_FATE(pktfate))); \
+				TX_PKTHASH(pkthash), TX_FATE(pktfate), \
+				((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+				(*pktfate) : (0))); \
 			} \
 		} else { \
 			DHD_PKTDUMP_MEM((str "[%s] [RX] op_code=%d\n", \
@@ -1230,11 +1252,15 @@ static const char dns_opcode_types[][11] = {
 			if (dump_enabled && pktfate && !TX_FATE_ACKED(pktfate)) { \
 				DHD_PKTDUMP((str "[%s] [TX] ID:0x%04X OPCODE:%s" \
 					TXFATE_FMT "\n", ifname, id, DNSOPCODE(opcode), \
-					TX_PKTHASH(pkthash), TX_FATE(pktfate))); \
+					TX_PKTHASH(pkthash), TX_FATE(pktfate), \
+					((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+					(*pktfate) : (0))); \
 			} else { \
 				DHD_PKTDUMP_MEM((str "[%s] [TX] ID:0x%04X OPCODE:%s" \
 					TXFATE_FMT "\n", ifname, id, DNSOPCODE(opcode), \
-					TX_PKTHASH(pkthash), TX_FATE(pktfate))); \
+					TX_PKTHASH(pkthash), TX_FATE(pktfate), \
+					((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+					(*pktfate) : (0))); \
 			} \
 		} else { \
 			DHD_PKTDUMP_MEM((str "[%s] [RX] ID:0x%04X OPCODE:%s\n", \
@@ -1249,12 +1275,16 @@ static const char dns_opcode_types[][11] = {
 				DHD_PKTDUMP((str "[%s] [TX] ID:0x%04X OPCODE:%s RCODE:%d" \
 					TXFATE_FMT "\n", ifname, id, DNSOPCODE(opcode), \
 					GET_DNS_RCODE(flags), TX_PKTHASH(pkthash), \
-					TX_FATE(pktfate))); \
+					TX_FATE(pktfate), \
+					((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+					(*pktfate) : (0))); \
 			} else { \
 				DHD_PKTDUMP_MEM((str "[%s] [TX] ID:0x%04X OPCODE:%s RCODE:%d" \
 					TXFATE_FMT "\n", ifname, id, DNSOPCODE(opcode), \
 					GET_DNS_RCODE(flags), TX_PKTHASH(pkthash), \
-					TX_FATE(pktfate))); \
+					TX_FATE(pktfate), \
+					((pktfate) && ((*pktfate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED))) ? \
+					(*pktfate) : (0))); \
 			} \
 		} else { \
 			DHD_PKTDUMP_MEM((str "[%s] [RX] ID:0x%04X OPCODE:%s RCODE:%d\n", \
