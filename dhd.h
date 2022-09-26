@@ -1981,6 +1981,9 @@ typedef struct dhd_pub {
 #ifdef DHD_WAKE_STATUS
 	int evtlog_cnt;
 #endif /* DHD_WAKE_STATUS */
+	/* Pointer to Platform Layer */
+	void *plat_info;
+	uint32 plat_info_size;
 } dhd_pub_t;
 
 #if defined(__linux__)

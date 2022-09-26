@@ -50,6 +50,14 @@
 #include <linux/platform_data/sscoredump.h>
 #endif /* DHD_COREDUMP */
 
+#define EXYNOS_PCIE_VENDOR_ID 0x144d
+#if defined(CONFIG_SOC_GOOGLE)
+#define EXYNOS_PCIE_DEVICE_ID 0xecec
+#define EXYNOS_PCIE_CH_NUM 0
+#else
+#error "Not supported platform"
+#endif /* CONFIG_SOC_GOOGLE */
+
 #ifdef CONFIG_BROADCOM_WIFI_RESERVED_MEM
 extern int dhd_init_wlan_mem(void);
 extern void *dhd_wlan_mem_prealloc(int section, unsigned long size);
@@ -68,9 +76,16 @@ static int wlan_host_wake_irq = 0;
 #endif /* CONFIG_BCMDHD_OOB_HOST_WAKE */
 #define WIFI_WLAN_HOST_WAKE_PROPNAME    "wl_host_wake"
 
+static int resched_streak = 0;
+static int resched_streak_max = 0;
+static uint64 last_resched_cnt_check_time_ns = 0;
+static uint64 last_affinity_update_time_ns = 0;
+/* force to switch to small core at beginning */
+static bool is_irq_on_big_core = TRUE;
+
+static int pcie_ch_num = EXYNOS_PCIE_CH_NUM;
 #if defined(CONFIG_SOC_GOOGLE)
 #define EXYNOS_PCIE_RC_ONOFF
-extern int pcie_ch_num;
 extern int exynos_pcie_pm_resume(int);
 extern void exynos_pcie_pm_suspend(int);
 extern int exynos_pcie_l1_exit(int ch_num);
@@ -605,6 +620,162 @@ dhd_wlan_set_carddetect(int val)
 	return 0;
 }
 
+#include <linux/exynos-pci-noti.h>
+extern int exynos_pcie_register_event(struct exynos_pcie_register_event *reg);
+extern int exynos_pcie_deregister_event(struct exynos_pcie_register_event *reg);
+
+#include <dhd_plat.h>
+
+typedef struct dhd_plat_info {
+	struct exynos_pcie_register_event pcie_event;
+	struct exynos_pcie_notify pcie_notify;
+	struct pci_dev *pdev;
+} dhd_plat_info_t;
+
+static dhd_pcie_event_cb_t g_pfn = NULL;
+
+uint32 dhd_plat_get_info_size(void)
+{
+	return sizeof(dhd_plat_info_t);
+}
+
+void plat_pcie_notify_cb(struct exynos_pcie_notify *pcie_notify)
+{
+	struct pci_dev *pdev;
+
+	if (pcie_notify == NULL) {
+		pr_err("%s(): Invalid argument to Platform layer call back \r\n", __func__);
+		return;
+	}
+
+	if (g_pfn) {
+		pdev = (struct pci_dev *)pcie_notify->user;
+		pr_err("%s(): Invoking DHD call back with pdev %p \r\n",
+				__func__, pdev);
+		(*(g_pfn))(pdev);
+	} else {
+		pr_err("%s(): Driver Call back pointer is NULL \r\n", __func__);
+	}
+	return;
+}
+
+int dhd_plat_pcie_register_event(void *plat_info, struct pci_dev *pdev, dhd_pcie_event_cb_t pfn)
+{
+		dhd_plat_info_t *p = plat_info;
+
+		if ((p == NULL) || (pdev == NULL) || (pfn == NULL)) {
+			pr_err("%s(): Invalid argument p %p, pdev %p, pfn %p\r\n",
+				__func__, p, pdev, pfn);
+			return -1;
+		}
+		g_pfn = pfn;
+		p->pdev = pdev;
+#ifdef CPL_TIMEOUT_RECOVERY
+		p->pcie_event.events = EXYNOS_PCIE_EVENT_LINKDOWN | EXYNOS_PCIE_EVENT_CPL_TIMEOUT;
+#else
+		p->pcie_event.events = EXYNOS_PCIE_EVENT_LINKDOWN;
+#endif /* CPL_TIMEOUT_RECOVERY */
+		p->pcie_event.user = pdev;
+		p->pcie_event.mode = EXYNOS_PCIE_TRIGGER_CALLBACK;
+		p->pcie_event.callback = plat_pcie_notify_cb;
+		exynos_pcie_register_event(&p->pcie_event);
+		pr_err("%s(): Registered Event PCIe event pdev %p \r\n", __func__, pdev);
+		return 0;
+}
+
+void dhd_plat_pcie_deregister_event(void *plat_info)
+{
+	dhd_plat_info_t *p = plat_info;
+	if (p) {
+		exynos_pcie_deregister_event(&p->pcie_event);
+	}
+	return;
+}
+
+static int
+set_affinity(unsigned int irq, const struct cpumask *cpumask)
+{
+#ifdef BCMDHD_MODULAR
+	return irq_set_affinity_hint(irq, cpumask);
+#else
+	return irq_set_affinity(irq, cpumask);
+#endif
+}
+
+static void
+irq_affinity_hysteresis_control(struct pci_dev *pdev, int resched_streak_max,
+	uint64 curr_time_ns)
+{
+	int err = 0;
+	bool has_recent_affinity_update = (curr_time_ns - last_affinity_update_time_ns)
+		< (AFFINITY_UPDATE_MIN_PERIOD_SEC * NSEC_PER_SEC);
+	if (!pdev) {
+		DHD_ERROR(("%s : pdev is NULL\n", __FUNCTION__));
+		return;
+	}
+
+	if (!is_irq_on_big_core && (resched_streak_max >= RESCHED_STREAK_MAX_HIGH) &&
+		!has_recent_affinity_update) {
+		err = set_affinity(pdev->irq, cpumask_of(IRQ_AFFINITY_BIG_CORE));
+		if (!err) {
+			is_irq_on_big_core = TRUE;
+			last_affinity_update_time_ns = curr_time_ns;
+			DHD_INFO(("%s switches to big core successfully\n", __FUNCTION__));
+		} else {
+			DHD_ERROR(("%s switches to big core unsuccessfully!\n", __FUNCTION__));
+		}
+	}
+	if (is_irq_on_big_core && (resched_streak_max <= RESCHED_STREAK_MAX_LOW) &&
+		!has_recent_affinity_update) {
+		err = set_affinity(pdev->irq, cpumask_of(IRQ_AFFINITY_SMALL_CORE));
+		if (!err) {
+			is_irq_on_big_core = FALSE;
+			last_affinity_update_time_ns = curr_time_ns;
+			DHD_INFO(("%s switches to all cores successfully\n", __FUNCTION__));
+		} else {
+			DHD_ERROR(("%s switches to all cores unsuccessfully\n", __FUNCTION__));
+		}
+	}
+}
+
+/*
+ * DHD Core layer reports whether the bottom half is getting rescheduled or not
+ * resched = 1, BH is getting rescheduled.
+ * resched = 0, BH is NOT getting rescheduled.
+ * resched is used to detect bottom half load and configure IRQ affinity dynamically
+ */
+void dhd_plat_report_bh_sched(void *plat_info, int resched)
+{
+	dhd_plat_info_t *p = plat_info;
+	uint64 curr_time_ns;
+	uint64 time_delta_ns;
+
+	if (resched > 0) {
+		resched_streak++;
+		return;
+	}
+
+	if (resched_streak > resched_streak_max) {
+		resched_streak_max = resched_streak;
+	}
+	resched_streak = 0;
+
+	curr_time_ns = OSL_LOCALTIME_NS();
+	time_delta_ns = curr_time_ns - last_resched_cnt_check_time_ns;
+	if (time_delta_ns < (RESCHED_CNT_CHECK_PERIOD_SEC * NSEC_PER_SEC)) {
+		return;
+	}
+	last_resched_cnt_check_time_ns = curr_time_ns;
+
+	DHD_INFO(("%s resched_streak_max=%d\n",
+		__FUNCTION__, resched_streak_max));
+
+	irq_affinity_hysteresis_control(p->pdev, resched_streak_max, curr_time_ns);
+
+	resched_streak_max = 0;
+	return;
+}
+
 #ifdef BCMSDIO
 static int dhd_wlan_get_wake_irq(void)
 {
@@ -620,6 +791,13 @@ dhd_get_wlan_oob_gpio(void)
 		gpio_get_value(wlan_host_wake_up) : -1;
 }
 EXPORT_SYMBOL(dhd_get_wlan_oob_gpio);
+int
+dhd_get_wlan_oob_gpio_number(void)
+{
+	return gpio_is_valid(wlan_host_wake_up) ?
+		wlan_host_wake_up : -1;
+}
+EXPORT_SYMBOL(dhd_get_wlan_oob_gpio_number);
 #endif /* CONFIG_BCMDHD_OOB_HOST_WAKE && CONFIG_BCMDHD_GET_OOB_STATE */
 
 struct resource dhd_wlan_resources = {
@@ -726,6 +904,67 @@ dhd_wlan_deinit(void)
 #endif /* DHD_COREDUMP */
 
 	return 0;
+}
+
+void dhd_plat_l1ss_ctrl(bool ctrl)
+{
+#if defined(CONFIG_SOC_GOOGLE)
+	printk(KERN_DEBUG "%s: Control L1ss RC side %d \n", __FUNCTION__, ctrl);
+	exynos_pcie_rc_l1ss_ctrl(ctrl, PCIE_L1SS_CTRL_WIFI, 1);
+#endif /* CONFIG_SOC_GOOGLE */
+	return;
+}
+
+void dhd_plat_l1_exit_io(void)
+{
+#if defined(DHD_PCIE_L1_EXIT_DURING_IO)
+	exynos_pcie_l1_exit(pcie_ch_num);
+#endif /* DHD_PCIE_L1_EXIT_DURING_IO */
+	return;
+}
+
+void dhd_plat_l1_exit(void)
+{
+	exynos_pcie_l1_exit(pcie_ch_num);
+	return;
+}
+
+int dhd_plat_pcie_suspend(void *plat_info)
+{
+	exynos_pcie_pm_suspend(pcie_ch_num);
+	return 0;
+}
+
+int dhd_plat_pcie_resume(void *plat_info)
+{
+	int ret = 0;
+	ret = exynos_pcie_pm_resume(pcie_ch_num);
+	is_irq_on_big_core = true;
+	return ret;
+}
+
+void dhd_plat_pin_dbg_show(void *plat_info)
+{
+#ifdef PRINT_WAKEUP_GPIO_STATUS
+	exynos_pin_dbg_show(dhd_get_wlan_oob_gpio_number(), "gpa0");
+#endif /* PRINT_WAKEUP_GPIO_STATUS */
+}
+
+void dhd_plat_pcie_register_dump(void *plat_info)
+{
+#ifdef EXYNOS_PCIE_DEBUG
+	exynos_pcie_register_dump(1);
+#endif /* EXYNOS_PCIE_DEBUG */
+}
+
+uint32 dhd_plat_get_rc_vendor_id(void)
+{
+	return EXYNOS_PCIE_VENDOR_ID;
+}
+
+uint32 dhd_plat_get_rc_device_id(void)
+{
+	return EXYNOS_PCIE_DEVICE_ID;
 }
 
 #ifndef BCMDHD_MODULAR

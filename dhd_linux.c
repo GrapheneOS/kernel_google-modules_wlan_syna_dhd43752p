@@ -270,6 +270,8 @@ static void dhd_blk_tsfl_handler(struct work_struct * work);
 #include <bcmproto.h>
 #endif /* defined(DHD_TX_PROFILE) */
 
+#include <dhd_plat.h>
+
 #ifdef WL_MON_OWN_PKT
 extern int dhd_get_monitor_data(dhd_pub_t *dhdp,void *pktbuf,struct sk_buff *skb,void *pktdata,uint pktlen);
 #else
@@ -7240,6 +7242,9 @@ dhd_dpc(ulong data)
 #endif /* DHD_LB_STATS && PCIE_FULL_DONGLE */
 		if (dhd_bus_dpc(dhd->pub.bus)) {
 			tasklet_schedule(&dhd->tasklet);
+			dhd_plat_report_bh_sched(dhd->pub.plat_info, 1);
+		} else {
+			dhd_plat_report_bh_sched(dhd->pub.plat_info, 0);
 		}
 	} else {
 		dhd_bus_stop(dhd->pub.bus, TRUE);
@@ -11593,6 +11598,17 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	dll_init(&(dhd->pub.mw_list_head));
 #endif /* DHD_DEBUG */
 
+	/*
+	 * Attach DHD Core Layer to Platform Layer. For non
+	 * Embedded environment, where there is no dependency on platform
+	 * layer, dhd_get_plat_info_size can return 0, if the platform
+	 * layer does not exist or chooses not to implement it.
+	 */
+	dhd->pub.plat_info_size = dhd_plat_get_info_size();
+	if (dhd->pub.plat_info_size) {
+		dhd->pub.plat_info = MALLOCZ(osh, dhd->pub.plat_info_size);
+	}
+
 #ifdef GET_CUSTOM_MAC_ENABLE
 	wifi_platform_get_mac_addr(dhd->adapter, dhd->pub.mac.octet);
 #endif /* GET_CUSTOM_MAC_ENABLE */
@@ -12842,20 +12858,15 @@ dhd_bus_start(dhd_pub_t *dhdp)
 	dhd_bus_l1ss_enable_rc_ep(dhdp->bus, TRUE);
 #endif /* BT_OVER_PCIE */
 
-#if defined(CONFIG_ARCH_EXYNOS) && defined(BCMPCIE)
-#if !defined(CONFIG_SOC_EXYNOS8890) && !defined(SUPPORT_EXYNOS7420)
+#if defined(BCMPCIE)
 	/* XXX: JIRA SWWLAN-139454: Added L1ss enable
 	 * after firmware download completion due to link down issue
 	 * JIRA SWWLAN-142236: Amendment - Changed L1ss enable point
 	 */
 	DHD_ERROR(("%s: Enable L1ss EP side\n", __FUNCTION__));
-#if defined(CONFIG_SOC_GOOGLE)
-	exynos_pcie_rc_l1ss_ctrl(1, PCIE_L1SS_CTRL_WIFI, pcie_ch_num);
-#else
-	exynos_pcie_l1ss_ctrl(1, PCIE_L1SS_CTRL_WIFI);
-#endif /* CONFIG_SOC_GOOGLE */
-#endif /* !CONFIG_SOC_EXYNOS8890 && !SUPPORT_EXYNOS7420 */
-#endif /* CONFIG_ARCH_EXYNOS && BCMPCIE */
+	dhd_plat_l1ss_ctrl(1);
+#endif /* BCMPCIE */
+
 #if defined(DHD_DEBUG) && defined(BCMSDIO)
 	f2_sync_end = OSL_SYSUPTIME();
 	DHD_ERROR(("Time taken for FW download and F2 ready is: %d msec\n",
@@ -17485,6 +17496,11 @@ dhd_free(dhd_pub_t *dhdp)
 			deinit_dhd_timeouts(&dhd->pub);
 #endif /* REPORT_FATAL_TIMEOUTS */
 
+			/* Free Platform Layer allocations */
+			if (dhd->pub.plat_info) {
+				MFREE(dhdp->osh, dhdp->plat_info, dhdp->plat_info_size);
+			}
+
 			/* If pointer is allocated by dhd_os_prealloc then avoid MFREE */
 			if (dhd != (dhd_info_t *)dhd_os_prealloc(dhdp,
 					DHD_PREALLOC_DHD_INFO, 0, FALSE))
@@ -18710,22 +18726,17 @@ dhd_net_bus_devreset(struct net_device *dev, uint8 flag)
 			dhd->fw_path, dhd->nv_path);
 	}
 #endif /* BCMSDIO */
-#if defined(CONFIG_ARCH_EXYNOS) && defined(BCMPCIE)
-#if !defined(CONFIG_SOC_EXYNOS8890) && !defined(SUPPORT_EXYNOS7420)
+#if defined(BCMPCIE)
 	/* XXX: JIRA SWWLAN-139454: Added L1ss enable
 	 * after firmware download completion due to link down issue
 	 * JIRA SWWLAN-142236: Amendment - Changed L1ss enable point
 	 */
 	DHD_ERROR(("%s Disable L1ss EP side\n", __FUNCTION__));
 	if (flag == FALSE && dhd->pub.busstate == DHD_BUS_DOWN) {
-#if defined(CONFIG_SOC_GOOGLE)
-		exynos_pcie_rc_l1ss_ctrl(0, PCIE_L1SS_CTRL_WIFI, pcie_ch_num);
-#else
-		exynos_pcie_l1ss_ctrl(0, PCIE_L1SS_CTRL_WIFI);
-#endif /* CONFIG_SOC_GOOGLE  */
+		DHD_ERROR(("%s Disable L1ss EP side\n", __FUNCTION__));
+		dhd_plat_l1ss_ctrl(0);
 	}
-#endif /* !CONFIG_SOC_EXYNOS8890 && !defined(SUPPORT_EXYNOS7420)  */
-#endif /* CONFIG_ARCH_EXYNOS && BCMPCIE */
+#endif /* BCMPCIE */
 
 	ret = dhd_bus_devreset(&dhd->pub, flag);
 
