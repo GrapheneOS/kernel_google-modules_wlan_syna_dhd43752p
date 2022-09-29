@@ -5524,8 +5524,9 @@ dhdpcie_mem_dump(dhd_bus_t *bus)
 			__FUNCTION__, dhd_console_ms_prev));
 		dhdp->dhd_console_ms = 0;
 	}
+
 #ifdef EXYNOS_PCIE_DEBUG
-	exynos_pcie_register_dump(1);
+	dhd_plat_pcie_register_dump(dhdp->plat_info);
 #endif /* EXYNOS_PCIE_DEBUG */
 
 #ifdef SUPPORT_LINKDOWN_RECOVERY
@@ -17200,6 +17201,10 @@ dhd_pcie_intr_count_dump(dhd_pub_t *dhd)
 	DHD_ERROR(("oob_irq_enabled=%d oob_gpio_level=%d\n",
 		dhdpcie_get_oob_irq_status(bus),
 		dhdpcie_get_oob_irq_level()));
+
+#ifdef EXYNOS_PCIE_DEBUG
+	dhd_plat_pin_dbg_show(bus->dhd->plat_info);
+#endif /* EXYNOS_PCIE_DEBUG */
 #endif /* BCMPCIE_OOB_HOST_WAKE */
 	DHD_ERROR(("dpc_return_busdown_count=%lu non_ours_irq_count=%lu\n",
 		bus->dpc_return_busdown_count, bus->non_ours_irq_count));

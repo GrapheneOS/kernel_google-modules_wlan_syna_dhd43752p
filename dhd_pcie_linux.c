@@ -92,6 +92,8 @@
 #include "ftdi_sio_external.h"
 #endif /* PCIE_OOB */
 
+#include <dhd_plat.h>
+
 #define PCI_CFG_RETRY 		10	/* PR15065: retry count for pci cfg accesses */
 #define OS_HANDLE_MAGIC		0x1234abcd	/* Magic # to recognize osh */
 #define BCM_MEM_FILENAME_LEN 	24		/* Mem. filename length */
@@ -1155,19 +1157,12 @@ static int dhdpcie_suspend_dev(struct pci_dev *dev)
 	}
 #endif /* OEM_ANDROID && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
 	DHD_ERROR(("%s: Enter\n", __FUNCTION__));
-#if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS9820) || \
-	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_EXYNOS2100) || \
-	defined(CONFIG_SOC_EXYNOS1000)
-	DHD_ERROR(("%s: Disable L1ss EP side\n", __FUNCTION__));
-	exynos_pcie_l1ss_ctrl(0, PCIE_L1SS_CTRL_WIFI);
-#endif /* CONFIG_SOC_EXYNOS9810 || CONFIG_SOC_EXYNOS9820 ||
-	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_EXYNOS2100 ||
-	* CONFIG_SOC_EXYNOS1000
-	*/
-#if defined(CONFIG_SOC_GOOGLE)
-	DHD_ERROR(("%s: Disable L1ss EP side\n", __FUNCTION__));
-	exynos_pcie_rc_l1ss_ctrl(0, PCIE_L1SS_CTRL_WIFI, pcie_ch_num);
-#endif /* CONFIG_SOC_GOOGLE */
+	/*
+	 * Disable L1ss on EP and RC side ... defaults to NOP
+	 * If needed implement this function in the dhd_custom_xxx.c
+	 * accordingly.
+	 */
+	dhd_plat_l1ss_ctrl(0);
 
 	dhdpcie_suspend_dump_cfgregs(bus, "BEFORE_EP_SUSPEND");
 #if defined(OEM_ANDROID) && (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0))
@@ -1265,19 +1260,12 @@ static int dhdpcie_resume_dev(struct pci_dev *dev)
 	}
 	BCM_REFERENCE(pch);
 	dhdpcie_suspend_dump_cfgregs(pch->bus, "AFTER_EP_RESUME");
-#if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS9820) || \
-	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_EXYNOS2100) || \
-	defined(CONFIG_SOC_EXYNOS1000)
-	DHD_ERROR(("%s: Enable L1ss EP side\n", __FUNCTION__));
-	exynos_pcie_l1ss_ctrl(1, PCIE_L1SS_CTRL_WIFI);
-#endif /* CONFIG_SOC_EXYNOS9810 || CONFIG_SOC_EXYNOS9820 ||
-	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_EXYNOS2100 ||
-	* CONFIG_SOC_EXYNOS1000
-	*/
-#if defined(CONFIG_SOC_GOOGLE)
-	DHD_ERROR(("%s: Enable L1ss EP side\n", __FUNCTION__));
-	exynos_pcie_rc_l1ss_ctrl(1, PCIE_L1SS_CTRL_WIFI, pcie_ch_num);
-#endif /* CONFIG_SOC_GOOGLE */
+
+	/*
+	 * Re-enable L1ss in Resume path. Implementation defalts to NOP
+	 * If need override in the paltform file
+	 */
+	dhd_plat_l1ss_ctrl(1);
 
 out:
 	return err;
@@ -1316,7 +1304,7 @@ static int dhdpcie_suspend_host_dev(dhd_bus_t *bus)
 		pci_save_state(bus->rc_dev);
 	} else {
 		DHD_ERROR(("%s: RC %x:%x handle is NULL\n",
-			__FUNCTION__, PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID));
+			__FUNCTION__, dhd_plat_get_rc_vendor_id(), dhd_plat_get_rc_device_id()));
 	}
 #endif /* CONFIG_ARCH_EXYNOS */
 	bcmerror = dhdpcie_stop_host_dev(bus);
@@ -1344,10 +1332,11 @@ dhdpcie_rc_config_read(dhd_bus_t *bus, uint offset)
 		OSL_DELAY(100);
 	} else {
 		DHD_ERROR(("%s: RC %x:%x handle is NULL\n",
-			__FUNCTION__, PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID));
+			__FUNCTION__, dhd_plat_get_rc_vendor_id(), dhd_plat_get_rc_device_id()));
 	}
 	DHD_ERROR(("%s: RC %x:%x offset 0x%x val 0x%x\n",
-		__FUNCTION__, PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID, offset, val));
+		__FUNCTION__, dhd_plat_get_rc_vendor_id(), dhd_plat_get_rc_device_id(),
+		offset, val));
 	return (val);
 }
 
@@ -1423,7 +1412,7 @@ dhdpcie_rc_access_cap(dhd_bus_t *bus, int cap, uint offset, bool is_ext, bool is
 {
 	if (!(bus->rc_dev)) {
 		DHD_ERROR(("%s: RC %x:%x handle is NULL\n",
-			__FUNCTION__, PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID));
+			__FUNCTION__, dhd_plat_get_rc_vendor_id(), dhd_plat_get_rc_device_id()));
 		return BCME_ERROR;
 	}
 
@@ -1645,12 +1634,7 @@ dhdpcie_pci_stop(struct pci_dev *pdev)
 
 	if (bus) {
 #ifdef SUPPORT_LINKDOWN_RECOVERY
-#ifdef CONFIG_ARCH_MSM
-		msm_pcie_deregister_event(&bus->pcie_event);
-#endif /* CONFIG_ARCH_MSM */
-#ifdef CONFIG_ARCH_EXYNOS
-		exynos_pcie_deregister_event(&bus->pcie_event);
-#endif /* CONFIG_ARCH_EXYNOS */
+		dhd_plat_pcie_deregister_event(bus->dhd->plat_info);
 #endif /* SUPPORT_LINKDOWN_RECOVERY */
 
 		bus->rc_dev = NULL;
@@ -1993,10 +1977,8 @@ void dhdpcie_dump_resource(dhd_bus_t *bus)
 }
 
 #ifdef SUPPORT_LINKDOWN_RECOVERY
-#if defined(CONFIG_ARCH_MSM) || defined(CONFIG_ARCH_EXYNOS)
-void dhdpcie_linkdown_cb(struct_pcie_notify *noti)
+void dhdpcie_linkdown_cb(struct pci_dev *pdev)
 {
-	struct pci_dev *pdev = (struct pci_dev *)noti->user;
 	dhdpcie_info_t *pch = NULL;
 
 	if (pdev) {
@@ -2032,7 +2014,6 @@ void dhdpcie_linkdown_cb(struct_pcie_notify *noti)
 	}
 
 }
-#endif /* CONFIG_ARCH_MSM || CONFIG_ARCH_EXYNOS */
 #endif /* SUPPORT_LINKDOWN_RECOVERY */
 
 int dhdpcie_init(struct pci_dev *pdev)
@@ -2166,9 +2147,11 @@ int dhdpcie_init(struct pci_dev *pdev)
 
 		/* if rc_dev is still NULL, try to get from vendor/device IDs */
 		if (bus->rc_dev == NULL) {
-			bus->rc_dev = pci_get_device(PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID, NULL);
+			bus->rc_dev = pci_get_device(dhd_plat_get_rc_vendor_id(),
+					dhd_plat_get_rc_device_id(), NULL);
 			DHD_ERROR(("%s: rc_dev from pci_get_device (%x:%x) is %p\n", __FUNCTION__,
-				PCIE_RC_VENDOR_ID, PCIE_RC_DEVICE_ID, bus->rc_dev));
+				dhd_plat_get_rc_vendor_id(), dhd_plat_get_rc_device_id(),
+				bus->rc_dev));
 		}
 
 		bus->rc_ep_aspm_cap = dhd_bus_is_rc_ep_aspm_capable(bus);
@@ -2192,26 +2175,11 @@ int dhdpcie_init(struct pci_dev *pdev)
 		bus->dhd->dongle_isolation = TRUE;
 #endif /* DONGLE_ENABLE_ISOLATION */
 #ifdef SUPPORT_LINKDOWN_RECOVERY
+		dhd_plat_pcie_register_event(bus->dhd->plat_info, pdev,
+			dhdpcie_linkdown_cb);
 #ifdef CONFIG_ARCH_MSM
-		bus->pcie_event.events = MSM_PCIE_EVENT_LINKDOWN;
-		bus->pcie_event.user = pdev;
-		bus->pcie_event.mode = MSM_PCIE_TRIGGER_CALLBACK;
-		bus->pcie_event.callback = dhdpcie_linkdown_cb;
-		bus->pcie_event.options = MSM_PCIE_CONFIG_NO_RECOVERY;
-		msm_pcie_register_event(&bus->pcie_event);
 		bus->no_cfg_restore = FALSE;
 #endif /* CONFIG_ARCH_MSM */
-#ifdef CONFIG_ARCH_EXYNOS
-#ifdef CPL_TIMEOUT_RECOVERY
-		bus->pcie_event.events = EXYNOS_PCIE_EVENT_LINKDOWN | EXYNOS_PCIE_EVENT_CPL_TIMEOUT;
-#else
-		bus->pcie_event.events = EXYNOS_PCIE_EVENT_LINKDOWN;
-#endif /* CPL_TIMEOUT_RECOVERY */
-		bus->pcie_event.user = pdev;
-		bus->pcie_event.mode = EXYNOS_PCIE_TRIGGER_CALLBACK;
-		bus->pcie_event.callback = dhdpcie_linkdown_cb;
-		exynos_pcie_register_event(&bus->pcie_event);
-#endif /* CONFIG_ARCH_EXYNOS */
 		bus->read_shm_fail = FALSE;
 #endif /* SUPPORT_LINKDOWN_RECOVERY */
 
@@ -2421,10 +2389,6 @@ dhdpcie_irq_disabled(dhd_bus_t *bus)
 	return desc->depth;
 }
 
-#if defined(CONFIG_ARCH_EXYNOS)
-int pcie_ch_num = EXYNOS_PCIE_CH_NUM;
-#endif /* CONFIG_ARCH_EXYNOS */
-
 int
 dhdpcie_start_host_dev(dhd_bus_t *bus)
 {
@@ -2444,9 +2408,8 @@ dhdpcie_start_host_dev(dhd_bus_t *bus)
 		return BCME_ERROR;
 	}
 
-#ifdef CONFIG_ARCH_EXYNOS
-	exynos_pcie_pm_resume(pcie_ch_num);
-#endif /* CONFIG_ARCH_EXYNOS */
+	ret = dhd_plat_pcie_resume(bus->dhd->plat_info);
+
 #ifdef CONFIG_ARCH_MSM
 #ifdef SUPPORT_LINKDOWN_RECOVERY
 	if (bus->no_cfg_restore) {
@@ -2499,9 +2462,8 @@ dhdpcie_stop_host_dev(dhd_bus_t *bus)
 		return BCME_ERROR;
 	}
 
-#ifdef CONFIG_ARCH_EXYNOS
-	exynos_pcie_pm_suspend(pcie_ch_num);
-#endif /* CONFIG_ARCH_EXYNOS */
+	dhd_plat_pcie_suspend(bus->dhd->plat_info);
+
 #ifdef CONFIG_ARCH_MSM
 #ifdef SUPPORT_LINKDOWN_RECOVERY
 	if (bus->no_cfg_restore) {
