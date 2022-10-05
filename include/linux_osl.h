@@ -376,13 +376,6 @@ extern char* osl_get_rtctime(void);
 #define	bcmp(b1, b2, len)	memcmp((b1), (b2), (len))
 #define	bzero(b, len)		memset((b), '\0', (len))
 
-#if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS9820) || \
-	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_GOOGLE)
-extern int pcie_ch_num;
-#endif /* CONFIG_SOC_EXYNOS9810 || CONFIG_SOC_EXYNOS9820
-	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_GOOGLE
-	*/
-
 /* register access macros */
 #if defined(OSLREGOPS)
 #define R_REG(osh, r) (\

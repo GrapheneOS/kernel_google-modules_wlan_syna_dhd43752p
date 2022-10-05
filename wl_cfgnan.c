@@ -2138,6 +2138,30 @@ check_for_valid_5gchan(struct net_device *ndev, uint8 chan)
 		ret = BCME_BADCHAN;
 		goto exit;
 	}
+
+	if (bitmap & WL_CHAN_RADAR) {
+		WL_ERR(("Radar channel, NAN can not operate\n"));
+		ret = BCME_BADCHAN;
+		goto exit;
+	}
+
+	if (bitmap & WL_CHAN_PASSIVE) {
+		WL_ERR(("Passive channel, NAN can not operate\n"));
+		ret = BCME_BADCHAN;
+		goto exit;
+	}
+
+	if (bitmap & WL_CHAN_RESTRICTED) {
+		WL_ERR(("Use restricted channel, NAN can not operate\n"));
+		ret = BCME_BADCHAN;
+		goto exit;
+	}
+
+	if (bitmap & WL_CHAN_CLM_RESTRICTED) {
+		WL_ERR(("CLM restricted channel, NAN can not operate\n"));
+		ret = BCME_BADCHAN;
+		goto exit;
+	}
 exit:
 	NAN_DBG_EXIT();
 	return ret;

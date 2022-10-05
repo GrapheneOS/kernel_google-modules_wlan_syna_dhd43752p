@@ -10908,9 +10908,6 @@ wl_cfg80211_update_self_regd(struct bcm_cfg80211 *cfg, char *ccode)
 	int regd_len = 0;
 	struct ieee80211_regdomain *regd_copy = NULL;
 	s32 clm_flags = WLC_BAND_5G;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0))
-	int need_rtnl_lock = 0;
-#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0) */
 
 	wl_check_brcm_specifc_country_code(ccode);
 
@@ -10954,16 +10951,22 @@ wl_cfg80211_update_self_regd(struct bcm_cfg80211 *cfg, char *ccode)
 			}
 		}
 		if (wiphy) {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0))
-			need_rtnl_lock = !rtnl_is_locked();
-			if (need_rtnl_lock)
-				rtnl_lock();
-			regulatory_set_wiphy_regd_sync_rtnl(wiphy, regd_copy);
-			if (need_rtnl_lock)
-				rtnl_unlock();
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0))
+			if (rtnl_is_locked()) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0))
+				wiphy_lock(wiphy);
+				regulatory_set_wiphy_regd_sync(wiphy, regd_copy);
+				wiphy_unlock(wiphy);
 #else
-			regulatory_set_wiphy_regd_sync(wiphy, regd_copy);
-#endif /* LINUX_VERSION < VERSION(5, 12, 0) */
+				regulatory_set_wiphy_regd_sync_rtnl(wiphy, regd_copy);
+#endif /* LINUX_VERSION >= 5.12.0 */
+			} else {
+				regulatory_set_wiphy_regd(wiphy, regd_copy);
+			}
+#else
+			/* for 3.10 */
+			wiphy_apply_custom_regulatory(wiphy, regd_copy);
+#endif /* LINUX_VERSION >= 4.0.0 */
 		}
 		kfree(regd_copy);
 	}
