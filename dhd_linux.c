@@ -6248,10 +6248,12 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 		dhd_rx_pkt_dump(dhdp, ifidx, dump_data, len);
 		dhd_handle_pktdata(dhdp, ifidx, skb, dump_data, FALSE,
 			len, NULL, NULL, FALSE, pkt_wake, TRUE);
-#if defined(DHD_WAKE_STATUS) && defined(DHD_WAKEPKT_DUMP)
+#if defined(DHD_WAKE_STATUS)
 		if (pkt_wake) {
 			DHD_ERROR(("##### dhdpcie_host_wake caused by packets\n"));
+#if defined(DHD_WAKEPKT_DUMP)
 			dhd_prhex("[wakepkt_dump]", (char*)dump_data, MIN(len, 64), DHD_ERROR_VAL);
+#endif /* DHD_WAKEPKT_DUMP */
 			DHD_ERROR(("config check in_suspend: %d\n", dhdp->in_suspend));
 #ifdef ARP_OFFLOAD_SUPPORT
 			DHD_ERROR(("arp hmac_update:%d \n", dhdp->hmac_updated));
@@ -6260,7 +6262,7 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 			PKTMARK(skb) |= 0x80000000;
 #endif /* DHD_WAKEPKT_SET_MARK */
 		}
-#endif /* DHD_WAKE_STATUS && DHD_WAKEPKT_DUMP */
+#endif /* DHD_WAKE_STATUS */
 
 #ifdef BCMINTERNAL
 		if (dhd->pub.loopback) {
