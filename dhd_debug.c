@@ -2264,13 +2264,15 @@ dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 		uint16 req_count, uint16 *resp_count)
 {
 	dhd_dbg_tx_report_t *tx_report;
-	dhd_dbg_tx_info_t *tx_pkt;
+	dhd_dbg_tx_info_t *tx_pkt, *ori_tx_pkt;
 	wifi_tx_report_t *ptr;
 	compat_wifi_tx_report_t *cptr;
 	dhd_dbg_pkt_mon_state_t tx_pkt_state;
 	dhd_dbg_pkt_mon_state_t tx_status_state;
 	uint16 pkt_count, count;
 	unsigned long flags;
+	dhd_dbg_tx_info_t *tmp_tx_pkt;
+	uint32 alloc_len, i, ret;
 
 	BCM_REFERENCE(ptr);
 	BCM_REFERENCE(cptr);
@@ -2295,8 +2297,35 @@ dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 
 	count = 0;
 	tx_report = dhdp->dbg->pkt_mon.tx_report;
-	tx_pkt = tx_report->tx_pkts;
+	ori_tx_pkt = tx_report->tx_pkts;
 	pkt_count = MIN(req_count, tx_report->status_pos);
+
+	alloc_len = (sizeof(*tmp_tx_pkt) * pkt_count);
+	tmp_tx_pkt = (dhd_dbg_tx_info_t *)MALLOCZ(dhdp->osh, alloc_len);
+
+	if (unlikely(!tmp_tx_pkt)) {
+		DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+		DHD_ERROR(("%s: fail to alloc tmp_tx_pkt\n", __func__));
+		return -ENOMEM;
+	}
+
+	if ((ret = memcpy_s(tmp_tx_pkt, alloc_len, ori_tx_pkt, alloc_len))) {
+		DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+		DHD_ERROR(("%s: fail to copy tmp_tx_pkt, ret=%d\n", __func__, ret));
+		return -EINVAL;
+	}
+
+	for (i = 0; i < pkt_count; i++) {
+		tmp_tx_pkt[i].info.pkt = skb_copy((struct sk_buff*) ori_tx_pkt[i].info.pkt,
+				GFP_ATOMIC);
+		if(!tmp_tx_pkt[i].info.pkt) {
+			DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+			DHD_ERROR(("%s: fail to copy skb\n", __func__));
+			return -ENOMEM;
+		}
+	}
+
+	tx_pkt = tmp_tx_pkt;
 	DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
 
 #ifdef CONFIG_COMPAT
@@ -2348,6 +2377,11 @@ dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 	}
 	*resp_count = pkt_count;
 
+	for (i = 0; i < pkt_count; i++) {
+		PKTFREE(dhdp->osh, tmp_tx_pkt[i].info.pkt, TRUE);
+	}
+	MFREE(dhdp->osh, tmp_tx_pkt, alloc_len);
+
 	if (!pkt_count) {
 		DHD_ERROR(("%s(): no tx_status in tx completion messages, "
 			"make sure that 'd11status' is enabled in firmware, "
@@ -2362,12 +2396,14 @@ dhd_dbg_monitor_get_rx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 		uint16 req_count, uint16 *resp_count)
 {
 	dhd_dbg_rx_report_t *rx_report;
-	dhd_dbg_rx_info_t *rx_pkt;
+	dhd_dbg_rx_info_t *rx_pkt, *ori_rx_pkt;
 	wifi_rx_report_t *ptr;
 	compat_wifi_rx_report_t *cptr;
 	dhd_dbg_pkt_mon_state_t rx_pkt_state;
 	uint16 pkt_count, count;
 	unsigned long flags;
+	dhd_dbg_rx_info_t *tmp_rx_pkt;
+	uint32 alloc_len, i, ret;
 
 	BCM_REFERENCE(ptr);
 	BCM_REFERENCE(cptr);
@@ -2389,8 +2425,35 @@ dhd_dbg_monitor_get_rx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 
 	count = 0;
 	rx_report = dhdp->dbg->pkt_mon.rx_report;
-	rx_pkt = rx_report->rx_pkts;
+	ori_rx_pkt = rx_report->rx_pkts;
 	pkt_count = MIN(req_count, rx_report->pkt_pos);
+
+	alloc_len = (sizeof(*tmp_rx_pkt) * pkt_count);
+	tmp_rx_pkt = (dhd_dbg_rx_info_t *)MALLOCZ(dhdp->osh, alloc_len);
+
+	if (unlikely(!tmp_rx_pkt)) {
+		DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+		DHD_ERROR(("%s: fail to alloc tmp_rx_pkt\n", __func__));
+		return -ENOMEM;
+	}
+
+	if ((ret = memcpy_s(tmp_rx_pkt, alloc_len, ori_rx_pkt, alloc_len))) {
+		DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+		DHD_ERROR(("%s: fail to copy tmp_rx_pkt ret=%d\n", __func__, ret));
+		return -EINVAL;
+	}
+
+	for (i = 0; i < pkt_count; i++) {
+		tmp_rx_pkt[i].info.pkt = skb_copy((struct sk_buff*) ori_rx_pkt[i].info.pkt,
+				GFP_ATOMIC);
+		if(!tmp_rx_pkt[i].info.pkt) {
+			DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
+			DHD_ERROR(("%s: fail to copy skb\n", __func__));
+			return -ENOMEM;
+		}
+	}
+
+	rx_pkt = tmp_rx_pkt;
 	DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
 
 #ifdef CONFIG_COMPAT
@@ -2443,6 +2506,11 @@ dhd_dbg_monitor_get_rx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 	}
 
 	*resp_count = pkt_count;
+
+	for (i = 0; i < pkt_count; i++) {
+		PKTFREE(dhdp->osh, tmp_rx_pkt[i].info.pkt, TRUE);
+	}
+	MFREE(dhdp->osh, tmp_rx_pkt, alloc_len);
 
 	return BCME_OK;
 }
