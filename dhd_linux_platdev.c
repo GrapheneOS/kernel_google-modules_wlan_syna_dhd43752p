@@ -36,11 +36,10 @@
 #include <dhd_linux.h>
 #if defined(OEM_ANDROID)
 #include <wl_android.h>
+#include <dhd_plat.h>
 #endif
 #if defined(CONFIG_WIFI_CONTROL_FUNC) || defined(CUSTOMER_HW4)
 #include <linux/wlan_plat.h>
-#else
-#include <dhd_plat.h>
 #endif /* CONFIG_WIFI_CONTROL_FUNC */
 #ifdef BCMDBUS
 #include <dbus.h>
@@ -112,6 +111,18 @@ static int lock_cookie_wifi = 'W' | 'i'<<8 | 'F'<<16 | 'i'<<24;	/* cookie is "Wi
 #ifdef BCM4335_XTAL_WAR
 extern bool check_bcm4335_rev(void);
 #endif /* BCM4335_XTAL_WAR */
+
+#if defined(CONFIG_X86)
+#define PCIE_RC_VENDOR_ID 0x8086
+#define PCIE_RC_DEVICE_ID 0x9c1a
+#elif defined(CONFIG_ARCH_TEGRA)
+#define PCIE_RC_VENDOR_ID 0x14e4
+#define PCIE_RC_DEVICE_ID 0x4347
+#else /* CONFIG_ARCH_TEGRA */
+/* Dummy defn */
+#define PCIE_RC_VENDOR_ID 0xffff
+#define PCIE_RC_DEVICE_ID 0xffff
+#endif /* CONFIG_X86 */
 
 wifi_adapter_info_t* dhd_wifi_platform_get_adapter(uint32 bus_type, uint32 bus_num, uint32 slot_num)
 {
@@ -973,13 +984,50 @@ end:
 	return err;
 }
 
+int
+__attribute__ ((weak)) dhd_get_platform_naming_for_nvram_clmblob_file(char *file_name)
+{
+	return BCME_ERROR;
+}
+
+/* Weak functions that can be overridden in Platform specific implementation */
+uint32 __attribute__ ((weak)) dhd_plat_get_info_size(void)
+{
+	return 0;
+}
+
+int __attribute__ ((weak)) dhd_plat_pcie_register_event(void *plat_info,
+               struct pci_dev *pdev, dhd_pcie_event_cb_t pfn)
+{
+	return 0;
+}
+
+void __attribute__ ((weak)) dhd_plat_pcie_deregister_event(void *plat_info)
+{
+	return;
+}
+
+void __attribute__ ((weak)) dhd_plat_l1ss_ctrl(bool ctrl)
+{
+	return;
+}
+
 void __attribute__ ((weak)) dhd_plat_l1_exit_io(void)
 {
 	return;
 }
 
-int
-__attribute__ ((weak)) dhd_get_platform_naming_for_nvram_clmblob_file(char *file_name)
+void __attribute__ ((weak)) dhd_plat_l1_exit(void)
 {
-	return BCME_ERROR;
+	return;
+}
+
+void __attribute__ ((weak)) dhd_plat_report_bh_sched(void *plat_info, int resched)
+{
+	return;
+}
+
+uint32 __attribute__ ((weak)) dhd_plat_get_rc_device_id(void)
+{
+	return PCIE_RC_DEVICE_ID;
 }

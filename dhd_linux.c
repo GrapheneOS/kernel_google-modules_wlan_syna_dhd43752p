@@ -76,6 +76,9 @@
 #include <bcmevent.h>
 #include <vlan.h>
 #include <802.3.h>
+#ifdef ARP_IPV6NSRS_PKTPRIO_OVERRIDE
+#include <bcmicmp.h>
+#endif
 
 #ifdef WL_NANHO
 #include <nanho.h>
@@ -269,6 +272,8 @@ static void dhd_blk_tsfl_handler(struct work_struct * work);
 #include <bcmudp.h>
 #include <bcmproto.h>
 #endif /* defined(DHD_TX_PROFILE) */
+
+#include <dhd_plat.h>
 
 #ifdef WL_MON_OWN_PKT
 extern int dhd_get_monitor_data(dhd_pub_t *dhdp,void *pktbuf,struct sk_buff *skb,void *pktdata,uint pktlen);
@@ -4149,7 +4154,26 @@ BCMFASTPATH(__dhd_sendpkt)(dhd_pub_t *dhdp, int ifidx, void *pktbuf)
 		}
 #endif /* !PKTPRIO_OVERRIDE */
 	}
-
+#ifdef ARP_IPV6NSRS_PKTPRIO_OVERRIDE
+	{
+		uint16 ether_type = ntoh16(eh->ether_type);
+		if (ether_type == ETHER_TYPE_ARP) {
+			PKTSETPRIO(pktbuf, PRIO_8021D_VO);
+		} else if (ether_type == ETHER_TYPE_IPV6) {
+			uint8 *pkt_data = PKTDATA(dhdp->osh, pktbuf);
+			struct ipv6_hdr *ipv6 = (struct ipv6_hdr *)(pkt_data + ETHER_HDR_LEN);
+			if (ipv6->nexthdr == ICMPV6_HEADER_TYPE) {
+				struct icmp6_hdr *icmpv6_hdr =
+					(struct icmp6_hdr *)(pkt_data + ETHER_HDR_LEN + sizeof(*ipv6));
+				int subtype = icmpv6_hdr->icmp6_type;
+				if (subtype == ICMP6_NEIGH_SOLICITATION ||
+						subtype == ICMP6_RTR_SOLICITATION) {
+					PKTSETPRIO(pktbuf, PRIO_8021D_VO);
+				}
+			}
+		}
+	}
+#endif
 #if defined(BCM_ROUTER_DHD)
 	traffic_mgmt_pkt_set_prio(dhdp, pktbuf);
 
@@ -6224,10 +6248,12 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 		dhd_rx_pkt_dump(dhdp, ifidx, dump_data, len);
 		dhd_handle_pktdata(dhdp, ifidx, skb, dump_data, FALSE,
 			len, NULL, NULL, FALSE, pkt_wake, TRUE);
-#if defined(DHD_WAKE_STATUS) && defined(DHD_WAKEPKT_DUMP)
+#if defined(DHD_WAKE_STATUS)
 		if (pkt_wake) {
 			DHD_ERROR(("##### dhdpcie_host_wake caused by packets\n"));
+#if defined(DHD_WAKEPKT_DUMP)
 			dhd_prhex("[wakepkt_dump]", (char*)dump_data, MIN(len, 64), DHD_ERROR_VAL);
+#endif /* DHD_WAKEPKT_DUMP */
 			DHD_ERROR(("config check in_suspend: %d\n", dhdp->in_suspend));
 #ifdef ARP_OFFLOAD_SUPPORT
 			DHD_ERROR(("arp hmac_update:%d \n", dhdp->hmac_updated));
@@ -6236,7 +6262,7 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 			PKTMARK(skb) |= 0x80000000;
 #endif /* DHD_WAKEPKT_SET_MARK */
 		}
-#endif /* DHD_WAKE_STATUS && DHD_WAKEPKT_DUMP */
+#endif /* DHD_WAKE_STATUS */
 
 #ifdef BCMINTERNAL
 		if (dhd->pub.loopback) {
@@ -7240,6 +7266,9 @@ dhd_dpc(ulong data)
 #endif /* DHD_LB_STATS && PCIE_FULL_DONGLE */
 		if (dhd_bus_dpc(dhd->pub.bus)) {
 			tasklet_schedule(&dhd->tasklet);
+			dhd_plat_report_bh_sched(dhd->pub.plat_info, 1);
+		} else {
+			dhd_plat_report_bh_sched(dhd->pub.plat_info, 0);
 		}
 	} else {
 		dhd_bus_stop(dhd->pub.bus, TRUE);
@@ -11593,6 +11622,17 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	dll_init(&(dhd->pub.mw_list_head));
 #endif /* DHD_DEBUG */
 
+	/*
+	 * Attach DHD Core Layer to Platform Layer. For non
+	 * Embedded environment, where there is no dependency on platform
+	 * layer, dhd_get_plat_info_size can return 0, if the platform
+	 * layer does not exist or chooses not to implement it.
+	 */
+	dhd->pub.plat_info_size = dhd_plat_get_info_size();
+	if (dhd->pub.plat_info_size) {
+		dhd->pub.plat_info = MALLOCZ(osh, dhd->pub.plat_info_size);
+	}
+
 #ifdef GET_CUSTOM_MAC_ENABLE
 	wifi_platform_get_mac_addr(dhd->adapter, dhd->pub.mac.octet);
 #endif /* GET_CUSTOM_MAC_ENABLE */
@@ -12842,20 +12882,15 @@ dhd_bus_start(dhd_pub_t *dhdp)
 	dhd_bus_l1ss_enable_rc_ep(dhdp->bus, TRUE);
 #endif /* BT_OVER_PCIE */
 
-#if defined(CONFIG_ARCH_EXYNOS) && defined(BCMPCIE)
-#if !defined(CONFIG_SOC_EXYNOS8890) && !defined(SUPPORT_EXYNOS7420)
+#if defined(BCMPCIE)
 	/* XXX: JIRA SWWLAN-139454: Added L1ss enable
 	 * after firmware download completion due to link down issue
 	 * JIRA SWWLAN-142236: Amendment - Changed L1ss enable point
 	 */
 	DHD_ERROR(("%s: Enable L1ss EP side\n", __FUNCTION__));
-#if defined(CONFIG_SOC_GOOGLE)
-	exynos_pcie_rc_l1ss_ctrl(1, PCIE_L1SS_CTRL_WIFI, pcie_ch_num);
-#else
-	exynos_pcie_l1ss_ctrl(1, PCIE_L1SS_CTRL_WIFI);
-#endif /* CONFIG_SOC_GOOGLE */
-#endif /* !CONFIG_SOC_EXYNOS8890 && !SUPPORT_EXYNOS7420 */
-#endif /* CONFIG_ARCH_EXYNOS && BCMPCIE */
+	dhd_plat_l1ss_ctrl(1);
+#endif /* BCMPCIE */
+
 #if defined(DHD_DEBUG) && defined(BCMSDIO)
 	f2_sync_end = OSL_SYSUPTIME();
 	DHD_ERROR(("Time taken for FW download and F2 ready is: %d msec\n",
@@ -14465,7 +14500,9 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 	uint roamvar = 1;
 #endif /* DISABLE_BUILTIN_ROAM */
 #endif /* ROAM_ENABLE */
-
+#ifdef DISABLE_TXACK_ALIVE
+	uint txack_alive = 0;
+#endif
 #if defined(SOFTAP)
 	uint dtim = 1;
 #endif
@@ -14985,6 +15022,12 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 		DHD_ERROR(("%s roam_off failed %d\n", __FUNCTION__, ret));
 	}
 #endif /* ROAM_ENABLE || DISABLE_BUILTIN_ROAM */
+#ifdef DISABLE_TXACK_ALIVE
+	ret = dhd_iovar(dhd, 0, "txack_alive", (char *)&txack_alive, sizeof(txack_alive), NULL, 0, TRUE);
+	if (ret < 0) {
+		DHD_ERROR(("%s txack_alive failed %d\n", __FUNCTION__, ret));
+	}
+#endif
 #if defined(ROAM_ENABLE)
 #ifdef DISABLE_BCNLOSS_ROAM
 	ret = dhd_iovar(dhd, 0, "roam_bcnloss_off", (char *)&roam_bcnloss_off,
@@ -17485,6 +17528,11 @@ dhd_free(dhd_pub_t *dhdp)
 			deinit_dhd_timeouts(&dhd->pub);
 #endif /* REPORT_FATAL_TIMEOUTS */
 
+			/* Free Platform Layer allocations */
+			if (dhd->pub.plat_info) {
+				MFREE(dhdp->osh, dhdp->plat_info, dhdp->plat_info_size);
+			}
+
 			/* If pointer is allocated by dhd_os_prealloc then avoid MFREE */
 			if (dhd != (dhd_info_t *)dhd_os_prealloc(dhdp,
 					DHD_PREALLOC_DHD_INFO, 0, FALSE))
@@ -18710,22 +18758,17 @@ dhd_net_bus_devreset(struct net_device *dev, uint8 flag)
 			dhd->fw_path, dhd->nv_path);
 	}
 #endif /* BCMSDIO */
-#if defined(CONFIG_ARCH_EXYNOS) && defined(BCMPCIE)
-#if !defined(CONFIG_SOC_EXYNOS8890) && !defined(SUPPORT_EXYNOS7420)
+#if defined(BCMPCIE)
 	/* XXX: JIRA SWWLAN-139454: Added L1ss enable
 	 * after firmware download completion due to link down issue
 	 * JIRA SWWLAN-142236: Amendment - Changed L1ss enable point
 	 */
 	DHD_ERROR(("%s Disable L1ss EP side\n", __FUNCTION__));
 	if (flag == FALSE && dhd->pub.busstate == DHD_BUS_DOWN) {
-#if defined(CONFIG_SOC_GOOGLE)
-		exynos_pcie_rc_l1ss_ctrl(0, PCIE_L1SS_CTRL_WIFI, pcie_ch_num);
-#else
-		exynos_pcie_l1ss_ctrl(0, PCIE_L1SS_CTRL_WIFI);
-#endif /* CONFIG_SOC_GOOGLE  */
+		DHD_ERROR(("%s Disable L1ss EP side\n", __FUNCTION__));
+		dhd_plat_l1ss_ctrl(0);
 	}
-#endif /* !CONFIG_SOC_EXYNOS8890 && !defined(SUPPORT_EXYNOS7420)  */
-#endif /* CONFIG_ARCH_EXYNOS && BCMPCIE */
+#endif /* BCMPCIE */
 
 	ret = dhd_bus_devreset(&dhd->pub, flag);
 

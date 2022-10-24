@@ -54,9 +54,31 @@ struct wifi_platform_data {
 #endif /* CONFIG_WIFI_CONTROL_FUNC */
 
 #include <linux/pci.h>
+extern uint32 dhd_plat_get_info_size(void);
+
+typedef void (*dhd_pcie_event_cb_t) (struct pci_dev *pdev);
+extern int dhd_plat_pcie_register_event(void *plat_info,
+               struct pci_dev *pdev, dhd_pcie_event_cb_t pfn);
+extern void dhd_plat_pcie_deregister_event(void *plat_info);
+extern void dhd_plat_report_bh_sched(void *plat_info, int resched);
+extern int dhd_plat_pcie_suspend(void *plat_info);
+extern int dhd_plat_pcie_resume(void *plat_info);
+extern void dhd_plat_pcie_register_dump(void *plat_info);
+extern void dhd_plat_pin_dbg_show(void *plat_info);
+
+extern uint32 dhd_plat_get_info_size(void);
+extern void dhd_plat_l1ss_ctrl(bool ctrl);
+
+#include <linux/pci.h>
 
 /* To be called when we intend to exit L1 while performing wreg, rreg operations */
 extern void dhd_plat_l1_exit_io(void);
+
+/* To be called when we intend to exit L1 in non-io case */
+extern void dhd_plat_l1_exit(void);
+
+extern uint32 dhd_plat_get_rc_vendor_id(void);
+extern uint32 dhd_plat_get_rc_device_id(void);
 
 #endif /* __linux__ */
 #endif /* __DHD_PLAT_H__ */
