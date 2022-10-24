@@ -147,8 +147,12 @@ int dhd_msg_level = DHD_ERROR_VAL | DHD_EVENT_VAL
 #ifdef BOARD_HIKEY
 		| DHD_FWLOG_VAL
 #endif /* BOARD_HIKEY */
+#ifndef DHD_REDUCE_PM_LOG
+		| DHD_RPM_VAL
+#endif /* REDUCE_PM_LOG */
 	        | DHD_PKT_MON_VAL;
 int dhd_log_level = DHD_ERROR_VAL | DHD_EVENT_VAL
+		| DHD_RPM_VAL
 		| DHD_PKT_MON_VAL | DHD_FWLOG_VAL | DHD_IOVAR_MEM_VAL;
 #else
 int dbgring_msg_level = 0;
@@ -161,6 +165,7 @@ int dhd_msg_level = DHD_ERROR_VAL | DHD_FWLOG_VAL | DHD_EVENT_VAL
 #ifndef OEM_ANDROID
 	| DHD_MSGTRACE_VAL
 #endif /* OEM_ANDROID */
+	| DHD_RPM_VAL
 	| DHD_PKT_MON_VAL;
 
 int dhd_log_level = DHD_ERROR_VAL | DHD_FWLOG_VAL | DHD_EVENT_VAL
@@ -171,6 +176,7 @@ int dhd_log_level = DHD_ERROR_VAL | DHD_FWLOG_VAL | DHD_EVENT_VAL
 #ifndef OEM_ANDROID
 	| DHD_MSGTRACE_VAL
 #endif /* OEM_ANDROID */
+	| DHD_RPM_VAL
 	| DHD_PKT_MON_VAL;
 
 #endif /* DHD_DEBUGABILITY_LOG_DUMP_RING */

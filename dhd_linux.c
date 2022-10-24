@@ -4888,7 +4888,7 @@ __dhd_txflowcontrol(dhd_pub_t *dhdp, struct net_device *net, bool state)
 {
 	if (state == ON) {
 		if (!netif_queue_stopped(net)) {
-			DHD_INFO(("%s: Stop Netif Queue\n", __FUNCTION__));
+			DHD_TXFLOWCTL(("%s: Stop Netif Queue\n", __FUNCTION__));
 			netif_stop_queue(net);
 		} else {
 			DHD_LOG_MEM(("%s: Netif Queue already stopped\n", __FUNCTION__));
@@ -4897,7 +4897,7 @@ __dhd_txflowcontrol(dhd_pub_t *dhdp, struct net_device *net, bool state)
 
 	if (state == OFF) {
 		if (netif_queue_stopped(net)) {
-			DHD_INFO(("%s: Start Netif Queue\n", __FUNCTION__));
+			DHD_TXFLOWCTL(("%s: Start Netif Queue\n", __FUNCTION__));
 			netif_wake_queue(net);
 		} else {
 			DHD_LOG_MEM(("%s: Netif Queue already started\n", __FUNCTION__));
@@ -12887,7 +12887,7 @@ dhd_bus_start(dhd_pub_t *dhdp)
 	 * after firmware download completion due to link down issue
 	 * JIRA SWWLAN-142236: Amendment - Changed L1ss enable point
 	 */
-	DHD_ERROR(("%s: Enable L1ss EP side\n", __FUNCTION__));
+	DHD_RPM(("%s: Enable L1ss EP side\n", __FUNCTION__));
 	dhd_plat_l1ss_ctrl(1);
 #endif /* BCMPCIE */
 
@@ -18763,7 +18763,7 @@ dhd_net_bus_devreset(struct net_device *dev, uint8 flag)
 	 * after firmware download completion due to link down issue
 	 * JIRA SWWLAN-142236: Amendment - Changed L1ss enable point
 	 */
-	DHD_ERROR(("%s Disable L1ss EP side\n", __FUNCTION__));
+	DHD_RPM(("%s Disable L1ss EP side\n", __FUNCTION__));
 	if (flag == FALSE && dhd->pub.busstate == DHD_BUS_DOWN) {
 		DHD_ERROR(("%s Disable L1ss EP side\n", __FUNCTION__));
 		dhd_plat_l1ss_ctrl(0);
