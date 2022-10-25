@@ -2299,7 +2299,6 @@ dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 	tx_report = dhdp->dbg->pkt_mon.tx_report;
 	ori_tx_pkt = tx_report->tx_pkts;
 	pkt_count = MIN(req_count, tx_report->status_pos);
-	DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
 
 	alloc_len = (sizeof(*tmp_tx_pkt) * pkt_count);
 	tmp_tx_pkt = (dhd_dbg_tx_info_t *)MALLOCZ(dhdp->osh, alloc_len);
@@ -2428,7 +2427,6 @@ dhd_dbg_monitor_get_rx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 	rx_report = dhdp->dbg->pkt_mon.rx_report;
 	ori_rx_pkt = rx_report->rx_pkts;
 	pkt_count = MIN(req_count, rx_report->pkt_pos);
-	DHD_PKT_MON_UNLOCK(dhdp->dbg->pkt_mon_lock, flags);
 
 	alloc_len = (sizeof(*tmp_rx_pkt) * pkt_count);
 	tmp_rx_pkt = (dhd_dbg_rx_info_t *)MALLOCZ(dhdp->osh, alloc_len);
