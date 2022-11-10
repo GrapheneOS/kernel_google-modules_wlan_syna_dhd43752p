@@ -4691,7 +4691,7 @@ BCMFASTPATH(dhd_start_xmit)(struct sk_buff *skb, struct net_device *net)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) && defined(DHD_TCP_PACING_SHIFT)
 #ifndef DHD_DEFAULT_TCP_PACING_SHIFT
-#define DHD_DEFAULT_TCP_PACING_SHIFT 3
+#define DHD_DEFAULT_TCP_PACING_SHIFT 7
 #endif /* DHD_DEFAULT_TCP_PACING_SHIFT */
 	if (skb->sk) {
 		sk_pacing_shift_update(skb->sk, DHD_DEFAULT_TCP_PACING_SHIFT);
@@ -9028,7 +9028,9 @@ dhd_ioctl_entry_wrapper(struct net_device *net, struct ifreq *ifr, int cmd)
 #endif /* DHD_PCIE_NATIVE_RUNTIMEPM */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) && defined(DHD_TCP_LIMIT_OUTPUT)
+#ifndef DHD_TCP_LIMIT_OUTPUT_BYTES
 #define DHD_TCP_LIMIT_OUTPUT_BYTES (4 * 1024 * 1024)
+#endif /* DHD_TCP_LIMIT_OUTPUT_BYTES */
 #ifndef TCP_DEFAULT_LIMIT_OUTPUT
 #define TCP_DEFAULT_LIMIT_OUTPUT (256 * 1024)
 #endif /* TSQ_DEFAULT_LIMIT_OUTPUT */
@@ -9850,6 +9852,10 @@ dhd_open(struct net_device *net)
 #endif /* NUM_SCB_MAX_PROBE */
 #endif /* WL_CFG80211 */
 	}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) && defined(DHD_TCP_LIMIT_OUTPUT)
+    dhd_ctrl_tcp_limit_output_bytes(1);
+#endif /* LINUX_VERSION_CODE > 4.19.0 && DHD_TCP_LIMIT_OUTPUT */
 
 	dhd->pub.up = 1;
 #if defined(BCMPCIE) && defined(CONFIG_ARCH_MSM)
