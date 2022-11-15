@@ -843,6 +843,15 @@ do {									\
 #define FILS_INDICATION_IE_TAG_FIXED_LEN		2
 #endif
 
+/* Join pref defines */
+#define JOIN_PREF_RSSI_LEN		0x02
+#define JOIN_PREF_RSSI_SIZE		4	/* RSSI pref header size in bytes */
+#define JOIN_PREF_WPA_HDR_SIZE		4	/* WPA pref header size in bytes */
+#define JOIN_PREF_WPA_TUPLE_SIZE	12	/* Tuple size in bytes */
+#define JOIN_PREF_MAX_WPA_TUPLES	16	/* Max no of tuples */
+#define JOIN_PREF_MAX_BUF_SIZE		(JOIN_PREF_RSSI_SIZE + JOIN_PREF_WPA_HDR_SIZE +	\
+				           (JOIN_PREF_WPA_TUPLE_SIZE * JOIN_PREF_MAX_WPA_TUPLES))
+
 #if defined(STRICT_GCC_WARNINGS) && defined(__GNUC__) &&\
 (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6))
 #define BCM_SET_LIST_FIRST_ENTRY(entry, ptr, type, member) \
@@ -1231,6 +1240,16 @@ struct net_info {
 	wl_cfgbss_t bss;
 	u8 ifidx;
 	struct list_head list; /* list of all net_info structure */
+
+	/* Multi-AKMs */
+	u8 passphrase[WSEC_MAX_PASSPHRASE_LEN];
+	u16 passphrase_len;
+	/* used to comapre with incoming config
+	* Delete config from firmware if both are not matching
+	* If matching, skip configuring iovar again
+	*/
+	u8* passphrase_cfg;
+	u16 passphrase_cfg_len;
 };
 
 #ifdef WL_BCNRECV
@@ -1788,6 +1807,8 @@ typedef struct wlcfg_assoc_info {
 	s32 bssidx;
 	u32 chan_cnt;
 	chanspec_t chanspecs[MAX_ROAM_CHANNEL];
+	bool auto_wpa_enabled;	/* auto_wpa enabled for multi AKM */
+	bool seamless_psk;	/* Multi-AKMs needing seamless PSK */
 } wlcfg_assoc_info_t;
 
 #define MAX_NUM_OF_ASSOCIATED_DEV       64
@@ -2162,6 +2183,22 @@ typedef struct wl_wips_event_info {
 	int16 current_RSSI;
 	int16 deauth_RSSI;
 } wl_wips_event_info_t;
+
+/* Struct used to populate fields needed for
+* wsec_info passphrase iovar config..
+* Passphrase can be configured per
+* 1. SSID
+* 2. SSID + AKM
+* 3. BSSID
+*/
+typedef struct wl_config_passphrase {
+	u8* passphrase;
+	u16 passphrase_len;
+	const u8 *ssid;
+	u8 ssid_len;
+	u8 *bssid;
+	u32 akm;
+} wl_config_passphrase_t;
 
 s32 wl_iftype_to_mode(wl_iftype_t iftype);
 
@@ -3169,10 +3206,9 @@ extern void update_roam_cache(struct bcm_cfg80211 *cfg, int ioctl_ver);
 extern int wl_cfgnan_get_stats(struct bcm_cfg80211 *cfg);
 #endif /* WL_NAN */
 
-#ifdef WL_SAE
 extern s32 wl_cfg80211_set_wsec_info(struct net_device *dev, uint32 *data,
 	uint16 data_len, int tag);
-#endif /* WL_SAE */
+
 #define WL_CHANNEL_ARRAY_INIT(band_chan_arr)	\
 do {	\
 	u32 arr_size, k;	\
@@ -3238,6 +3274,12 @@ extern bool wl_customer6_legacy_chip_check(struct bcm_cfg80211 *cfg,
 #ifdef WL_CFGVENDOR_SEND_ALERT_EVENT
 extern int wl_cfg80211_alert(struct net_device *dev);
 #endif /* WL_CFGVENDOR_SEND_ALERT_EVENT */
+
+s32 wl_cfg80211_set_netinfo_passphrase(struct bcm_cfg80211 *cfg,
+	struct net_device *ndev, const u8* passphrase, u8 len);
+s32 wl_cfg80211_config_passphrase(struct bcm_cfg80211 *cfg,
+	struct net_device *ndev, wl_config_passphrase_t *pp_config);
+chanspec_t wl_cfg80211_get_sta_chanspec(struct bcm_cfg80211 *cfg);
 
 #define BRCM_ROAMMING_EVENT_LENGTH 64
 #if !defined(WL_TWT) && defined(WL_TWT_HAL_IF)

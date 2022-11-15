@@ -795,7 +795,7 @@ static s32 wl_set_auth_type(struct net_device *dev,
 static s32 wl_set_set_cipher(struct net_device *dev,
 	struct cfg80211_connect_params *sme);
 static s32 wl_set_key_mgmt(struct net_device *dev,
-	struct cfg80211_connect_params *sme);
+	struct cfg80211_connect_params *sme, wlcfg_assoc_info_t *assoc_info);
 static s32 wl_set_set_sharedkey(struct net_device *dev,
 	struct cfg80211_connect_params *sme);
 #ifdef WL_FILS
@@ -5046,7 +5046,6 @@ wl_set_wsec_info_algos(struct net_device *dev, uint32 algos, uint32 mask)
 }
 #endif /* WL_GCMP */
 
-#ifdef WL_SAE
 s32
 wl_cfg80211_set_wsec_info(struct net_device *dev, uint32 *data,
 	uint16 data_len, int tag)
@@ -5104,7 +5103,6 @@ exit:
 	}
 	return err;
 }
-#endif /* SAE */
 
 #ifdef MFP
 static s32
@@ -5416,8 +5414,154 @@ wl_fils_toggle_roaming(struct net_device *dev, u32 auth_type)
 #endif /* !WL_FILS_ROAM_OFFLD && WL_FILS */
 #endif /* WL_FILS */
 
+/* Set Passphrase w.r.t SSID */
 static s32
-wl_set_key_mgmt(struct net_device *dev, struct cfg80211_connect_params *sme)
+wl_set_passphrase(struct net_device *dev,
+	struct cfg80211_connect_params *sme)
+{
+	struct net_info *_net_info;
+	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
+	wl_config_passphrase_t pp_config;
+	int err = BCME_OK;
+
+	bzero(&pp_config, sizeof(wl_config_passphrase_t));
+	_net_info = wl_get_netinfo_by_netdev(cfg, dev);
+
+	if (_net_info == NULL) {
+		WL_ERR(("net_info not found for iface %s", dev->name));
+		err = BCME_BADARG;
+		goto done;
+	}
+
+	/* Backward compat code till wpa_supp RB: 208505 is given to SS */
+	if (_net_info->passphrase_len == 0) {
+		WL_INFORM(("Passphrase not set ..Skip config\n"));
+		goto done;
+	}
+
+	if ((sme->ssid_len == 0) || (_net_info->passphrase_len == 0)) {
+		WL_ERR(("Invalid config ssid_len %zu passphrase_len %d",
+			sme->ssid_len, _net_info->passphrase_len));
+		err = BCME_BADARG;
+		goto done;
+	}
+
+	WL_INFORM(("Passphrase config: ssid len %zu passphrase len %d\n",
+		sme->ssid_len, _net_info->passphrase_len));
+	pp_config.ssid = sme->ssid;
+	pp_config.ssid_len = sme->ssid_len;
+	pp_config.passphrase = _net_info->passphrase;
+	pp_config.passphrase_len = _net_info->passphrase_len;
+
+	err = wl_cfg80211_config_passphrase(cfg, dev, &pp_config);
+
+done:
+	return err;
+}
+
+static void
+wl_prepare_joinpref_tuples(uint8 **pref_buf, u32 akm, u32 pairwise_cipher, u32 mcast_cipher)
+{
+	u32 val = 0;
+
+	/* Update AKM in tuple */
+	val = bcmswap32(akm);
+	/* memcpy_s return is typecast to void since we have JOIN_PREF_MAX_WPA_TUPLES check */
+	(void)memcpy_s(*pref_buf, sizeof(u32), (uint8 *)&val, sizeof(u32));
+	*pref_buf += WPA_SUITE_LEN;
+	/* Set unicast cipher in tuple */
+	val = bcmswap32(pairwise_cipher);
+	(void)memcpy_s(*pref_buf, sizeof(u32), (uint8 *)&val, sizeof(u32));
+	*pref_buf += WPA_SUITE_LEN;
+	/* Set multicast cipher tuple */
+	val = bcmswap32(mcast_cipher);
+	(void)memcpy_s(*pref_buf, sizeof(u32), (uint8 *)&val, sizeof(u32));
+	*pref_buf += WPA_SUITE_LEN;
+
+}
+
+static s32
+wl_set_multi_akm(struct net_device *dev, struct bcm_cfg80211 *cfg,
+	struct cfg80211_connect_params *sme, wlcfg_assoc_info_t *assoc_info)
+{
+	int num_tuples = 0;
+	char smbuf[WLC_IOCTL_SMLEN];
+	uint8 buf[JOIN_PREF_MAX_BUF_SIZE];
+	uint8 *pref = buf;
+	int j;
+	int total_bytes = 0;
+	u32 multi_akm = 0;
+	s32 err = 0;
+
+	/* Check for valid set AKM combinations */
+	for (j = 0; j < sme->crypto.n_akm_suites; j++) {
+		multi_akm |= wl_rsn_akm_wpa_auth_lookup(sme->crypto.akm_suites[j]);
+	}
+
+	/* Currently supplicant layer multi-AKM is support is restricted to
+	* SAE and WPA2PSK for seamless roaming
+	*/
+	if (multi_akm == (WPA3_AUTH_SAE_PSK | WPA2_AUTH_PSK)) {
+		/* Set auto_wpa_enabled to avoid wpa ie plumb */
+		assoc_info->auto_wpa_enabled = TRUE;
+		/* Update seamless_psk for AKMs needing psk plumb */
+		assoc_info->seamless_psk = TRUE;
+	} else {
+		WL_ERR(("Invalid MultiAKM combination 0x%x\n", multi_akm));
+		return -EINVAL;
+	}
+
+	bzero(buf, sizeof(buf));
+	/* Increment the num_tuples value whenever new joinpref tuple is added */
+	num_tuples = 2;
+
+	if (num_tuples <= JOIN_PREF_MAX_WPA_TUPLES) {
+
+		/* Add WL_JOIN_PREF_RSSI for old firmware version */
+		*pref++ = WL_JOIN_PREF_RSSI;
+		*pref++ = JOIN_PREF_RSSI_LEN;
+		*pref++ = 0;
+		*pref++ = 0;
+		total_bytes = JOIN_PREF_RSSI_SIZE;
+
+		*pref++ = WL_JOIN_PREF_WPA;
+		*pref++ = (JOIN_PREF_WPA_TUPLE_SIZE * num_tuples) + 2;
+		*pref++ = 0;
+		*pref++ = (uint8)num_tuples;
+		total_bytes += JOIN_PREF_WPA_HDR_SIZE +
+			(JOIN_PREF_WPA_TUPLE_SIZE * num_tuples);
+	} else {
+		WL_ERR(("Too many wpa configs for join_pref\n"));
+		return -EINVAL;
+	}
+
+	/* Update tuples in akm-ucipher-mcipher format required for join_pref, the order of
+	* tuple defines the AKM preference, the first addition being the highest preference
+	*/
+	wl_prepare_joinpref_tuples(&pref, WLAN_AKM_SUITE_SAE,
+		WLAN_CIPHER_SUITE_CCMP, WLAN_CIPHER_SUITE_CCMP);
+	wl_prepare_joinpref_tuples(&pref, WLAN_AKM_SUITE_PSK,
+		WLAN_CIPHER_SUITE_CCMP, WLAN_CIPHER_SUITE_CCMP);
+
+#ifdef MFP
+	if ((err = wl_cfg80211_set_mfp(cfg, dev, sme)) < 0) {
+		WL_ERR(("MFP set failed err:%d\n", err));
+		return -EINVAL;
+	}
+#endif /* MFP */
+
+	err = wldev_iovar_setbuf(dev, "join_pref", buf, total_bytes,
+		smbuf, sizeof(smbuf), NULL);
+	if (err) {
+		WL_ERR(("Failed to set join_pref, error = %d\n", err));
+	}
+
+	return err;
+}
+
+static s32
+wl_set_key_mgmt(struct net_device *dev, struct cfg80211_connect_params *sme,
+	wlcfg_assoc_info_t *assoc_info)
 {
 	struct bcm_cfg80211 *cfg = wl_get_cfg(dev);
 	struct wl_security *sec;
@@ -5431,153 +5575,169 @@ wl_set_key_mgmt(struct net_device *dev, struct cfg80211_connect_params *sme)
 	}
 
 	if (sme->crypto.n_akm_suites) {
-		err = wldev_iovar_getint(dev, "wpa_auth", &val);
-		if (unlikely(err)) {
-			WL_ERR(("could not get wpa_auth (%d)\n", err));
-			return err;
-		}
-		if (val & (WPA_AUTH_PSK |
-#ifdef BCMCCX
-			WPA_AUTH_CCKM |
-#endif
-			WPA_AUTH_UNSPECIFIED)) {
-			switch (sme->crypto.akm_suites[0]) {
-			case WLAN_AKM_SUITE_8021X:
-				val = WPA_AUTH_UNSPECIFIED;
-				break;
-			case WLAN_AKM_SUITE_PSK:
-				val = WPA_AUTH_PSK;
-				break;
-#ifdef BCMCCX
-			case WLAN_AKM_SUITE_CCKM:
-				val = WPA_AUTH_CCKM;
-				break;
-#endif
-			default:
-				WL_ERR(("invalid akm suite (0x%x)\n",
-					sme->crypto.akm_suites[0]));
-				return -EINVAL;
+		WL_DBG(("No of akms %d 0x%x 0x%x\n", sme->crypto.n_akm_suites,
+			sme->crypto.akm_suites[0], sme->crypto.akm_suites[1]));
+		if (sme->crypto.n_akm_suites > 1) {
+			err = wl_set_multi_akm(dev, cfg, sme, assoc_info);
+			if (unlikely(err)) {
+				WL_ERR(("Failed to set multi akm key mgmt err = %d\n", err));
+				return err;
 			}
-		} else if (val & (WPA2_AUTH_PSK |
+		} else {
+			err = wldev_iovar_getint(dev, "wpa_auth", &val);
+			if (unlikely(err)) {
+				WL_ERR(("could not get wpa_auth (%d)\n", err));
+				return err;
+			}
+			if (val & (WPA_AUTH_PSK |
 #ifdef BCMCCX
-			WPA2_AUTH_CCKM |
+				WPA_AUTH_CCKM |
 #endif
-			WPA2_AUTH_UNSPECIFIED)) {
-			switch (sme->crypto.akm_suites[0]) {
+				WPA_AUTH_UNSPECIFIED)) {
+				switch (sme->crypto.akm_suites[0]) {
+				case WLAN_AKM_SUITE_8021X:
+					val = WPA_AUTH_UNSPECIFIED;
+					break;
+				case WLAN_AKM_SUITE_PSK:
+					val = WPA_AUTH_PSK;
+					break;
+#ifdef BCMCCX
+				case WLAN_AKM_SUITE_CCKM:
+					val = WPA_AUTH_CCKM;
+					break;
+#endif
+				default:
+					WL_ERR(("invalid akm suite (0x%x)\n",
+						sme->crypto.akm_suites[0]));
+					return -EINVAL;
+				}
+			} else if (val & (WPA2_AUTH_PSK |
+#ifdef BCMCCX
+				WPA2_AUTH_CCKM |
+#endif
+				WPA2_AUTH_UNSPECIFIED)) {
+				switch (sme->crypto.akm_suites[0]) {
 #ifdef MFP
 
 #ifdef CUSTOMER_HW6
-			case WL_AKM_SUITE_SHA256_1X:
-				if (wl_customer6_legacy_chip_check(cfg,	dev)) {
-					val = WPA2_AUTH_UNSPECIFIED;
-				} else {
-					val = WPA2_AUTH_1X_SHA256;
-				}
-				break;
-			case WL_AKM_SUITE_SHA256_PSK:
-				if (wl_customer6_legacy_chip_check(cfg,	dev)) {
-					val = WPA2_AUTH_PSK;
-				} else {
-					val = WPA2_AUTH_PSK_SHA256;
-				}
-				break;
+				case WL_AKM_SUITE_SHA256_1X:
+					if (wl_customer6_legacy_chip_check(cfg,	dev)) {
+						val = WPA2_AUTH_UNSPECIFIED;
+					} else {
+						val = WPA2_AUTH_1X_SHA256;
+					}
+					break;
+				case WL_AKM_SUITE_SHA256_PSK:
+					if (wl_customer6_legacy_chip_check(cfg,	dev)) {
+						val = WPA2_AUTH_PSK;
+					} else {
+						val = WPA2_AUTH_PSK_SHA256;
+					}
+					break;
 #endif /* CUSTOMER_HW6 */
 
 #ifndef CUSTOMER_HW6
-			case WL_AKM_SUITE_SHA256_1X:
-				val = WPA2_AUTH_1X_SHA256;
-				break;
-			case WL_AKM_SUITE_SHA256_PSK:
-				val = WPA2_AUTH_PSK_SHA256;
-				break;
+				case WL_AKM_SUITE_SHA256_1X:
+					val = WPA2_AUTH_1X_SHA256;
+					break;
+				case WL_AKM_SUITE_SHA256_PSK:
+					val = WPA2_AUTH_PSK_SHA256;
+					break;
 #endif /* CUSTOMER_HW6 */
 #endif /* MFP */
 #ifdef BCMCCX
-			case WLAN_AKM_SUITE_CCKM:
-				val = WPA2_AUTH_CCKM;
-				break;
+				case WLAN_AKM_SUITE_CCKM:
+					val = WPA2_AUTH_CCKM;
+					break;
 #endif
-			case WLAN_AKM_SUITE_8021X:
-			case WLAN_AKM_SUITE_PSK:
+				case WLAN_AKM_SUITE_8021X:
+				case WLAN_AKM_SUITE_PSK:
 #if defined(WLFBT) && defined(WLAN_AKM_SUITE_FT_8021X)
-			case WLAN_AKM_SUITE_FT_8021X:
+				case WLAN_AKM_SUITE_FT_8021X:
 #endif
 #if defined(WLFBT) && defined(WLAN_AKM_SUITE_FT_PSK)
-			case WLAN_AKM_SUITE_FT_PSK:
+				case WLAN_AKM_SUITE_FT_PSK:
 #endif
-			case WLAN_AKM_SUITE_FILS_SHA256:
-			case WLAN_AKM_SUITE_FILS_SHA384:
-			case WLAN_AKM_SUITE_8021X_SUITE_B:
-			case WLAN_AKM_SUITE_8021X_SUITE_B_192:
+				case WLAN_AKM_SUITE_FILS_SHA256:
+				case WLAN_AKM_SUITE_FILS_SHA384:
+				case WLAN_AKM_SUITE_8021X_SUITE_B:
+				case WLAN_AKM_SUITE_8021X_SUITE_B_192:
 #ifdef WL_OWE
-			case WLAN_AKM_SUITE_OWE:
+				case WLAN_AKM_SUITE_OWE:
 #endif /* WL_OWE */
 #if defined(WL_SAE) || defined(WL_CLIENT_SAE)
-			case WLAN_AKM_SUITE_SAE:
+				case WLAN_AKM_SUITE_SAE:
 #endif /* WL_SAE || WL_CLIENT_SAE */
 #ifdef WL_SAE_FT
-			case WLAN_AKM_SUITE_FT_OVER_SAE:
+				case WLAN_AKM_SUITE_FT_OVER_SAE:
 #endif /* WL_SAE_FT */
-			case WLAN_AKM_SUITE_DPP:
-			case WLAN_AKM_SUITE_FT_8021X_SHA384:
-				val = wl_rsn_akm_wpa_auth_lookup(sme->crypto.akm_suites[0]);
-				break;
-			case WLAN_AKM_SUITE_FT_FILS_SHA256:
-				val = WPA2_AUTH_FILS_SHA256 | WPA2_AUTH_FT;
-				break;
-			case WLAN_AKM_SUITE_FT_FILS_SHA384:
-				val = WPA2_AUTH_FILS_SHA384 | WPA2_AUTH_FT;
-				break;
-			default:
-				WL_ERR(("invalid akm suite (0x%x)\n",
-					sme->crypto.akm_suites[0]));
-				return -EINVAL;
+				case WLAN_AKM_SUITE_DPP:
+				case WLAN_AKM_SUITE_FT_8021X_SHA384:
+					val = wl_rsn_akm_wpa_auth_lookup(sme->crypto.akm_suites[0]);
+					break;
+				case WLAN_AKM_SUITE_FT_FILS_SHA256:
+					val = WPA2_AUTH_FILS_SHA256 | WPA2_AUTH_FT;
+					break;
+				case WLAN_AKM_SUITE_FT_FILS_SHA384:
+					val = WPA2_AUTH_FILS_SHA384 | WPA2_AUTH_FT;
+					break;
+				default:
+					WL_ERR(("invalid akm suite (0x%x)\n",
+						sme->crypto.akm_suites[0]));
+					return -EINVAL;
+				}
 			}
-		}
 
 #ifdef BCMWAPI_WPI
-		else if (val & (WAPI_AUTH_PSK | WAPI_AUTH_UNSPECIFIED)) {
-			switch (sme->crypto.akm_suites[0]) {
-			case WLAN_AKM_SUITE_WAPI_CERT:
-				val = WAPI_AUTH_UNSPECIFIED;
-				break;
-			case WLAN_AKM_SUITE_WAPI_PSK:
-				val = WAPI_AUTH_PSK;
-				break;
-			default:
-				WL_ERR(("invalid akm suite (0x%x)\n",
-					sme->crypto.akm_suites[0]));
-				return -EINVAL;
+			else if (val & (WAPI_AUTH_PSK | WAPI_AUTH_UNSPECIFIED)) {
+				switch (sme->crypto.akm_suites[0]) {
+				case WLAN_AKM_SUITE_WAPI_CERT:
+					val = WAPI_AUTH_UNSPECIFIED;
+					break;
+				case WLAN_AKM_SUITE_WAPI_PSK:
+					val = WAPI_AUTH_PSK;
+					break;
+				default:
+					WL_ERR(("invalid akm suite (0x%x)\n",
+						sme->crypto.akm_suites[0]));
+					return -EINVAL;
+				}
 			}
-		}
 #endif
 
 #ifdef WL_FILS
 #if !defined(WL_FILS_ROAM_OFFLD)
-	err = wl_fils_toggle_roaming(dev, val);
-	if (unlikely(err)) {
-		return err;
-	}
+			err = wl_fils_toggle_roaming(dev, val);
+			if (unlikely(err)) {
+				return err;
+			}
 #endif /* !WL_FILS_ROAM_OFFLD */
 #endif /* !WL_FILS */
 
 #ifdef MFP
-		if ((err = wl_cfg80211_set_mfp(cfg, dev, sme)) < 0) {
-			WL_ERR(("MFP set failed err:%d\n", err));
-			return -EINVAL;
-		}
+			if ((err = wl_cfg80211_set_mfp(cfg, dev, sme)) < 0) {
+				WL_ERR(("MFP set failed err:%d\n", err));
+				return -EINVAL;
+			}
 #endif /* MFP */
 
-		WL_DBG_MEM(("[%s] wl wpa_auth to 0x%x\n", dev->name, val));
-		err = wldev_iovar_setint_bsscfg(dev, "wpa_auth", val, bssidx);
-		if (unlikely(err)) {
-			WL_ERR(("could not set wpa_auth (0x%x)\n", err));
-			return err;
+			WL_DBG_MEM(("[%s] wl wpa_auth to 0x%x\n", dev->name, val));
+			err = wldev_iovar_setint_bsscfg(dev, "wpa_auth", val, bssidx);
+			if (unlikely(err)) {
+				WL_ERR(("could not set wpa_auth (0x%x)\n", err));
+				return err;
+			}
 		}
 	}
 	sec = wl_read_prof(cfg, dev, WL_PROF_SEC);
-	sec->wpa_auth = sme->crypto.akm_suites[0];
-	sec->fw_wpa_auth = val;
+	if (assoc_info->auto_wpa_enabled == TRUE) {
+		/* Set to value 0 indicating multi-akm configuration */
+		sec->wpa_auth = 0;
+		sec->fw_wpa_auth = 0;
+	} else {
+		sec->wpa_auth = sme->crypto.akm_suites[0];
+		sec->fw_wpa_auth = val;
+	}
 
 	return err;
 }
@@ -5961,8 +6121,8 @@ wl_do_preassoc_ops(struct bcm_cfg80211 *cfg,
 }
 
 static s32
-wl_config_assoc_security(struct bcm_cfg80211 *cfg,
-	struct net_device *dev, struct cfg80211_connect_params *sme)
+wl_config_assoc_security(struct bcm_cfg80211 *cfg, struct net_device *dev,
+	struct cfg80211_connect_params *sme, wlcfg_assoc_info_t *assoc_info)
 {
 	s32 err = BCME_OK;
 
@@ -5987,18 +6147,33 @@ wl_config_assoc_security(struct bcm_cfg80211 *cfg,
 		}
 	}
 #endif /* WL_FILS */
-
-	err = wl_set_set_cipher(dev, sme);
-	if (unlikely(err)) {
-		WL_ERR(("Invalid ciper\n"));
-		goto exit;
+	/* Avoid cipher setting for multi-AKM, cipher combinations for multi-AKM predefined */
+	if (!(sme->crypto.n_akm_suites > 1)) {
+		err = wl_set_set_cipher(dev, sme);
+		if (unlikely(err)) {
+			WL_ERR(("Invalid ciper\n"));
+			goto exit;
+		}
 	}
 
-	err = wl_set_key_mgmt(dev, sme);
+	err = wl_set_key_mgmt(dev, sme, assoc_info);
 	if (unlikely(err)) {
 		WL_ERR(("Invalid key mgmt\n"));
 		goto exit;
 	}
+
+	BCM_REFERENCE(wl_set_passphrase);
+#ifdef WL_SAE
+	sec = wl_read_prof(cfg, dev, WL_PROF_SEC);
+	if ((sec->fw_wpa_auth & WPA3_AUTH_SAE_PSK) ||
+		(assoc_info->seamless_psk == TRUE)) {
+		err = wl_set_passphrase(dev, sme);
+		if (unlikely(err)) {
+			WL_ERR(("Unable to set passphrase\n"));
+			goto exit;
+		}
+	}
+#endif /* WL_SAE */
 
 	err = wl_set_set_sharedkey(dev, sme);
 	if (unlikely(err)) {
@@ -6568,7 +6743,7 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 			goto fail;
 		}
 	} else {
-		err = wl_config_assoc_security(cfg, dev, sme);
+		err = wl_config_assoc_security(cfg, dev, sme, &assoc_info);
 		if (unlikely(err)) {
 			WL_ERR(("config assoc security failed\n"));
 			goto fail;
@@ -24007,6 +24182,165 @@ done:
 	return err;
 }
 #endif /* WL_MON_OWN_PKT */
+
+s32
+wl_cfg80211_set_netinfo_passphrase(struct bcm_cfg80211 *cfg,
+	struct net_device *ndev, const u8* passphrase, u8 len)
+{
+	struct net_info * _net_info = NULL;
+	int err = BCME_OK;
+
+	_net_info = wl_get_netinfo_by_netdev(cfg, ndev);
+	if (_net_info == NULL) {
+		WL_ERR(("net_info not found for iface %s", ndev->name));
+		err = BCME_ERROR;
+		goto done;
+	}
+
+	_net_info->passphrase_len = len;
+	err = memcpy_s(_net_info->passphrase, sizeof(_net_info->passphrase),
+		passphrase, len);
+	if (err != BCME_OK) {
+		WL_ERR(("Failed to copy passphrase err %d\n", err));
+		goto done;
+	}
+
+done:
+	return err;
+}
+
+/* Configure "wsec_info 0x108" IOVAR */
+s32
+wl_cfg80211_wsec_info_pmk(struct bcm_cfg80211 *cfg, struct net_device *ndev,
+	wl_wsec_info_pmk_info_t *pmk_info, uint16 pmk_info_len, uint8 action)
+{
+	int err = BCME_OK;
+
+	pmk_info->action = action;
+	err = wl_cfg80211_set_wsec_info(ndev, (uint32 *)pmk_info,
+		pmk_info_len, WL_WSEC_INFO_BSS_PMK_PASSPHRASE);
+
+	if (unlikely(err)) {
+		WL_ERR(("couldn't set[%d] passphrase (wsec_info %d)\n", action, err));
+	}
+
+	return err;
+}
+
+s32
+wl_cfg80211_config_passphrase(struct bcm_cfg80211 *cfg,
+	struct net_device *ndev, wl_config_passphrase_t *pp_config)
+{
+	wl_wsec_info_pmk_info_t *pmk_info = NULL;
+	uint16 buf_size = 0;
+	uint8 *data = NULL;
+	int err = BCME_OK;
+	uint16 avail_size = 0;
+	struct net_info *_net_info = wl_get_netinfo_by_netdev(cfg, ndev);
+
+	buf_size = sizeof(wl_wsec_info_pmk_info_t) +
+		pp_config->passphrase_len + pp_config->ssid_len;
+	buf_size = ALIGN_SIZE(buf_size, 4);
+
+	pmk_info = (wl_wsec_info_pmk_info_t *)MALLOCZ(cfg->osh, buf_size);
+	if (pmk_info == NULL) {
+		WL_ERR(("Failed to alloc memory for pmk_info\n"));
+		err = BCME_NOMEM;
+		goto done;
+	}
+
+	avail_size = buf_size - sizeof(wl_wsec_info_pmk_info_t);
+	bzero(pmk_info, buf_size);
+	pmk_info->version = WL_WSEC_PMK_INFO_VERSION;
+
+	/* Set data start ..after pmk_info struct */
+	data = (uint8*)(pmk_info + 1);
+
+	/* Copy SSID */
+	pmk_info->ssid.len = pp_config->ssid_len;
+	pmk_info->ssid.off = sizeof(wl_wsec_info_pmk_info_t);
+	err = memcpy_s(data, avail_size, pp_config->ssid,
+		pp_config->ssid_len);
+	if (err != BCME_OK) {
+		WL_ERR(("Failed to copy ssid err %d\n", err));
+		goto done;
+	}
+	data = data + pp_config->ssid_len;
+	avail_size -= pp_config->ssid_len;
+
+	/* Copy passphrase */
+	pmk_info->passphrase.len = pp_config->passphrase_len;
+	pmk_info->passphrase.off = sizeof(wl_wsec_info_pmk_info_t) + pp_config->ssid_len;
+	err = memcpy_s(data, avail_size,
+		pp_config->passphrase, pp_config->passphrase_len);
+	if (err != BCME_OK) {
+		WL_ERR(("Failed to copy passphrase err %d\n", err));
+		goto done;
+	}
+	data = data + pp_config->passphrase_len;
+	avail_size -= pp_config->passphrase_len;
+
+	/* Compare with earlier config and delete passphrase entry from firmware
+	 * if not matching and then add the new entry
+	*/
+	if (_net_info->passphrase_cfg_len && _net_info->passphrase_cfg &&
+		(buf_size != _net_info->passphrase_cfg_len ||
+		memcmp((uint8*)pmk_info, _net_info->passphrase_cfg, buf_size))) {
+		wl_wsec_info_pmk_info_t *pmk_del_info =
+			(wl_wsec_info_pmk_info_t *)_net_info->passphrase_cfg;
+		WL_INFORM_MEM(("New passphrase config received for iface %s."
+			"Delete earlier config before adding new one\n", ndev->name));
+		err = wl_cfg80211_wsec_info_pmk(cfg, ndev, pmk_del_info,
+			_net_info->passphrase_cfg_len, WL_WSEC_PMK_INFO_DEL);
+		if (unlikely(err)) {
+			WL_ERR(("couldn't delete passphrase err %d..continue and try to add new\n",
+				err));
+		}
+	}
+
+	err = wl_cfg80211_wsec_info_pmk(cfg, ndev, pmk_info, buf_size, WL_WSEC_PMK_INFO_ADD);
+
+	if (unlikely(err)) {
+		WL_ERR(("couldn't set passphrase (wsec_info %d)\n", err));
+		if (err == BCME_UNSUPPORTED) {
+			/* try legacy iovar */
+			wsec_pmk_t pmk;
+			(void)memset_s(&pmk, sizeof(wsec_pmk_t), 0x0,
+				sizeof(wsec_pmk_t));
+			pmk.key_len = htod16(pp_config->passphrase_len);
+			bcopy((const u8*)pp_config->passphrase, pmk.key,
+				pp_config->passphrase_len);
+			pmk.flags = htod16(WSEC_PASSPHRASE);
+
+			err = wldev_ioctl_set(ndev, WLC_SET_WSEC_PMK, &pmk,
+				sizeof(pmk));
+			if (unlikely(err)) {
+				WL_ERR(("couldn't set passphrase (wsec_pmk %d)\n", err));
+			} else {
+				WL_INFORM_MEM(("Passphrase set(wsec_pmk) for iface %s\n",
+					ndev->name));
+			}
+		}
+	} else {
+		WL_INFORM_MEM(("Passphrase set(wsec_info) for iface %s\n", ndev->name));
+		/* update the config */
+		if (_net_info->passphrase_cfg) {
+			MFREE(cfg->osh, _net_info->passphrase_cfg,
+				_net_info->passphrase_cfg_len);
+			_net_info->passphrase_cfg = NULL;
+		}
+		_net_info->passphrase_cfg = (uint8*)pmk_info;
+		_net_info->passphrase_cfg_len = buf_size;
+		_net_info->passphrase_len = 0;
+		return err;
+	}
+
+done:
+	if (pmk_info) {
+		MFREE(cfg->osh, pmk_info, buf_size);
+	}
+	return err;
+}
 
 chanspec_t
 wl_cfg80211_get_sta_chanspec(struct bcm_cfg80211 *cfg)
