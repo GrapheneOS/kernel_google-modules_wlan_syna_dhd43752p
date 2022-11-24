@@ -76,9 +76,6 @@
 #include <bcmevent.h>
 #include <vlan.h>
 #include <802.3.h>
-#ifdef ARP_IPV6NSRS_PKTPRIO_OVERRIDE
-#include <bcmicmp.h>
-#endif
 
 #ifdef WL_NANHO
 #include <nanho.h>
@@ -4154,26 +4151,6 @@ BCMFASTPATH(__dhd_sendpkt)(dhd_pub_t *dhdp, int ifidx, void *pktbuf)
 		}
 #endif /* !PKTPRIO_OVERRIDE */
 	}
-#ifdef ARP_IPV6NSRS_PKTPRIO_OVERRIDE
-	{
-		uint16 ether_type = ntoh16(eh->ether_type);
-		if (ether_type == ETHER_TYPE_ARP) {
-			PKTSETPRIO(pktbuf, PRIO_8021D_VO);
-		} else if (ether_type == ETHER_TYPE_IPV6) {
-			uint8 *pkt_data = PKTDATA(dhdp->osh, pktbuf);
-			struct ipv6_hdr *ipv6 = (struct ipv6_hdr *)(pkt_data + ETHER_HDR_LEN);
-			if (ipv6->nexthdr == ICMPV6_HEADER_TYPE) {
-				struct icmp6_hdr *icmpv6_hdr =
-					(struct icmp6_hdr *)(pkt_data + ETHER_HDR_LEN + sizeof(*ipv6));
-				int subtype = icmpv6_hdr->icmp6_type;
-				if (subtype == ICMP6_NEIGH_SOLICITATION ||
-						subtype == ICMP6_RTR_SOLICITATION) {
-					PKTSETPRIO(pktbuf, PRIO_8021D_VO);
-				}
-			}
-		}
-	}
-#endif
 #if defined(BCM_ROUTER_DHD)
 	traffic_mgmt_pkt_set_prio(dhdp, pktbuf);
 
