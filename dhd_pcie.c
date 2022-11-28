@@ -9525,11 +9525,11 @@ dhd_bus_dump_dar_registers(struct dhd_bus *bus)
 	dar_erraddr_val = si_corereg(bus->sih, bus->sih->buscoreidx, dar_erraddr_reg, 0, 0);
 	dar_pcie_mbint_val = si_corereg(bus->sih, bus->sih->buscoreidx, dar_pcie_mbint_reg, 0, 0);
 
-	DHD_ERROR(("%s: dar_clk_ctrl(0x%x:0x%x) dar_pwr_ctrl(0x%x:0x%x) dar_intstat(0x%x:0x%x)\n",
+	DHD_RPM(("%s: dar_clk_ctrl(0x%x:0x%x) dar_pwr_ctrl(0x%x:0x%x) dar_intstat(0x%x:0x%x)\n",
 		__FUNCTION__, dar_clk_ctrl_reg, dar_clk_ctrl_val,
 		dar_pwr_ctrl_reg, dar_pwr_ctrl_val, dar_intstat_reg, dar_intstat_val));
 
-	DHD_ERROR(("%s: dar_errlog(0x%x:0x%x) dar_erraddr(0x%x:0x%x) dar_pcie_mbint(0x%x:0x%x)\n",
+	DHD_RPM(("%s: dar_errlog(0x%x:0x%x) dar_erraddr(0x%x:0x%x) dar_pcie_mbint(0x%x:0x%x)\n",
 		__FUNCTION__, dar_errlog_reg, dar_errlog_val,
 		dar_erraddr_reg, dar_erraddr_val, dar_pcie_mbint_reg, dar_pcie_mbint_val));
 }
@@ -9656,7 +9656,7 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 		}
 
 		/* Suspend */
-		DHD_ERROR(("%s: Entering suspend state\n", __FUNCTION__));
+		DHD_RPM(("%s: Entering suspend state\n", __FUNCTION__));
 
 		bus->dhd->dhd_watchdog_ms_backup = dhd_watchdog_ms;
 		if (bus->dhd->dhd_watchdog_ms_backup) {
@@ -9808,7 +9808,7 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 #endif /* OEM_ANDROID */
 
 		if (bus->wait_for_d3_ack) {
-			DHD_ERROR(("%s: Got D3 Ack \n", __FUNCTION__));
+			DHD_RPM(("%s: Got D3 Ack \n", __FUNCTION__));
 			/* Got D3 Ack. Suspend the bus */
 #ifdef OEM_ANDROID
 			if (active) {
@@ -10070,7 +10070,7 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 #endif /* PCIE_OOB */
 	} else {
 		/* Resume */
-		DHD_ERROR(("%s: Entering resume state\n", __FUNCTION__));
+		DHD_RPM(("%s: Entering resume state\n", __FUNCTION__));
 		bus->last_resume_start_time = OSL_LOCALTIME_NS();
 
 		/**
@@ -12574,7 +12574,7 @@ dhdpcie_bus_ringbell_fast(struct dhd_bus *bus, uint32 value)
 {
 	/* Skip once bus enters low power state (D3_INFORM/D3_ACK) */
 	if (__DHD_CHK_BUS_IN_LPS(bus)) {
-		DHD_ERROR(("%s: trying to ring the doorbell after D3 inform %d\n",
+		DHD_RPM(("%s: trying to ring the doorbell after D3 inform %d\n",
 			__FUNCTION__, bus->bus_low_power_state));
 		return;
 	}
@@ -12871,7 +12871,7 @@ dhd_bus_handle_d3_ack(dhd_bus_t *bus)
 #endif /* !NDIS */
 
 	DHD_SET_BUS_LPS_D3_ACKED(bus);
-	DHD_ERROR(("%s: D3_ACK Recieved\n", __FUNCTION__));
+	DHD_RPM(("%s: D3_ACK Recieved\n", __FUNCTION__));
 
 	if (bus->dhd->dhd_induce_error == DHD_INDUCE_D3_ACK_TIMEOUT) {
 		/* Set bus_low_power_state to DHD_BUS_D3_ACK_RECIEVED */
@@ -13276,7 +13276,7 @@ dhdpcie_bus_process_mailbox_intr(dhd_bus_t *bus, uint32 intstatus)
 
 	/* Do not process dpc after receiving D3_ACK */
 	if (DHD_CHK_BUS_LPS_D3_ACKED(bus)) {
-		DHD_PCIE_INFO(("%s: D3 Ack Received, skip dpc\n", __FUNCTION__));
+		DHD_RPM(("%s: D3 Ack Received, skip dpc\n", __FUNCTION__));
 		return resched;
 	}
 
@@ -13383,7 +13383,7 @@ dhdpci_bus_read_frames(dhd_bus_t *bus)
 
 	/* Do not process rest of ring buf once bus enters low power state (D3_INFORM/D3_ACK) */
 	if (DHD_CHK_BUS_IN_LPS(bus)) {
-		DHD_ERROR(("%s: Bus is in power save state (%d). "
+		DHD_RPM(("%s: Bus is in power save state (%d). "
 			"Skip processing rest of ring buffers.\n",
 			__FUNCTION__, bus->bus_low_power_state));
 		return FALSE;
@@ -15835,7 +15835,7 @@ dhd_get_rpm_state(dhd_pub_t *dhd)
 void
 dhd_set_rpm_state(dhd_pub_t *dhd, bool state)
 {
-	DHD_ERROR(("%s: %d\n", __FUNCTION__, state));
+	DHD_RPM(("%s: %d\n", __FUNCTION__, state));
 	dhd->bus->rpm_enabled = state;
 }
 

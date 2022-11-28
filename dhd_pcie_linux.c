@@ -1126,7 +1126,7 @@ extern void dhd_dpc_tasklet_kill(dhd_pub_t *dhdp);
 static void
 dhdpcie_suspend_dump_cfgregs(struct dhd_bus *bus, char *suspend_state)
 {
-	DHD_ERROR(("%s: BaseAddress0(0x%x)=0x%x, "
+	DHD_RPM(("%s: BaseAddress0(0x%x)=0x%x, "
 		"BaseAddress1(0x%x)=0x%x PCIE_CFG_PMCSR(0x%x)=0x%x "
 		"PCI_BAR1_WIN(0x%x)=(0x%x)\n",
 		suspend_state,
@@ -1156,7 +1156,7 @@ static int dhdpcie_suspend_dev(struct pci_dev *dev)
 		return BCME_ERROR;
 	}
 #endif /* OEM_ANDROID && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
-	DHD_ERROR(("%s: Enter\n", __FUNCTION__));
+	DHD_RPM(("%s: Enter\n", __FUNCTION__));
 	/*
 	 * Disable L1ss on EP and RC side ... defaults to NOP
 	 * If needed implement this function in the dhd_custom_xxx.c
@@ -1233,7 +1233,7 @@ static int dhdpcie_resume_dev(struct pci_dev *dev)
 #if defined(OEM_ANDROID) && (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0))
 	pci_load_and_free_saved_state(dev, &pch->state);
 #endif /* OEM_ANDROID && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
-	DHD_ERROR(("%s: Enter\n", __FUNCTION__));
+	DHD_RPM(("%s: Enter\n", __FUNCTION__));
 #ifdef OEM_ANDROID
 	dev->state_saved = TRUE;
 #endif /* OEM_ANDROID */
@@ -1966,12 +1966,12 @@ void dhdpcie_dump_resource(dhd_bus_t *bus)
 	}
 
 	/* BAR0 */
-	DHD_ERROR(("%s: BAR0(VA): 0x%pK, BAR0(PA): "PRINTF_RESOURCE", SIZE: %d\n",
+	DHD_RPM(("%s: BAR0(VA): 0x%pK, BAR0(PA): "PRINTF_RESOURCE", SIZE: %d\n",
 		__FUNCTION__, pch->regs, pci_resource_start(bus->dev, 0),
 		DONGLE_REG_MAP_SIZE));
 
 	/* BAR1 */
-	DHD_ERROR(("%s: BAR1(VA): 0x%pK, BAR1(PA): "PRINTF_RESOURCE", SIZE: %d\n",
+	DHD_RPM(("%s: BAR1(VA): 0x%pK, BAR1(PA): "PRINTF_RESOURCE", SIZE: %d\n",
 		__FUNCTION__, pch->tcm, pci_resource_start(bus->dev, 2),
 		pch->bar1_size));
 }
@@ -3162,6 +3162,7 @@ bool dhd_runtimepm_state(dhd_pub_t *dhd)
 				return FALSE;
 			}
 
+			DHD_RPM(("%s, update suspend states\n", __FUNCTION__));
 			DHD_GENERAL_LOCK(dhd, flags);
 			DHD_BUS_BUSY_CLEAR_RPM_SUSPEND_IN_PROGRESS(dhd);
 			DHD_BUS_BUSY_SET_RPM_SUSPEND_DONE(dhd);
