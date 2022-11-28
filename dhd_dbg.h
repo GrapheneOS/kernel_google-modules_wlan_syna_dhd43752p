@@ -293,6 +293,18 @@ do {	\
 	}	\
 } while (0)
 
+#define DHD_RPM(args)   \
+do { \
+	if (dhd_msg_level & DHD_RPM_VAL) {	\
+		DBG_PRINT_SYSTEM_TIME;	\
+		pr_cont args;	\
+	}	\
+	if (dhd_log_level & DHD_RPM_VAL) {	\
+		DHD_LOG_DUMP_WRITE_TS;	\
+		DHD_LOG_DUMP_WRITE args;	\
+	}	\
+} while (0)
+
 #endif /* DHD_EFI */
 #else /* DHD_LOG_DUMP */
 /* !DHD_LOG_DUMP */
@@ -321,6 +333,9 @@ do {	\
 #define DHD_REORDER(args)	do {if (dhd_msg_level & DHD_REORDER_VAL) printf args;} while (0)
 #define DHD_PNO(args)		do {if (dhd_msg_level & DHD_PNO_VAL) printf args;} while (0)
 #define DHD_RTT(args)		do {if (dhd_msg_level & DHD_RTT_VAL) printf args;} while (0)
+#if defined(DHD_EFI) || !defined(DHD_LOG_DUMP)
+#define DHD_RPM(args)		do {if (dhd_msg_level & DHD_RPM_VAL) printf args;} while (0)
+#endif /* defined(DHD_EFI) || !defined(DHD_LOG_DUMP) */
 
 #if defined(DHD_LOG_DUMP)
 #if defined(DHD_EFI)
@@ -359,10 +374,7 @@ do { \
 #endif /* DHD_LOG_DUMP */
 
 #define DHD_DBGIF(args)		do {if (dhd_msg_level & DHD_DBGIF_VAL) printf args;} while (0)
-
-#ifdef DHD_PCIE_NATIVE_RUNTIMEPM
-#define DHD_RPM(args)		do {if (dhd_msg_level & DHD_RPM_VAL) printf args;} while (0)
-#endif /* DHD_PCIE_NATIVE_RUNTIMEPM */
+#define DHD_TXFLOWCTL(args)	DHD_RPM(args)
 
 #ifdef CUSTOMER_HW4_DEBUG
 #define DHD_TRACE_HW4	DHD_ERROR
@@ -516,6 +528,8 @@ do {	\
 #define DHD_ERROR_EX(args)	DHD_ERROR(args)
 #endif /* DHD_EFI */
 #define DHD_ERROR_ROAM(args)    DHD_ERROR(args)
+#define DHD_RPM(args)		DHD_ERROR(args)
+#define DHD_TXFLOWCTL(args)	DHD_ERROR(args)
 #ifdef CUSTOMER_HW4_DEBUG
 #define DHD_TRACE_HW4	DHD_ERROR
 #define DHD_INFO_HW4	DHD_ERROR

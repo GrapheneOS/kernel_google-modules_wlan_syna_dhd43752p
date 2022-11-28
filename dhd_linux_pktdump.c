@@ -172,10 +172,12 @@ const char tx_pktfate[][30] = {
 	"TX_PKT_FATE_FW_QUEUED",	/* 2: WLFC_CTL_PKTFLAG_WLSUPPRESS */
 	"TX_PKT_FATE_FW_DROP_INVALID",	/* 3: WLFC_CTL_PKTFLAG_TOSSED_BYWLC */
 	"TX_PKT_FATE_SENT",		/* 4: WLFC_CTL_PKTFLAG_DISCARD_NOACK */
-	"TX_PKT_FATE_FW_DROP_OTHER",	/* 5: WLFC_CTL_PKTFLAG_SUPPRESS_ACKED */
+	"TX_PKT_FATE_FW_SUPPRESS_ACKED",	/* 5: WLFC_CTL_PKTFLAG_SUPPRESS_ACKED */
 	"TX_PKT_FATE_FW_DROP_EXPTIME",	/* 6: WLFC_CTL_PKTFLAG_EXPIRED */
 	"TX_PKT_FATE_FW_DROP_OTHER",	/* 7: WLFC_CTL_PKTFLAG_DROPPED */
 	"TX_PKT_FATE_FW_PKT_FREE",	/* 8: WLFC_CTL_PKTFLAG_MKTFREE */
+	"TX_PKT_FATE_FW_MAX_SUP_RETR",	/* 9: WLFC_CTL_PKTFLAG_MAX_SUP_RETR */
+	"TX_PKT_FATE_FW_FORCED_EXPIRED",	/* 10: WLFC_CTL_PKTFLAG_FORCED_EXPIRED */
 };
 
 #define DBGREPLAY		" Replay Counter: %02x%02x%02x%02x%02x%02x%02x%02x"
@@ -189,8 +191,8 @@ const char tx_pktfate[][30] = {
 				((const eapol_key_hdr_t *)(key))->replay[7]
 #define TXFATE_FMT		" TX_PKTHASH:0x%X TX_PKT_FATE:%s (%d)"
 #define TX_PKTHASH(pkthash)		((pkthash) ? (*pkthash) : (0))
-#define TX_FATE_STR(fate)	(((*fate) <= (WLFC_CTL_PKTFLAG_MKTFREE)) ? \
-				(tx_pktfate[(*fate)]) : "TX_PKT_FATE_FW_DROP_OTHER")
+#define TX_FATE_STR(fate)	(((*fate) <= (WLFC_CTL_PKTFLAG_FORCED_EXPIRED)) ? \
+				(tx_pktfate[(*fate)]) : "TX_PKT_FATE_UNKNOWN")
 #define TX_FATE(fate)		((fate) ? (TX_FATE_STR(fate)) : "N/A")
 #define TX_FATE_ACKED(fate)	((fate) ? ((*fate) == (WLFC_CTL_PKTFLAG_DISCARD)) : (0))
 
