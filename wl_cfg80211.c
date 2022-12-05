@@ -2096,6 +2096,11 @@ wl_wlfc_enable(struct bcm_cfg80211 *cfg, bool enable)
 #endif /* PROP_TXSTATUS_VSDB */
 }
 
+#ifdef P2P_MCHAN_TUNING
+char str_mchanbw_min[] = "20";
+char str_mchanbw_def[] = "50";
+#endif /* P2P_MCHAN_TUNING */
+
 struct wireless_dev *
 wl_cfg80211_p2p_if_add(struct bcm_cfg80211 *cfg,
 	wl_iftype_t wl_iftype,
@@ -2198,6 +2203,11 @@ wl_cfg80211_p2p_if_add(struct bcm_cfg80211 *cfg,
 
 		WL_ERR((" virtual interface(%s) is "
 			"created net attach done\n", cfg->p2p->vir_ifname));
+
+#ifdef P2P_MCHAN_TUNING
+		wl_cfg80211_increase_p2p_bw(bcmcfg_to_prmry_ndev(cfg),
+			str_mchanbw_min, strlen(str_mchanbw_min));
+#endif /* P2P_MCHAN_TUNING */
 #if defined(BCMDONGLEHOST)
 		dhd_mode = (wl_iftype == WL_IF_TYPE_P2P_GC) ?
 			DHD_FLAG_P2P_GC_MODE : DHD_FLAG_P2P_GO_MODE;
@@ -2438,6 +2448,10 @@ wl_cfg80211_p2p_if_del(struct wiphy *wiphy, struct wireless_dev *wdev)
 			err = -EINVAL;
 		}
 	}
+#ifdef P2P_MCHAN_TUNING
+	wl_cfg80211_increase_p2p_bw(bcmcfg_to_prmry_ndev(cfg),
+		str_mchanbw_def, strlen(str_mchanbw_def));
+#endif /* P2P_MCHAN_TUNING */
 
 fail:
 	/* Even in failure case, attempt to remove the host data structure.
@@ -12784,6 +12798,10 @@ wl_post_linkdown_ops(struct bcm_cfg80211 *cfg,
 		wl_cfgnan_get_stats(cfg);
 	}
 #endif /* WL_NAN */
+#ifdef P2P_MCHAN_TUNING
+	wl_cfg80211_increase_p2p_bw(bcmcfg_to_prmry_ndev(cfg),
+		str_mchanbw_def, strlen(str_mchanbw_def));
+#endif /* P2P_MCHAN_TUNING */
 
 	return ret;
 }
@@ -13327,6 +13345,10 @@ wl_notify_connect_status_sta(struct bcm_cfg80211 *cfg,
 		 */
 		WL_INFORM_MEM(("Connected, event_type=%d, status=%d, start_roam_addr=%pM, e->addr=%pM\n",
 			event_type, ntoh32(e->status), (u8*)&cfg->start_roam_addr, &e->addr));
+#ifdef P2P_MCHAN_TUNING
+		wl_cfg80211_increase_p2p_bw(bcmcfg_to_prmry_ndev(cfg),
+			str_mchanbw_def, strlen(str_mchanbw_def));
+#endif /* P2P_MCHAN_TUNING */
 		if (event_type == WLC_E_AUTH) {
 			if (ntoh32(e->status) == WLC_E_STATUS_SUCCESS) {
 				bcopy(&e->addr, (u8*)&cfg->start_roam_addr, ETHER_ADDR_LEN);
