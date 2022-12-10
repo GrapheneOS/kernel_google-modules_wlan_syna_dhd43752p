@@ -16197,6 +16197,21 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 #endif /* READ_CONFIG_FROM_FILE */
 	dhd_set_bandlock(dhd);
 
+#ifdef DHD_WAKE_EVENT_STATUS
+#ifdef CUSTOM_WAKE_REASON_STATS
+	/* Initialization */
+	if (dhd_bus_get_wakecount(dhd)) {
+		int i = 0;
+		wake_counts_t *wcp = dhd_bus_get_wakecount(dhd);
+
+		wcp->rc_event_idx = 0;
+		for (i = 0; i < MAX_WAKE_REASON_STATS; i++) {
+			wcp->rc_event[i] = -1;
+		}
+	}
+#endif /* CUSTOM_WAKE_REASON_STATS */
+#endif /* DHD_WAKE_EVENT_STATUS */
+
 done:
 
 	if (eventmask_msg) {
