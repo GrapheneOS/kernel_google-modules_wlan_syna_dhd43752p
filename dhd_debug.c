@@ -198,7 +198,7 @@ dhd_dbg_urgent_pull(dhd_pub_t *dhdp, dhd_dbg_ring_t *ring)
 	}
 
 	if (pending_len > ring->threshold) {
-		DHD_ERROR(("%s: pending_len(%d) is exceeded threshold(%d), pktcount(%d)\n",
+		DHD_INFO(("%s: pending_len(%d) is exceeded threshold(%d), pktcount(%d)\n",
 			__FUNCTION__, pending_len, ring->threshold, pktlog_ring->pktcount));
 	}
 
