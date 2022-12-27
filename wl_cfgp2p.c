@@ -2793,6 +2793,11 @@ wl_cfgp2p_stop_p2p_device(struct wiphy *wiphy, struct wireless_dev *wdev)
 	return;
 }
 
+#ifdef P2P_MCHAN_TUNING
+extern char str_mchanbw_min[];
+extern char str_mchanbw_def[];
+#endif /* P2P_MCHAN_TUNING */
+
 int
 wl_cfgp2p_del_p2p_disc_if(struct wireless_dev *wdev, struct bcm_cfg80211 *cfg)
 {
@@ -2836,6 +2841,11 @@ wl_cfgp2p_del_p2p_disc_if(struct wireless_dev *wdev, struct bcm_cfg80211 *cfg)
 	cfg->p2p_wdev = NULL;
 
 	CFGP2P_ERR(("P2P interface unregistered\n"));
+
+#ifdef P2P_MCHAN_TUNING
+	wl_cfg80211_increase_p2p_bw(bcmcfg_to_prmry_ndev(cfg),
+		str_mchanbw_def, strlen(str_mchanbw_def));
+#endif /* P2P_MCHAN_TUNING */
 
 	return 0;
 }
