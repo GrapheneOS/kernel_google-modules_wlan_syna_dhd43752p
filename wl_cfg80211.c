@@ -460,6 +460,8 @@ static bool wl_cfg80211_wbtext_send_btm_query(struct bcm_cfg80211 *cfg, struct n
 	struct wl_profile *profile);
 static void wl_cfg80211_wbtext_set_wnm_maxidle(struct bcm_cfg80211 *cfg, struct net_device *dev);
 static int wl_cfg80211_recv_nbr_resp(struct net_device *dev, uint8 *body, uint body_len);
+#else
+static void wl_cfg80211_join_pref_reset_conf(struct bcm_cfg80211 *cfg, struct net_device *ndev);
 #endif /* WBTEXT */
 
 #ifdef RTT_SUPPORT
@@ -12959,6 +12961,8 @@ wl_post_linkdown_ops(struct bcm_cfg80211 *cfg,
 
 #ifdef WBTEXT
 	wl_cfg80211_wbtext_reset_conf(cfg, as->ndev);
+#else
+	wl_cfg80211_join_pref_reset_conf(cfg, as->ndev);
 #endif /* WBTEXT */
 
 #ifdef P2PLISTEN_AP_SAMECHN
@@ -13112,6 +13116,23 @@ wl_cfg80211_wbtext_reset_conf(struct bcm_cfg80211 *cfg, struct net_device *ndev)
 		WL_ERR(("wbtext not applicable\n"));
 	}
 #endif /* BCMDONGLEHOST */
+}
+#else
+static void
+wl_cfg80211_join_pref_reset_conf(struct bcm_cfg80211 *cfg, struct net_device *ndev)
+{
+	s32 err;
+
+	/* when STA was disconnected, clear join pref */
+	if (ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_STATION) {
+		char smbuf[WLC_IOCTL_SMLEN];
+
+		WL_INFORM_MEM(("Multi-AKM: clean join pref\n"));
+		if ((err = wldev_iovar_setbuf(ndev, "join_pref",
+			NULL, 0, smbuf, sizeof(smbuf), NULL)) != BCME_OK) {
+			WL_ERR(("Failed to clear join pref = %d\n", err));
+		}
+	}
 }
 #endif /* WBTEXT */
 
