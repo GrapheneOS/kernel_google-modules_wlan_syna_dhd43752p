@@ -824,6 +824,8 @@ dhd_clear_bus_errors(dhd_pub_t *dhdp)
 
 	dhdp->dongle_reset = FALSE;
 	dhdp->dongle_trap_occured = FALSE;
+	dhdp->dsack_hc_due_to_isr_delay = FALSE;
+	dhdp->dsack_hc_due_to_dpc_delay = FALSE;
 	dhdp->iovar_timeout_occured = FALSE;
 #ifdef PCIE_FULL_DONGLE
 	dhdp->d3ack_timeout_occured = FALSE;

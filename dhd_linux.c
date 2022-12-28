@@ -9572,6 +9572,8 @@ dhd_open(struct net_device *net)
 
 	DHD_OS_WAKE_LOCK(&dhd->pub);
 	dhd->pub.dongle_trap_occured = 0;
+	dhd->pub.dsack_hc_due_to_isr_delay = 0;
+	dhd->pub.dsack_hc_due_to_dpc_delay = 0;
 #ifdef BT_OVER_PCIE
 	dhd->pub.dongle_trap_due_to_bt = 0;
 #endif /* BT_OVER_PCIE */
@@ -12687,6 +12689,8 @@ dhd_bus_start(dhd_pub_t *dhdp)
 	DHD_TRACE(("Enter %s:\n", __FUNCTION__));
 	dhdp->memdump_type = 0;
 	dhdp->dongle_trap_occured = 0;
+	dhd->pub.dsack_hc_due_to_isr_delay = 0;
+	dhd->pub.dsack_hc_due_to_dpc_delay = 0;
 #ifdef DHD_SSSR_DUMP
 	dhdp->collect_sssr = FALSE;
 #endif /* DHD_SSSR_DUMP */
@@ -18790,6 +18794,8 @@ dhd_net_bus_devreset(struct net_device *dev, uint8 flag)
 	if (flag) {
 		/* Clear some flags for recovery logic */
 		dhd->pub.dongle_trap_occured = 0;
+		dhd->pub.dsack_hc_due_to_isr_delay = 0;
+		dhd->pub.dsack_hc_due_to_dpc_delay = 0;
 #ifdef BT_OVER_PCIE
 		dhd->pub.dongle_trap_due_to_bt = 0;
 #endif /* BT_OVER_PCIE */
@@ -21010,6 +21016,12 @@ dhd_convert_memdump_type_to_str(uint32 type, char *buf, size_t buf_len, int subs
 		case DUMP_TYPE_DONGLE_TRAP:
 			type_str = "Dongle_Trap";
 			break;
+		case DUMP_TYPE_BY_DSACK_HC_DUE_TO_ISR_DELAY:
+			type_str = "Dongle_Trap_DSACK_HC_due_to_ISR_delay";
+			break;
+		case DUMP_TYPE_BY_DSACK_HC_DUE_TO_DPC_DELAY:
+			type_str = "Dongle_Trap_DSACK_HC_due_to_DPC_delay";
+			break;
 		case DUMP_TYPE_MEMORY_CORRUPTION:
 			type_str = "Memory_Corruption";
 			break;
@@ -22853,6 +22865,7 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 #endif /* DHD_LINUX_STD_FW_API */
 	trap_t *tr;
 #endif /* DHD_COREDUMP */
+	uint32 memdump_type;
 
 	DHD_ERROR(("%s: ENTER \n", __FUNCTION__));
 
@@ -22866,6 +22879,8 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 		DHD_ERROR(("%s: dhdp is NULL\n", __FUNCTION__));
 		return;
 	}
+	/* keep it locally to avoid overwriting in other contexts */
+	memdump_type = dhdp->memdump_type;
 
 	DHD_GENERAL_LOCK(dhdp, flags);
 	if (DHD_BUS_CHECK_DOWN_OR_DOWN_IN_PROGRESS(dhdp)) {
@@ -22955,15 +22970,24 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 
 #ifdef DHD_COREDUMP
 	memset_s(dhdp->memdump_str, DHD_MEMDUMP_LONGSTR_LEN, 0, DHD_MEMDUMP_LONGSTR_LEN);
-	dhd_convert_memdump_type_to_str(dhdp->memdump_type, dhdp->memdump_str,
+
+	if (dhdp->dsack_hc_due_to_isr_delay) {
+		memdump_type = DUMP_TYPE_BY_DSACK_HC_DUE_TO_ISR_DELAY;
+	} else if (dhdp->dsack_hc_due_to_dpc_delay) {
+		memdump_type = DUMP_TYPE_BY_DSACK_HC_DUE_TO_DPC_DELAY;
+	}
+	dhd_convert_memdump_type_to_str(memdump_type, dhdp->memdump_str,
 		DHD_MEMDUMP_LONGSTR_LEN, dhdp->debug_dump_subcmd);
-	if (dhdp->memdump_type == DUMP_TYPE_DONGLE_TRAP &&
+	if (memdump_type == DUMP_TYPE_DONGLE_TRAP &&
 		dhdp->dongle_trap_occured == TRUE) {
-		tr = &dhdp->last_trap_info;
-		dhd_lookup_map(dhdp->osh, map_path,
-			ltoh32(tr->epc), pc_fn, ltoh32(tr->r14), lr_fn);
-		sprintf(&dhdp->memdump_str[strlen(dhdp->memdump_str)], "_%.79s_%.79s",
-				pc_fn, lr_fn);
+		if (!dhdp->dsack_hc_due_to_isr_delay &&
+				!dhdp->dsack_hc_due_to_dpc_delay) {
+			tr = &dhdp->last_trap_info;
+			dhd_lookup_map(dhdp->osh, map_path,
+					ltoh32(tr->epc), pc_fn, ltoh32(tr->r14), lr_fn);
+			sprintf(&dhdp->memdump_str[strlen(dhdp->memdump_str)],
+				"_%.79s_%.79s", pc_fn, lr_fn);
+		}
 	}
 
 #ifdef DHD_SSSR_DUMP
@@ -23030,7 +23054,7 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 	*/
 #ifdef DHD_LOG_DUMP
 	if (dhd->scheduled_memdump &&
-		dhdp->memdump_type != DUMP_TYPE_BY_SYSDUMP) {
+		memdump_type != DUMP_TYPE_BY_SYSDUMP) {
 		log_dump_type_t *flush_type = MALLOCZ(dhdp->osh,
 				sizeof(log_dump_type_t));
 		if (flush_type) {
@@ -23070,16 +23094,16 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 		dhd->wl_accel_boot_on_done == TRUE &&
 #endif /* WLAN_ACCEL_BOOT */
 #ifdef DHD_LOG_DUMP
-		dhd->pub.memdump_type != DUMP_TYPE_BY_SYSDUMP &&
+		memdump_type != DUMP_TYPE_BY_SYSDUMP &&
 #endif /* DHD_LOG_DUMP */
-		dhd->pub.memdump_type != DUMP_TYPE_BY_USER &&
+		memdump_type != DUMP_TYPE_BY_USER &&
 #ifdef DHD_DEBUG_UART
 		dhd->pub.memdump_success == TRUE &&
 #endif	/* DHD_DEBUG_UART */
 #ifdef DNGL_EVENT_SUPPORT
-		dhd->pub.memdump_type != DUMP_TYPE_DONGLE_HOST_EVENT &&
+		memdump_type != DUMP_TYPE_DONGLE_HOST_EVENT &&
 #endif /* DNGL_EVENT_SUPPORT */
-		dhd->pub.memdump_type != DUMP_TYPE_CFG_VENDOR_TRIGGERED) {
+		memdump_type != DUMP_TYPE_CFG_VENDOR_TRIGGERED) {
 #ifdef SHOW_LOGTRACE
 		/* Wait till logtrace context is flushed */
 		dhd_flush_logtrace_process(dhd);
