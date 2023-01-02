@@ -15887,6 +15887,13 @@ struct bcm_xlo {
 };
 typedef struct bcm_xlo bcm_xlo_t;
 
+/* Supported operations (actions) for PMK info */
+
+/* Add passphrase/pmk entry with the info provided..this is default behaviour */
+#define WL_WSEC_PMK_INFO_ADD 0x0u
+/* Search passphrase entry with info provided and delete it */
+#define WL_WSEC_PMK_INFO_DEL 0x1u
+
 /*
 ** all offsets are from the beginning of the structure that starts
 ** with the version field and length field is the total length of the structure
@@ -15899,7 +15906,8 @@ typedef struct wl_wsec_info_pmk_info {
 	wl_wsec_info_pmk_info_flags_t flags;	/* Fill in the input based on the flags */
 	wl_wsec_info_pmk_lifetime_t pmk_lifetime;
 	wl_wsec_info_akm_mask_t akm_mask;	/* RSN authenticated key management suite */
-	uint8 rsvd[3];		/* reserved for future use */
+	uint8 action;		/* add/del */
+	uint8 rsvd[2];		/* reserved for future use */
 	bcm_xlo_t ssid; /* ssid - key, zero length is allowed for SSID */
 	bcm_xlo_t bssid;	/* bssid - key, zero length = broadcast/wildcard */
 	bcm_xlo_t pass_id;	/* key - optional password id for SAE */

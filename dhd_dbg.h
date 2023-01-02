@@ -45,10 +45,17 @@
 
 #ifdef CUSTOM_PREFIX
 #define DBG_PRINT_PREFIX "[%s]"CUSTOM_PREFIX, OSL_GET_RTCTIME()
+#define DBG_PRINT_SYSTEM_TIME pr_cont(DBG_PRINT_PREFIX)
+#define DHD_CONS_ONLY(args)	\
+do {	\
+	DBG_PRINT_SYSTEM_TIME;	\
+	pr_cont args;		\
+} while (0)
 #else
 #define DBG_PRINT_PREFIX
-#endif
 #define DBG_PRINT_SYSTEM_TIME pr_cont(DBG_PRINT_PREFIX)
+#define DHD_CONS_ONLY(args) do { printf args;} while (0)
+#endif
 
 #if defined(BCMDBG) || defined(DHD_DEBUG)
 
