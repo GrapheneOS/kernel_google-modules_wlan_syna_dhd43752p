@@ -198,7 +198,7 @@ dhd_dbg_urgent_pull(dhd_pub_t *dhdp, dhd_dbg_ring_t *ring)
 	}
 
 	if (pending_len > ring->threshold) {
-		DHD_ERROR(("%s: pending_len(%d) is exceeded threshold(%d), pktcount(%d)\n",
+		DHD_INFO(("%s: pending_len(%d) is exceeded threshold(%d), pktcount(%d)\n",
 			__FUNCTION__, pending_len, ring->threshold, pktlog_ring->pktcount));
 	}
 
@@ -2266,6 +2266,19 @@ dhd_dbg_stop_pkt_monitor(dhd_pub_t *dhdp)
 		} \
 	} while (0);
 
+static wifi_tx_packet_fate
+__dhd_dbg_convert_fate(wifi_tx_packet_fate fate)
+{
+	wifi_tx_packet_fate new_fate = fate;
+
+	 /* To prevent SIG-ABORT, packet_fate > TX_PKT_FATE_DRV_DROP_OTHER */
+	if (fate > TX_PKT_FATE_DRV_DROP_OTHER) {
+		new_fate = TX_PKT_FATE_FW_DROP_OTHER;
+	}
+
+	return new_fate;
+}
+
 int
 dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 		uint16 req_count, uint16 *resp_count)
@@ -2347,7 +2360,12 @@ dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 			compat_wifi_tx_report_t *comp_ptr = compat_ptr((uintptr_t) cptr);
 			compat_dhd_dbg_pkt_info_t compat_tx_pkt;
 			__dhd_dbg_dump_tx_pkt_info(dhdp, tx_pkt, count);
-			__COPY_TO_USER(&comp_ptr->fate, &tx_pkt->fate, sizeof(tx_pkt->fate));
+                        /* fate convert asscording to wifi_logger.h */
+			{
+				wifi_tx_packet_fate new_fate = tx_pkt->fate;
+				new_fate = __dhd_dbg_convert_fate(new_fate);
+				__COPY_TO_USER(&comp_ptr->fate, &new_fate, sizeof(new_fate));
+			}
 
 			compat_tx_pkt.payload_type = tx_pkt->info.payload_type;
 			compat_tx_pkt.pkt_len = tx_pkt->info.pkt_len;
@@ -2370,7 +2388,12 @@ dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 		ptr = (wifi_tx_report_t *)user_buf;
 		while ((count < pkt_count) && tx_pkt && ptr) {
 			__dhd_dbg_dump_tx_pkt_info(dhdp, tx_pkt, count);
-			__COPY_TO_USER(&ptr->fate, &tx_pkt->fate, sizeof(tx_pkt->fate));
+                        /* fate convert asscording to wifi_logger.h */
+			{
+				wifi_tx_packet_fate new_fate = tx_pkt->fate;
+				new_fate = __dhd_dbg_convert_fate(new_fate);
+				__COPY_TO_USER(&ptr->fate, &new_fate, sizeof(new_fate));
+			}
 			__COPY_TO_USER(&ptr->frame_inf.payload_type,
 				&tx_pkt->info.payload_type,
 				OFFSETOF(dhd_dbg_pkt_info_t, pkt_hash));

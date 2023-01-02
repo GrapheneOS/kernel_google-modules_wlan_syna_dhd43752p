@@ -4428,7 +4428,7 @@ BCMFASTPATH(dhd_start_xmit)(struct sk_buff *skb, struct net_device *net)
 
 	DHD_GENERAL_LOCK(&dhd->pub, flags);
 	if (DHD_BUS_CHECK_SUSPEND_OR_SUSPEND_IN_PROGRESS(&dhd->pub)) {
-		DHD_ERROR(("%s: bus is in suspend(%d) or suspending(0x%x) state!!\n",
+		DHD_ERROR_RLMT(("%s: bus is in suspend(%d) or suspending(0x%x) state!!\n",
 			__FUNCTION__, dhd->pub.busstate, dhd->pub.dhd_bus_busy_state));
 		DHD_BUS_BUSY_CLEAR_IN_TX(&dhd->pub);
 #ifdef PCIE_FULL_DONGLE
@@ -16196,6 +16196,21 @@ dhd_legacy_preinit_ioctls(dhd_pub_t *dhd)
 	dhd_conf_dependency_set(dhd);
 #endif /* READ_CONFIG_FROM_FILE */
 	dhd_set_bandlock(dhd);
+
+#ifdef DHD_WAKE_EVENT_STATUS
+#ifdef CUSTOM_WAKE_REASON_STATS
+	/* Initialization */
+	if (dhd_bus_get_wakecount(dhd)) {
+		int i = 0;
+		wake_counts_t *wcp = dhd_bus_get_wakecount(dhd);
+
+		wcp->rc_event_idx = 0;
+		for (i = 0; i < MAX_WAKE_REASON_STATS; i++) {
+			wcp->rc_event[i] = -1;
+		}
+	}
+#endif /* CUSTOM_WAKE_REASON_STATS */
+#endif /* DHD_WAKE_EVENT_STATUS */
 
 done:
 

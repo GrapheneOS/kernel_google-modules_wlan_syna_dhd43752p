@@ -3745,11 +3745,13 @@ wl_cfg80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev)
 #endif /* LINUX_VER > 4.11 */
 {
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_device *pri_ndev;
 	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
 
 	WL_DBG(("Enter \n"));
 	WL_PNO((">>> SCHED SCAN STOP\n"));
 
+	pri_ndev = bcmcfg_to_prmry_ndev(cfg);
 #if defined(BCMDONGLEHOST)
 	if (dhd_dev_pno_stop_for_ssid(dev) < 0) {
 		WL_ERR(("PNO Stop for SSID failed"));
@@ -3764,8 +3766,15 @@ wl_cfg80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev)
 
 	mutex_lock(&cfg->scan_sync);
 	if (cfg->sched_scan_req) {
-		WL_PNO((">>> Sched scan running. Aborting it..\n"));
-		_wl_cfgscan_cancel_scan(cfg);
+		if (cfg->sched_scan_running && wl_get_drv_status(cfg, SCANNING, pri_ndev)) {
+			/* If targetted escan for PNO is running, abort it */
+			WL_INFORM_MEM(("abort targetted escan\n"));
+			_wl_cfgscan_cancel_scan(cfg);
+			wl_clr_drv_status(cfg, SCANNING, pri_ndev);
+		} else {
+			WL_INFORM_MEM(("pno escan state:%d\n",
+				cfg->sched_scan_running));
+		}
 	}
 	cfg->sched_scan_req = NULL;
 	cfg->sched_scan_running = FALSE;
@@ -4053,7 +4062,6 @@ wl_cfgscan_init_pno_escan(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	int err = 0;
 
 	mutex_lock(&cfg->scan_sync);
-	LOG_TS(cfg, scan_start);
 
 	if (wl_get_drv_status_all(cfg, SCANNING)) {
 		_wl_cfgscan_cancel_scan(cfg);
@@ -4062,19 +4070,21 @@ wl_cfgscan_init_pno_escan(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	wl_set_drv_status(cfg, SCANNING, ndev);
 	WL_PNO((">>> Doing targeted ESCAN on PNO event\n"));
 
+	LOG_TS(cfg, scan_start);
 	err = wl_do_escan(cfg, wiphy, ndev, request);
 	if (err) {
 		wl_clr_drv_status(cfg, SCANNING, ndev);
-		mutex_unlock(&cfg->scan_sync);
 		WL_ERR(("targeted escan failed. err:%d\n", err));
-		return err;
+		CLR_TS(cfg, scan_start);
+		goto exit;
 	}
 
 	DBG_EVENT_LOG(dhdp, WIFI_EVENT_DRIVER_PNO_SCAN_REQUESTED);
 
 	cfg->sched_scan_running = TRUE;
-	mutex_unlock(&cfg->scan_sync);
 
+exit:
+	mutex_unlock(&cfg->scan_sync);
 	return err;
 }
 
@@ -4274,6 +4284,12 @@ wl_notify_sched_scan_results(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	u8 tmp_buf[DOT11_MAX_SSID_LEN + 1];
 
 	WL_DBG(("Enter\n"));
+
+
+	if (cfg->sched_scan_running) {
+		WL_INFORM_MEM(("sched_scan is already running. return\n"));
+		return BCME_OK;
+	}
 
 	/* These static asserts guarantee v1/v2 net_info and subnet_info are compatible
 	 * in size and SSID offset, allowing v1 to be used below except for the results
