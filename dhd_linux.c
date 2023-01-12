@@ -8093,6 +8093,14 @@ dhd_add_monitor_if(dhd_info_t *dhd)
 
 	dev->netdev_ops = &netdev_monitor_ops;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 9))
+	/* as priv_destructor calls free_netdev, no need to set need_free_netdev */
+	dev->needs_free_netdev = 0;
+	dev->priv_destructor = free_netdev;
+#else /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 9) */
+	dev->destructor = free_netdev;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 9) */
+
 	if (rtnl_is_locked()) {
 
 	/* XXX: This is called from IOCTL path, in this case, rtnl_lock is already taken.
@@ -11206,6 +11214,10 @@ dhd_init_static_strs_array(osl_t *osh, dhd_event_log_t *temp, char *str_file, ch
 		temp->rom_raw_sstr_size = logstrs_size;
 		temp->rom_rodata_start = rodata_start;
 		temp->rom_rodata_end = rodata_end;
+	} else {
+		if (raw_fmts) {
+			MFREE(osh, raw_fmts, logstrs_size);
+		}
 	}
 
 	if (fw) {
