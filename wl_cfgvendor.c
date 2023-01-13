@@ -10827,6 +10827,8 @@ wl_cfgvendor_set_dtim_config(struct wiphy *wiphy,
 				WL_INFORM_MEM(("dtim multiplier %d\n", dtim_multiplier));
 				set = (dtim_multiplier > 0) ? FALSE : TRUE;
 				dhdp->suspend_bcn_li_dtim = dtim_multiplier;
+				WL_ERR(("%s: suspend_bcn_li_dtim = %d\n",
+					__FUNCTION__, dhdp->suspend_bcn_li_dtim));
 				err = net_os_set_max_dtim_enable(net, set);
 				break;
 			default:
