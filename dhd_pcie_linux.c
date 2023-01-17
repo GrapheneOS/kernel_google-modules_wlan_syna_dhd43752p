@@ -2835,6 +2835,7 @@ void dhdpcie_oob_intr_set(dhd_bus_t *bus, bool enable)
 static irqreturn_t wlan_oob_irq_isr(int irq, void *data)
 {
 	dhd_bus_t *bus = (dhd_bus_t *)data;
+	dhdpcie_oob_intr_set(bus, FALSE);
 	DHD_TRACE(("%s: IRQ ISR\n", __FUNCTION__));
 	bus->last_oob_irq_isr_time = OSL_LOCALTIME_NS();
 	return IRQ_WAKE_THREAD;
@@ -2845,11 +2846,11 @@ static irqreturn_t wlan_oob_irq(int irq, void *data)
 {
 	dhd_bus_t *bus;
 	bus = (dhd_bus_t *)data;
-	dhdpcie_oob_intr_set(bus, FALSE);
 #ifdef DHD_USE_PCIE_OOB_THREADED_IRQ
 	DHD_TRACE(("%s: IRQ Thread\n", __FUNCTION__));
 	bus->last_oob_irq_thr_time = OSL_LOCALTIME_NS();
 #else
+	dhdpcie_oob_intr_set(bus, FALSE);
 	DHD_TRACE(("%s: IRQ ISR\n", __FUNCTION__));
 	bus->last_oob_irq_isr_time = OSL_LOCALTIME_NS();
 #endif /* DHD_USE_PCIE_OOB_THREADED_IRQ */
