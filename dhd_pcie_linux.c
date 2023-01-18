@@ -3230,12 +3230,15 @@ bool dhd_runtimepm_state(dhd_pub_t *dhd)
 bool dhd_runtime_bus_wake(dhd_bus_t *bus, bool wait, void *func_addr)
 {
 	unsigned long flags;
-	bus->idlecount = 0;
 	DHD_TRACE(("%s : enter\n", __FUNCTION__));
-	if (bus->dhd == NULL) {
+
+	if (bus == NULL || bus->dhd == NULL) {
 		DHD_INFO(("%s : dhd is NULL\n", __FUNCTION__));
 		return FALSE;
 	}
+
+	bus->idlecount = 0;
+
 	if (bus->dhd->up == FALSE) {
 		DHD_INFO(("%s : dhd is not up\n", __FUNCTION__));
 		return FALSE;
