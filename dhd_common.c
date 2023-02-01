@@ -7437,6 +7437,9 @@ dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd, int *dtim_period, int *bcn_interval)
 	} else {
 		/* attemp to use platform defined dtim skip interval */
 		bcn_li_dtim = dhd->suspend_bcn_li_dtim;
+		DHD_ERROR(("%s: suspend_bcn_li_dtim = %d\n",
+			__FUNCTION__, dhd->suspend_bcn_li_dtim));
+
 
 		/* check if sta listen interval fits into AP dtim */
 		if (*dtim_period > CUSTOM_LISTEN_INTERVAL) {
@@ -7450,6 +7453,9 @@ dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd, int *dtim_period, int *bcn_interval)
 		if (((*dtim_period) * (*bcn_interval) * bcn_li_dtim) > MAX_DTIM_ALLOWED_INTERVAL) {
 			allowed_skip_dtim_cnt =
 				MAX_DTIM_ALLOWED_INTERVAL / ((*dtim_period) * (*bcn_interval));
+			DHD_ERROR(("%s: allowed_skip_dtim_cnt = %d\n",
+				__FUNCTION__, allowed_skip_dtim_cnt));
+
 			bcn_li_dtim =
 				(allowed_skip_dtim_cnt != 0) ? allowed_skip_dtim_cnt : NO_DTIM_SKIP;
 		}
