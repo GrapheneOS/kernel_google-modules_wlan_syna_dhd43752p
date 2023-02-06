@@ -473,6 +473,8 @@ static s32 wl_cfg80211_bssload_report_event_handler(struct bcm_cfg80211 *cfg,
 	bcm_struct_cfgdev *cfgdev, const wl_event_msg_t *e, void *data);
 static s32 wl_cfg80211_start_bssload_report(struct net_device *ndev);
 #endif /* WL_CHAN_UTIL */
+static int wl_get_p2p_disc_ies(struct bcm_cfg80211 *cfg,
+	struct wireless_dev *wdev, u8 **p2p_ie, u16 *p2p_ie_len);
 
 bool wl_legacy_chip_check(struct bcm_cfg80211 *cfg, struct net_device *ndev);
 
@@ -6220,10 +6222,49 @@ wl_config_assoc_ies(struct bcm_cfg80211 *cfg, struct net_device *dev,
 	u32 wpaie_len;
 	s32 err;
 	s32 bssidx = info->bssidx;
+	u8 *p2p_ie = NULL;
+	u16 p2p_ie_len = 0;
+	bcm_tlv_t *ie = NULL;
 
 	/* configure all vendor and extended vendor IEs */
 	wl_cfg80211_set_mgmt_vndr_ies(cfg, ndev_to_cfgdev(dev), bssidx,
 		VNDR_IE_ASSOCREQ_FLAG, sme->ie, sme->ie_len);
+
+	/* supplicant sometimes reuses scan from another interface and triggers p2p_connect
+	 * and that can cause regular scans to be skipped on actual connect interface.
+	 * Because of this, the vendor IEs may not be applied for Probe request that are
+	 * to be sent in the join scan. Invoke API for applying vendor IEs for probe req.
+	 */
+	if (IS_P2P_GC(dev->ieee80211_ptr)) {
+		wl_get_p2p_disc_ies(cfg, dev->ieee80211_ptr, &p2p_ie, &p2p_ie_len);
+		if (!p2p_ie_len && cfg->p2p_wdev) {
+			WL_DBG_MEM(("No IEs present in GC I/F. Fetch from P2P Disc.\n"));
+			wl_get_p2p_disc_ies(cfg, cfg->p2p_wdev, &p2p_ie, &p2p_ie_len);
+		}
+
+		/* If IEs are not found from discovery I/F, look for p2p IE in the assoc req */
+		if (p2p_ie_len == 0) {
+			WL_ERR(("no p2p discovery IEs. p2p_wdev:%p p2p_ie:%p p2p_ie_len:%d\n",
+				cfg->p2p_wdev, p2p_ie, p2p_ie_len));
+			ie = (bcm_tlv_t *)wl_cfgp2p_find_p2pie((const u8 *)sme->ie, sme->ie_len);
+			if (!ie) {
+				WL_ERR(("no p2p IE found in assoc req\n"));
+			} else {
+				p2p_ie = (u8 *)ie;
+				p2p_ie_len = ie->len + BCM_TLV_HDR_SIZE;
+				WL_DBG_MEM(("p2p IE\n"));
+			}
+		}
+
+		/* Apply P2P IEs if found */
+		if (p2p_ie && !wl_cfg80211_set_mgmt_vndr_ies(cfg, ndev_to_cfgdev(dev),
+			bssidx, VNDR_IE_PRBREQ_FLAG,
+			p2p_ie, p2p_ie_len)) {
+			WL_INFORM_MEM(("P2P IE config done for connect\n"));
+		} else {
+			WL_ERR(("P2P IE set failed for GC I/F. p2p_ie_len=%d\n", p2p_ie_len));
+		}
+	}
 
 	/* Find the RSNXE_IE and plumb */
 	if ((err = wl_cfg80211_config_rsnxe_ie(cfg, dev,
@@ -8496,11 +8537,15 @@ wl_cfg80211_set_power_mgmt(struct wiphy *wiphy, struct net_device *dev,
 		return err;
 	}
 
-	/* Don't auto restore PM mode if WL_LAENCY_MODE defined */
-#ifndef WL_LATENCY_MODE
-	/* Enlarge pm_enable_work */
-	wl_add_remove_pm_enable_work(cfg, WL_PM_WORKQ_LONG);
-#endif /* !WL_LATENCY_MODE */
+	mutex_lock(&cfg->pm_sync);
+	/* Remove the workqueue from enabling back PM when
+	 * PM is explicitly disabled by the power mgmt API
+	 */
+	cancel_delayed_work(&cfg->pm_enable_work);
+#if defined(BCMDONGLEHOST) && defined(OEM_ANDROID)
+	DHD_PM_WAKE_UNLOCK(cfg->pub);
+#endif /* BCMDONGLEHOST && OEM_ANDROID */
+	mutex_unlock(&cfg->pm_sync);
 
 	pm = enabled ? PM_FAST : PM_OFF;
 	if (_net_info->pm_block) {
@@ -20775,6 +20820,27 @@ wl_print_fw_ie_data(struct bcm_cfg80211 *cfg, struct net_device *ndev, s32 bssid
 
 #define WL_VNDR_IE_MAXLEN 2048
 static s8 g_mgmt_ie_buf[WL_VNDR_IE_MAXLEN];
+static int
+wl_get_p2p_disc_ies(struct bcm_cfg80211 *cfg, struct wireless_dev *wdev,
+	u8 **p2p_ie, u16 *p2p_ie_len)
+{
+	wl_bss_vndr_ies_t *ies = NULL;
+	struct net_info *netinfo;
+
+	netinfo = wl_get_netinfo_by_wdev(cfg, wdev);
+	if (!netinfo) {
+		WL_ERR(("net_info ptr is NULL \n"));
+		return -EINVAL;
+	}
+
+	ies = &netinfo->bss.ies;
+	*p2p_ie = ies->probe_req_ie;
+	*p2p_ie_len = ies->probe_req_ie_len;
+	WL_DBG(("probe_req_len:%d bssidx:%d\n", ies->probe_req_ie_len, netinfo->bssidx));
+
+	return BCME_OK;
+}
+
 int
 wl_cfg80211_set_mgmt_vndr_ies(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	s32 bssidx, s32 pktflag, const u8 *vndr_ie, u32 vndr_ie_len)
