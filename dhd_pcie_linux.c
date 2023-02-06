@@ -2331,6 +2331,7 @@ irqreturn_t
 dhdpcie_isr(int irq, void *arg)
 {
 	dhd_bus_t *bus = (dhd_bus_t*)arg;
+	bus->prev_isr_entry_time = bus->isr_entry_time;
 	bus->isr_entry_time = OSL_LOCALTIME_NS();
 	if (!dhdpcie_bus_isr(bus)) {
 		DHD_LOG_MEM(("%s: dhdpcie_bus_isr returns with FALSE\n", __FUNCTION__));
@@ -3230,12 +3231,15 @@ bool dhd_runtimepm_state(dhd_pub_t *dhd)
 bool dhd_runtime_bus_wake(dhd_bus_t *bus, bool wait, void *func_addr)
 {
 	unsigned long flags;
-	bus->idlecount = 0;
 	DHD_TRACE(("%s : enter\n", __FUNCTION__));
-	if (bus->dhd == NULL) {
+
+	if (bus == NULL || bus->dhd == NULL) {
 		DHD_INFO(("%s : dhd is NULL\n", __FUNCTION__));
 		return FALSE;
 	}
+
+	bus->idlecount = 0;
+
 	if (bus->dhd->up == FALSE) {
 		DHD_INFO(("%s : dhd is not up\n", __FUNCTION__));
 		return FALSE;

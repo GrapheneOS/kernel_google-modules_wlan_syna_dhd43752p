@@ -150,6 +150,8 @@ DHDCFLAGS += -DDHD_SKIP_PKTLOGGING_FOR_DATA_PKTS
 
 # Enable inband device wake feature
 DHDCFLAGS += -DPCIE_INB_DW
+# Enable DS ack extended wait
+DHDCFLAGS += -DPCIE_INB_DSACK_EXT_WAIT
 
 # Debug check for PCIe read latency
 #DHDCFLAGS += -DDBG_DW_CHK_PCIE_READ_LATENCY
