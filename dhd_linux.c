@@ -11044,6 +11044,9 @@ fail:
 	if (!(count & LR_FOUND_BIT)) {
 		sprintf(lr_fn, "0x%08x", lr);
 	}
+	if (raw_fmts) {
+		MFREE(osh, raw_fmts, read_size + 1);
+	}
 	return err;
 }
 #endif /* DHD_COREDUMP */
@@ -11446,6 +11449,10 @@ dhd_init_static_strs_array(osl_t *osh, dhd_event_log_t *temp, char *str_file, ch
 		temp->rom_raw_sstr_size = logstrs_size;
 		temp->rom_rodata_start = rodata_start;
 		temp->rom_rodata_end = rodata_end;
+	} else {
+		if (raw_fmts) {
+			MFREE(osh, raw_fmts, logstrs_size);
+		}
 	}
 
 	dhd_filp_close(filep, NULL);
