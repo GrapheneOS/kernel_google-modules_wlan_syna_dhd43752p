@@ -17512,6 +17512,20 @@ dhd_pcie_dump_int_regs(dhd_pub_t *dhd)
 	uint32 d2h_db0 = 0;
 	uint32 d2h_mb_data = 0;
 
+	/* Skip after receiving D3 ACK */
+	if (DHD_CHK_BUS_LPS_D3_ACKED(dhd->bus)) {
+		DHD_ERROR(("dhd_pcie_dump_int_regs: skip as d3 ack is received\n"));
+		return TRUE;
+	}
+
+#if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS9820) || \
+	defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_GOOGLE)
+	DHD_ERROR(("dhd_pcie_dump_int_regs: exit l1\n"));
+	dhd_plat_l1_exit_io();
+#endif /* CONFIG_SOC_EXYNOS9810 || CONFIG_SOC_EXYNOS9820
+	* CONFIG_SOC_EXYNOS9830 || CONFIG_SOC_GOOGLE
+	*/
+
 	DHD_ERROR(("\n ------- DUMPING INTR Status and Masks ------- \r\n"));
 	intstatus = si_corereg(dhd->bus->sih, dhd->bus->sih->buscoreidx,
 		dhd->bus->pcie_mailbox_int, 0, 0);
