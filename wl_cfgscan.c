@@ -3899,6 +3899,22 @@ static void wl_scan_timeout(unsigned long data)
 		return;
 	}
 
+#ifdef BCMPCIE
+	/* Defer timer if D3 ACKed */
+	if (dhd_pcie_check_lps_d3_acked(dhdp)) {
+		WL_ERR(("D3 acked, defer the timer\n"));
+		mutex_lock(&cfg->scan_sync);
+		/* Defer the timer 100ms */
+		mod_timer(&cfg->scan_timeout,
+			jiffies + msecs_to_jiffies(100));
+		mutex_unlock(&cfg->scan_sync);
+		return;
+	}
+#endif /* BCMPCIE */
+
+	/* Wake lock 300ms to avoid suspending */
+	DHD_OS_SCAN_WAKE_LOCK_TIMEOUT(dhdp, 300);
+
 	if (dhdp->memdump_enabled) {
 		dhdp->hang_reason = HANG_REASON_SCAN_TIMEOUT;
 	}
@@ -4004,6 +4020,10 @@ static void wl_scan_timeout(unsigned long data)
 #ifdef DHD_FW_COREDUMP
 	if (!dhd_bus_get_linkdown(dhdp) && dhdp->memdump_enabled) {
 		dhdp->memdump_type = DUMP_TYPE_SCAN_TIMEOUT;
+#ifdef DHD_SSSR_DUMP
+		WL_ERR(("Set collect_sssr as TRUE\n"));
+		dhdp->collect_sssr = TRUE;
+#endif /* DHD_SSSR_DUMP */
 		dhd_bus_mem_dump(dhdp);
 	}
 	/*
