@@ -3214,7 +3214,7 @@ bool dhd_runtimepm_state(dhd_pub_t *dhd)
 			/* Since one of the contexts are busy (TX, IOVAR or RX)
 			 * we should not suspend
 			 */
-			DHD_ERROR(("%s : bus is active with dhd_bus_busy_state = 0x%x\n",
+			DHD_TRACE(("%s : bus is active with dhd_bus_busy_state = 0x%x\n",
 				__FUNCTION__, dhd->dhd_bus_busy_state));
 			return FALSE;
 		}
