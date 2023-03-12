@@ -21766,7 +21766,8 @@ dhd_os_check_wakelock_all(dhd_pub_t *pub)
 
 	/* Indicate to the Host to avoid going to suspend if internal locks are up */
 	if (lock_active) {
-		DHD_ERROR(("%s wakelock c-%d wl-%d wd-%d rx-%d "
+		BCM_REFERENCE(c);
+		DHD_TRACE(("%s wakelock c-%d wl-%d wd-%d rx-%d "
 			"ctl-%d intr-%d scan-%d evt-%d, pm-%d, txfl-%d nan-%d\n",
 			__FUNCTION__, c, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10));
 		return 1;
