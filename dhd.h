@@ -4034,6 +4034,7 @@ extern int dhd_prot_debug_info_print(dhd_pub_t *dhd);
 extern bool dhd_bus_skip_clm(dhd_pub_t *dhdp);
 extern void dhd_pcie_dump_rc_conf_space_cap(dhd_pub_t *dhd);
 extern bool dhd_pcie_dump_int_regs(dhd_pub_t *dhd);
+extern bool dhd_pcie_check_lps_d3_acked(dhd_pub_t *dhd);
 #else
 #define dhd_prot_debug_info_print(x)
 static INLINE bool dhd_bus_skip_clm(dhd_pub_t *dhd_pub)

@@ -17505,6 +17505,12 @@ dhd_pcie_dma_info_dump(dhd_pub_t *dhd)
 }
 
 bool
+dhd_pcie_check_lps_d3_acked(dhd_pub_t *dhd)
+{
+	return DHD_CHK_BUS_LPS_D3_ACKED(dhd->bus);
+}
+
+bool
 dhd_pcie_dump_int_regs(dhd_pub_t *dhd)
 {
 	uint32 intstatus = 0;
