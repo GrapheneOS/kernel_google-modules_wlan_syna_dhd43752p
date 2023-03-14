@@ -3917,11 +3917,15 @@ dhd_handle_pktdata(dhd_pub_t *dhdp, int ifidx, void *pkt, uint8 *pktdata, uint32
 			pkt_type = PKT_TYPE_DNS;
 		}
 	}
+#ifdef DHD_IPV6_DUMP
 	else if (ether_type == ETHER_TYPE_IPV6) {
 		if (dhd_check_icmpv6(pktdata, pktlen)) {
 			pkt_type = PKT_TYPE_ICMPV6;
+		} else if (dhd_check_dhcp6(pktdata, pktlen)) {
+			pkt_type = PKT_TYPE_DHCP6;
 		}
 	}
+#endif
 	else if (dhd_check_arp(pktdata, ether_type)) {
 		pkt_type = PKT_TYPE_ARP;
 	}
@@ -4017,6 +4021,14 @@ dhd_handle_pktdata(dhd_pub_t *dhdp, int ifidx, void *pkt, uint8 *pktdata, uint32
 		case PKT_TYPE_EAP:
 			dhd_dump_eapol_message(dhdp, ifidx, pktdata, pktlen, tx, &pkthash, pktfate);
 			break;
+#ifdef DHD_IPV6_DUMP
+		case PKT_TYPE_ICMPV6:
+			dhd_icmpv6_dump(dhdp, ifidx, pktdata, tx, &pkthash, pktfate);
+			break;
+		case PKT_TYPE_DHCP6:
+			dhd_dhcp6_dump(dhdp, ifidx, pktdata, tx, &pkthash, pktfate);
+			break;
+#endif
 		default:
 			break;
 	}
