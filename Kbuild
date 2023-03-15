@@ -133,6 +133,8 @@ ifneq ($(CONFIG_SOC_GS201),)
 endif
 endif
 
+# Enable wakelock for legacy scan
+DHDCFLAGS += -DDHD_USE_SCAN_WAKELOCK
 # Enable wakelock debug function
 DHDCFLAGS += -DDHD_TRACE_WAKE_LOCK
 
