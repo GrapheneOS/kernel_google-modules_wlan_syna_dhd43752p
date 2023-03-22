@@ -329,6 +329,17 @@ typedef struct icmpv6 {
 	uint16  id;
 	uint16  seq;
 } PACKED_STRUCT icmpv6_hdr_t;
+
+typedef struct dns6_fmt {
+	struct ipv6_hdr ip6h;
+	struct bcmudp_hdr udph;
+	uint16 id;
+	uint16 flags;
+	uint16 qdcount;
+	uint16 ancount;
+	uint16 nscount;
+	uint16 arcount;
+} PACKED_STRUCT dns6_fmt_t;
 #endif
 
 msg_eapol_t
@@ -1408,6 +1419,30 @@ uint32 *pkthash, uint16 *pktfate)
 	ICMPv6_PRINT("ICMPv6");
 	return;
 }
+
+bool
+dhd_check_dns6(uint8 *pktdata, uint32 plen)
+{
+	ipv6hdr_fmt_t *b = (ipv6hdr_fmt_t *)&pktdata[ETHER_HDR_LEN];
+	struct ipv6_hdr *ip6h = &b->ip6h;
+
+	/* check header length */
+	if (plen <= IPV6_MIN_HLEN) {
+		return FALSE;
+	}
+
+	if (IPV6_PROT(ip6h) != IP_PROT_UDP) {
+		return FALSE;
+	}
+
+	/* check UDP port for DNS */
+	if (b->udph.src_port != hton16(UDP_PORT_DNS) &&
+		b->udph.dst_port != hton16(UDP_PORT_DNS)) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
 #endif
 
 bool
@@ -1539,6 +1574,34 @@ dhd_dns_dump(dhd_pub_t *dhdp, int ifidx, uint8 *pktdata, bool tx,
 		dhd_dump_pkt_cnts_inc(dhdp, tx, pktfate, PKT_CNT_TYPE_DNS);
 	}
 }
+
+#ifdef DHD_IPV6_DUMP
+void
+dhd_dns6_dump(dhd_pub_t *dhdp, int ifidx, uint8 *pktdata, bool tx,
+	uint32 *pkthash, uint16 *pktfate)
+{
+	dns6_fmt_t *dns6h = (dns6_fmt_t *)&pktdata[ETHER_HDR_LEN];
+	uint16 flags, opcode, id;
+	char *ifname;
+	bool cond, dump_enabled;
+
+	ifname = dhd_ifname(dhdp, ifidx);
+	cond = (tx && pktfate) ? FALSE : TRUE;
+	dump_enabled = dhd_dump_pkt_enabled(dhdp);
+	flags = hton16(dns6h->flags);
+	opcode = GET_DNS_OPCODE(flags);
+	id = hton16(dns6h->id);
+	if (GET_DNS_QR(flags)) {
+		/* Response */
+		DHD_STATLOG_DATA(dhdp, ST(DNS_RESP), ifidx, tx, cond);
+		DNS_RESP_PRINT("DNS6 RESPONSE");
+	} else {
+		/* Request */
+		DHD_STATLOG_DATA(dhdp, ST(DNS_QUERY), ifidx, tx, cond);
+		DNS_REQ_PRINT("DNS6 REQUEST");
+	}
+}
+#endif
 #endif /* DHD_DNS_DUMP */
 
 #ifdef DHD_RX_DUMP

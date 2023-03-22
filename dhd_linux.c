@@ -3923,6 +3923,8 @@ dhd_handle_pktdata(dhd_pub_t *dhdp, int ifidx, void *pkt, uint8 *pktdata, uint32
 			pkt_type = PKT_TYPE_ICMPV6;
 		} else if (dhd_check_dhcp6(pktdata, pktlen)) {
 			pkt_type = PKT_TYPE_DHCP6;
+		} else if (dhd_check_dns6(pktdata, pktlen)) {
+			pkt_type = PKT_TYPE_DNS6;
 		}
 	}
 #endif
@@ -4027,6 +4029,9 @@ dhd_handle_pktdata(dhd_pub_t *dhdp, int ifidx, void *pkt, uint8 *pktdata, uint32
 			break;
 		case PKT_TYPE_DHCP6:
 			dhd_dhcp6_dump(dhdp, ifidx, pktdata, tx, &pkthash, pktfate);
+			break;
+		case PKT_TYPE_DNS6:
+			dhd_dns6_dump(dhdp, ifidx, pktdata, tx, &pkthash, pktfate);
 			break;
 #endif
 		default:

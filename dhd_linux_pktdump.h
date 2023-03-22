@@ -55,7 +55,8 @@ enum pkt_type {
 	PKT_TYPE_DNS = 4,
 	PKT_TYPE_ARP = 5,
 	PKT_TYPE_EAP = 6,
-	PKT_TYPE_DHCP6 = 7
+	PKT_TYPE_DHCP6 = 7,
+	PKT_TYPE_DNS6 = 8
 };
 
 extern msg_eapol_t dhd_is_4way_msg(uint8 *pktdata);
@@ -87,7 +88,10 @@ extern void dhd_dhcp6_dump(dhd_pub_t *dhdp, int ifidx, uint8 *pktdata, bool tx,
 	uint32 *pkthash, uint16 *pktfate);
 extern void dhd_icmpv6_dump(dhd_pub_t *dhdp, int ifidx, uint8 *pktdata, bool tx,
 	uint32 *pkthash, uint16 *pktfate);
+extern void dhd_dns6_dump(dhd_pub_t *dhdp, int ifidx, uint8 *pktdata, bool tx,
+    uint32 *pkthash, uint16 *pktfate);
 extern bool dhd_check_dhcp6(uint8 *pktdata, uint32 plen);
+extern bool dhd_check_dns6(uint8 *pktdata, uint32 plen);
 #endif
 
 /* DHCP packet dump */
