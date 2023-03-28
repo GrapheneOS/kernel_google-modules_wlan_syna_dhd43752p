@@ -25824,6 +25824,15 @@ EXPORT_SYMBOL(dhd_page_corrupt_cb);
 void
 dhd_pktid_error_handler(dhd_pub_t *dhdp)
 {
+	unsigned long flags = 0;
+
+	DHD_GENERAL_LOCK(dhdp, flags);
+	if (DHD_BUS_CHECK_DOWN_OR_DOWN_IN_PROGRESS(dhdp)) {
+		DHD_GENERAL_UNLOCK(dhdp, flags);
+		DHD_ERROR(("%s: bus is down!\n", __FUNCTION__));
+		return;
+	}
+	DHD_GENERAL_UNLOCK(dhdp, flags);
 	DHD_ERROR(("%s: Got Pkt Id Audit failure \n", __FUNCTION__));
 	DHD_OS_WAKE_LOCK(dhdp);
 	dhd_dump_to_kernelog(dhdp);
