@@ -2128,6 +2128,7 @@ struct bcm_cfg80211 {
 #ifdef WL_THERMAL_MITIGATION
 	wifi_thermal_mode thermal_mode;
 #endif /* WL_THERMAL_MITIGATION */
+	u32 authresp_status;
 };
 
 /* Max auth timeout allowed in case of EAP is 70sec, additional 5 sec for

@@ -14457,7 +14457,8 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	roam_info.resp_ie = conn_info->resp_ie;
 	roam_info.resp_ie_len = conn_info->resp_ie_len;
 #if defined(WL_FILS_ROAM_OFFLD)
-	if ((sec->auth_type == DOT11_FILS_SKEY_PFS)||(sec->auth_type == DOT11_FILS_SKEY)) {
+	if ((sec->auth_type == NL80211_AUTHTYPE_FILS_SK_PFS) ||
+		(sec->auth_type == NL80211_AUTHTYPE_FILS_SK)) {
 		roam_info.fils.kek = fils_info->fils_kek;
 		roam_info.fils.kek_len = fils_info->fils_kek_len;
 		roam_info.fils.update_erp_next_seq_num = true;
@@ -14801,8 +14802,12 @@ wl_bss_connect_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		status = WLAN_STATUS_UNSPECIFIED_FAILURE;
 	}
 
+	WL_ERR(("%s: sec->auth_type=%d(%x), status(%d)\n", __func__,
+		sec->auth_type, sec->auth_type, status));
+
 #ifdef WL_FILS
-	if ((sec->auth_type == DOT11_FILS_SKEY_PFS)||(sec->auth_type == DOT11_FILS_SKEY)) {
+	if ((sec->auth_type == NL80211_AUTHTYPE_FILS_SK_PFS) ||
+		(sec->auth_type == NL80211_AUTHTYPE_FILS_SK)) {
 		if ((err = wl_get_fils_connect_params(cfg, ndev)) != BCME_OK) {
 			WL_ERR(("FILS params fetch failed.\n"));
 			goto exit;
@@ -24014,6 +24019,8 @@ wl_handle_auth_event(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		return WL_INVALID;
 	}
 
+	cfg->authresp_status = ntoh32(e->status);
+
 	if (!len) {
 		WL_ERR(("WLC_E_AUTH : event has no payload. status %d reason %d \n",
 			ntoh32(e->status), ntoh32(e->reason)));
@@ -24097,6 +24104,18 @@ wl_cfg80211_external_auth(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
+	WL_INFORM_MEM(("wl_cfg80211_external_auth: BSSID:"MACDBG", status:%d, authresp_status:%u\n",
+		MAC2STRDBG(&ext_auth_param->bssid), ext_auth_param->status, cfg->authresp_status));
+
+	/* Issue disassoc on Auth failure */
+	if (unlikely(ext_auth_param->status)) {
+		/* Send disassoc only the auth response status is OK */
+		if (!cfg->authresp_status) {
+			wl_cfg80211_disassoc(ndev, WLAN_REASON_UNSPECIFIED);
+			goto done;
+		}
+	}
+
 	cmd.version = WL_ASSOC_MGR_CURRENT_VERSION;
 	cmd.length = sizeof(cmd);
 	cmd.cmd = WL_ASSOC_MGR_CMD_PAUSE_ON_EVT;
@@ -24107,6 +24126,7 @@ wl_cfg80211_external_auth(struct wiphy *wiphy,
 		WL_ERR(("%s: Failed to pause assoc(%d)\n", __func__, err));
 	}
 
+done:
 	return err;
 }
 #endif /* WL_CLIENT_SAE */
