@@ -222,7 +222,7 @@ int wl_cfgvendor_send_async_event(struct wiphy *wiphy,
 #endif /* (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
 		/* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
 	if (!skb) {
-		WL_ERR(("skb alloc failed"));
+		WL_ERR(("skb alloc failed\n"));
 		return -ENOMEM;
 	}
 
@@ -244,7 +244,7 @@ wl_cfgvendor_send_cmd_reply(struct wiphy *wiphy,
 	/* Alloc the SKB for vendor_event */
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, len);
 	if (unlikely(!skb)) {
-		WL_ERR(("skb alloc failed"));
+		WL_ERR(("skb alloc failed\n"));
 		err = -ENOMEM;
 		goto exit;
 	}
@@ -290,7 +290,7 @@ wl_cfgvendor_get_feature_set_matrix(struct wiphy *wiphy,
 	/* Alloc the SKB for vendor_event */
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
 	if (unlikely(!skb)) {
-		WL_ERR(("skb alloc failed"));
+		WL_ERR(("skb alloc failed\n"));
 		err = -ENOMEM;
 		goto exit;
 	}
@@ -453,7 +453,7 @@ wl_cfgvendor_send_hotlist_event(struct wiphy *wiphy,
 #endif /* (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
 		/* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
 		if (!skb) {
-			WL_ERR(("skb alloc failed"));
+			WL_ERR(("skb alloc failed\n"));
 			return -ENOMEM;
 		}
 
@@ -558,7 +558,7 @@ wl_cfgvendor_gscan_get_batch_results(struct wiphy *wiphy,
 	/* Alloc the SKB for vendor_event */
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
 	if (unlikely(!skb)) {
-		WL_ERR(("skb alloc failed"));
+		WL_ERR(("skb alloc failed\n"));
 		dhd_dev_pno_unlock_access_batch_results(bcmcfg_to_prmry_ndev(cfg));
 		return -ENOMEM;
 	}
@@ -1272,7 +1272,7 @@ wl_cfgvendor_gscan_get_channel_list(struct wiphy *wiphy,
 	/* Alloc the SKB for vendor_event */
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
 	if (unlikely(!skb)) {
-		WL_ERR(("skb alloc failed"));
+		WL_ERR(("skb alloc failed\n"));
 		err = -ENOMEM;
 		goto exit;
 	}
@@ -1751,7 +1751,7 @@ wl_cfgvendor_rtt_evt(void *ctx, void *rtt_data)
 #endif /* (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
 		/* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
 		if (!skb) {
-			WL_ERR(("skb alloc failed"));
+			WL_ERR(("skb alloc failed\n"));
 			return;
 		}
 		evt_complete = 1;
@@ -1776,7 +1776,7 @@ wl_cfgvendor_rtt_evt(void *ctx, void *rtt_data)
 #endif /* (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
 		/* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
 		if (!skb) {
-			WL_ERR(("skb alloc failed"));
+			WL_ERR(("skb alloc failed\n"));
 			return;
 		}
 		if (list_is_last(&rtt_header->list, rtt_cache_list)) {
@@ -1904,7 +1904,7 @@ wl_cfgvendor_rtt_set_config(struct wiphy *wiphy, struct wireless_dev *wdev,
 			nla_for_each_nested(iter1, iter, rem1) {
 				if ((uint8 *)rtt_target >= ((uint8 *)rtt_param.target_info +
 					TARGET_INFO_SIZE(target_cnt))) {
-					WL_ERR(("rtt_target increased over its max size"));
+					WL_ERR(("rtt_target increased over its max size\n"));
 					err = -EINVAL;
 					goto exit;
 				}
@@ -8201,8 +8201,8 @@ static void wl_cfgvendor_dbg_ring_send_evt(void *ctx,
 	struct sk_buff *skb;
 	struct nlmsghdr *nlh;
 	struct bcm_cfg80211 *cfg;
-	if (!ndev) {
-		WL_ERR(("ndev is NULL\n"));
+	if (ndev == NULL || ndev->ieee80211_ptr == NULL) {
+		WL_CONS_ONLY(("no device for debug ring id:%d\n", ring_id));
 		return;
 	}
 	kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
@@ -8211,7 +8211,7 @@ static void wl_cfgvendor_dbg_ring_send_evt(void *ctx,
 
 	/* If wifi hal is not start, don't send event to wifi hal */
 	if (!cfg->hal_started) {
-		WL_ERR(("Hal is not started\n"));
+		WL_CONS_ONLY(("Hal is not started id:%d\n", ring_id));
 		return;
 	}
 
@@ -8226,7 +8226,7 @@ static void wl_cfgvendor_dbg_ring_send_evt(void *ctx,
 #endif /* (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
 		/* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
 	if (!skb) {
-		WL_ERR(("skb alloc failed"));
+		WL_CONS_ONLY(("skb alloc failed id:%d\n", ring_id));
 		return;
 	}
 	/* Set halpid for sending unicast event to wifi hal */
@@ -8677,7 +8677,7 @@ static void wl_cfgvendor_dbg_send_file_dump_evt(void *ctx, const void *data,
 #endif /* (defined(CONFIG_ARCH_MSM) && defined(SUPPORT_WDEV_CFG80211_VENDOR_EVENT_ALLOC)) || */
 		/* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) */
 	if (!skb) {
-		WL_ERR(("skb alloc failed"));
+		WL_ERR(("skb alloc failed\n"));
 		return;
 	}
 
@@ -8721,7 +8721,7 @@ static int wl_cfgvendor_dbg_get_version(struct wiphy *wiphy,
 
 	buf_ptr = (char *)MALLOCZ(cfg->osh, buf_len);
 	if (!buf_ptr) {
-		WL_ERR(("failed to allocate the buffer for version n"));
+		WL_ERR(("failed to allocate the buffer for version\n"));
 		ret = BCME_NOMEM;
 		goto exit;
 	}
@@ -8823,7 +8823,7 @@ static int __wl_cfgvendor_dbg_get_pkt_fates(struct wiphy *wiphy,
 	mem_needed = VENDOR_REPLY_OVERHEAD + ATTRIBUTE_U32_LEN;
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
 	if (unlikely(!skb)) {
-		WL_ERR(("skb alloc failed"));
+		WL_ERR(("skb alloc failed\n"));
 		ret = -ENOMEM;
 		goto exit;
 	}
@@ -9301,7 +9301,7 @@ static int wl_cfgvendor_get_driver_feature(struct wiphy *wiphy,
 	/* Alloc the SKB for vendor_event */
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
 	if (unlikely(!skb)) {
-		WL_ERR(("skb alloc failed"));
+		WL_ERR(("skb alloc failed\n"));
 		ret = BCME_NOMEM;
 		goto exit;
 	}
@@ -11550,7 +11550,7 @@ wl_cfgvendor_notify_twt_event(struct bcm_cfg80211 *cfg,
 	skb = CFG80211_VENDOR_EVENT_ALLOC(wiphy, ndev_to_wdev(ndev),
 		BRCM_TWT_HAL_VENDOR_EVENT_BUF_LEN, BRCM_VENDOR_EVENT_TWT, kflags);
 	if (!skb) {
-		WL_ERR(("skb alloc failed"));
+		WL_ERR(("skb alloc failed\n"));
 		err = BCME_NOMEM;
 		goto fail;
 	}
@@ -13566,7 +13566,7 @@ wl_copy_hang_info_if_falure(struct net_device *dev, u16 reason, s32 ret)
 	int remain_len = 0;
 
 	if (!dev) {
-		WL_ERR(("dev is null"));
+		WL_ERR(("dev is null\n"));
 		return;
 
 	}

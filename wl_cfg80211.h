@@ -458,6 +458,13 @@ extern char *dhd_log_dump_get_timestamp(void);
 #define CFG80211_SCAN_TEXT		USER_PREFIX_CFG80211
 #define CFG80211_TRACE_TEXT		USER_PREFIX_CFG80211
 #define CFG80211_DEBUG_TEXT		USER_PREFIX_CFG80211
+
+#define WL_CONS_ONLY(args)	\
+do {	\
+	WL_DBG_PRINT_SYSTEM_TIME;	\
+	pr_cont(USER_PREFIX_CFG80211 "%s : ", __func__);	\
+	pr_cont args;			\
+} while (0)
 #else
 #define CFG80211_INFO_TEXT		"CFG80211-INFO) "
 /* Samsung want to print INFO2 instead of ERROR
@@ -472,6 +479,7 @@ extern char *dhd_log_dump_get_timestamp(void);
 #define CFG80211_SCAN_TEXT		"CFG80211-SCAN) "
 #define CFG80211_TRACE_TEXT		"CFG80211-TRACE) "
 #define CFG80211_DEBUG_TEXT		"CFG80211-DEBUG) "
+#define WL_CONS_ONLY(args) do { printf args; } while (0)
 #endif /* defined(CUSTOMER_DBG_PREFIX_ENABLE) */
 
 #ifdef DHD_DEBUG
