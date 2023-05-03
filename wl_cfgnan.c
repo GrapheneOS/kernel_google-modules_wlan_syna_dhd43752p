@@ -3119,7 +3119,7 @@ wl_cfgnan_start_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 
 	nan_buf_size -= nan_iov_data->nan_iov_len;
 	memset(resp_buf, 0, sizeof(resp_buf));
-	/* Reset conditon variable */
+	/* Reset condition variable */
 	ret = wl_cfgnan_execute_ioctl(ndev, cfg, nan_buf, nan_buf_size,
 			&(cmd_data->status), (void*)resp_buf, NAN_IOCTL_BUF_SIZE);
 	if (unlikely(ret) || unlikely(cmd_data->status)) {
@@ -3210,12 +3210,12 @@ wl_cfgnan_start_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 		ret = wl_cfgnan_config_control_flag(ndev, cfg, WL_NAN_CTRL2_FLAG1_NDPE_CAP,
 				0, WL_NAN_CMD_CFG_NAN_CONFIG2,
 				&(cmd_data->status), false);
+		nancfg->ndpe_enabled = false;
 		if (unlikely(ret) || unlikely(cmd_data->status)) {
 			WL_ERR((" nan ctrl2 config flags resetting failed, ret = %d status = %d \n",
 					ret, cmd_data->status));
 			goto fail;
 		}
-		nancfg->ndpe_enabled = false;
 	}
 
 	/* set CFG CTRL2 flags1 and flags2 */
@@ -3248,13 +3248,9 @@ wl_cfgnan_start_handler(struct net_device *ndev, struct bcm_cfg80211 *cfg,
 
 	nancfg->nan_enable = true;
 	WL_INFORM_MEM(("[NAN] Enable successfull \n"));
+	goto done;
 
 fail:
-	/* Enable back TDLS if connected interface is <= 1 */
-	wl_cfg80211_tdls_config(cfg, TDLS_STATE_IF_DELETE, false);
-
-	/* reset conditon variable */
-	nancfg->nan_event_recvd = false;
 	if (unlikely(ret) || unlikely(cmd_data->status)) {
 		mutex_lock(&cfg->if_sync);
 		ret = wl_cfg80211_delete_iface(cfg, WL_IF_TYPE_NAN);
@@ -3280,7 +3276,18 @@ fail:
 		if (ret != BCME_OK) {
 			WL_ERR(("failed to stop nan[%d]\n", ret));
 		}
+		ret = wl_cfgnan_deinit(cfg, dhdp->up);
+		if (ret != BCME_OK) {
+			WL_ERR(("failed to de-initialize NAN[%d]\n", ret));
+		}
 	}
+done:
+	/* Enable back TDLS if connected interface is <= 1 */
+	wl_cfg80211_tdls_config(cfg, TDLS_STATE_IF_DELETE, false);
+
+	/* reset condition variable */
+	nancfg->nan_event_recvd = false;
+
 	if (nan_buf) {
 		MFREE(cfg->osh, nan_buf, NAN_IOCTL_BUF_SIZE);
 	}
