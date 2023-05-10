@@ -144,6 +144,7 @@ enum {
 };
 
 enum {
+	RTT_BW_UNSPECIFIED = 0,
 	RTT_BW_5 = BIT(0),
 	RTT_BW_10 = BIT(1),
 	RTT_BW_20 = BIT(2),
@@ -377,6 +378,16 @@ typedef struct rtt_report {
 	bcm_tlv_t *LCI; /* LCI Report */
 	bcm_tlv_t *LCR; /* Location Civic Report */
 } rtt_report_t;
+
+typedef struct rtt_report_extra {
+	int frequency; /* primary channel frequency (MHz) used for ranging measurements
+		        *  If frequency is unknown, this will be set to |UNSPECIFIED(-1)|
+			*/
+	int packet_bw; /* RTT packet bandwidth is an average BW of the BWs of RTT frames.
+	                * Cap the average close to a specific valid RttBw.
+		        */
+} rtt_report_extra_t;
+
 #define RTT_REPORT_SIZE (sizeof(rtt_report_t))
 
 /* rtt_results_header to maintain rtt result list per mac address */
@@ -395,7 +406,9 @@ struct rtt_result_detail {
 typedef struct rtt_result {
 	struct list_head list;
 	struct rtt_report report;
+	struct rtt_report_extra report_extra;
 	int32 report_len; /* total length of rtt_report */
+	int32 report_extra_len;
 	struct rtt_result_detail rtt_detail;
 	int32 detail_len;
 } rtt_result_t;

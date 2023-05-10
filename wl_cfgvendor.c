@@ -1811,6 +1811,12 @@ wl_cfgvendor_rtt_evt(void *ctx, void *rtt_data)
 				WL_ERR(("Failed to put RTT_ATTRIBUTE_RESULT, ret:%d\n", ret));
 				goto free_mem;
 			}
+			ret = nla_put(skb, RTT_ATTRIBUTE_RESULT_EXTRA,
+				rtt_result->report_extra_len, &rtt_result->report_extra);
+			if (ret < 0) {
+				WL_ERR(("Failed to put RTT_ATTRIBUTE_RESULT_EXTRA, ret:%d\n", ret));
+				goto free_mem;
+			}
 			ret = nla_put(skb, RTT_ATTRIBUTE_RESULT_DETAIL,
 				rtt_result->detail_len, &rtt_result->rtt_detail);
 			if (ret < 0) {
@@ -11792,6 +11798,7 @@ const struct nla_policy rtt_attr_policy[RTT_ATTRIBUTE_MAX] = {
 	[RTT_ATTRIBUTE_RESULT] = { .type = NLA_BINARY, .len = sizeof(rtt_result_t) },
 	[RTT_ATTRIBUTE_RESULT_DETAIL] = { .type = NLA_BINARY,
 	.len = sizeof(struct rtt_result_detail) },
+	[RTT_ATTRIBUTE_RESULT_EXTRA] = { .type = NLA_BINARY, .len = sizeof(rtt_report_extra_t) },
 };
 
 #ifdef KEEP_ALIVE

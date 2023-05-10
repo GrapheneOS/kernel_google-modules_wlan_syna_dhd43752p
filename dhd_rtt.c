@@ -3467,6 +3467,7 @@ dhd_rtt_convert_results_to_host_v2(rtt_result_t *rtt_result, const uint8 *p_data
 	uint8 num_ftm = 0;
 	char *ftm_frame_types[] =  FTM_FRAME_TYPES;
 	rtt_report_t *rtt_report = &(rtt_result->report);
+	rtt_report_extra_t *rtt_report_extra = &(rtt_result->report_extra);
 
 	BCM_REFERENCE(ftm_frame_types);
 	BCM_REFERENCE(dist);
@@ -3482,6 +3483,7 @@ dhd_rtt_convert_results_to_host_v2(rtt_result_t *rtt_result, const uint8 *p_data
 	BCM_REFERENCE(ftm_session_state_value_to_logstr);
 
 	NULL_CHECK(rtt_report, "rtt_report is NULL", err);
+	NULL_CHECK(rtt_report_extra, "rtt_report_extra is NULL", err);
 	NULL_CHECK(p_data, "p_data is NULL", err);
 	DHD_RTT(("%s enter\n", __FUNCTION__));
 	p_data_info = (const wl_proxd_rtt_result_v2_t *) p_data;
@@ -3628,6 +3630,29 @@ dhd_rtt_convert_results_to_host_v2(rtt_result_t *rtt_result, const uint8 *p_data
 			ftm_tmu_value_to_logstr(ltoh16_ua(&p_data_info->u.burst_duration.tmu))));
 		DHD_RTT(("rtt_report->burst_duration : %d\n", rtt_report->burst_duration));
 	}
+
+	chanspec = ltoh32_ua(&p_sample_avg->chanspec);
+	/* rtt frequency & bw */
+	if (!wf_chspec_malformed(chanspec)) {
+		rtt_report_extra->frequency =
+			wl_channel_to_frequency(wf_chspec_ctlchan(chanspec), CHSPEC_BAND(chanspec));
+
+		if (CHSPEC_IS20(chanspec)) {
+			rtt_report_extra->packet_bw = RTT_BW_20;
+		} else if (CHSPEC_IS40(chanspec)) {
+			rtt_report_extra->packet_bw = RTT_BW_40;
+		} else if (CHSPEC_IS80(chanspec)) {
+			rtt_report_extra->packet_bw = RTT_BW_80;
+		} else if (CHSPEC_IS160(chanspec)) {
+			rtt_report_extra->packet_bw = RTT_BW_160;
+		} else {
+			rtt_report_extra->packet_bw = RTT_BW_UNSPECIFIED;
+		}
+	} else {
+		rtt_report_extra->frequency = -1;
+		rtt_report_extra->packet_bw = RTT_BW_UNSPECIFIED;
+	}
+
 	/* display detail if available */
 	num_rtt = ltoh16_ua(&p_data_info->num_rtt);
 	if (num_rtt > 0) {
@@ -3940,6 +3965,7 @@ dhd_rtt_parse_result_event(wl_proxd_event_t *proxd_ev_data,
 	rtt_result->report.type = RTT_TWO_WAY;
 	DHD_RTT(("report->ftm_num : %d\n", rtt_result->report.ftm_num));
 	rtt_result->report_len = RTT_REPORT_SIZE;
+	rtt_result->report_extra_len = sizeof(rtt_result->report_extra);
 	rtt_result->detail_len = sizeof(rtt_result->rtt_detail);
 
 exit:
@@ -3994,6 +4020,7 @@ dhd_rtt_handle_directed_rtt_burst_end(dhd_pub_t *dhd, struct ether_addr *peer_ad
 			list_add_tail(&rtt_result->list, &rtt_results_header->result_list);
 			rtt_results_header->result_cnt++;
 			rtt_results_header->result_tot_len += rtt_result->report_len +
+				rtt_result->report_extra_len +
 				rtt_result->detail_len;
 		} else {
 			err_at = 2;
