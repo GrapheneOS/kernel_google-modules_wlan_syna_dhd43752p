@@ -109,6 +109,14 @@ dbg_ring_poll_worker(struct work_struct *work)
 	uint32 buflen, rlen;
 	unsigned long flags;
 
+	BCM_REFERENCE(hdr);
+
+	if (!CAN_SLEEP()) {
+		DHD_CONS_ONLY(("this context should be sleepable\n"));
+		sched = FALSE;
+		goto exit;
+	}
+
 	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
 	ring_info = container_of(d_work, linux_dbgring_info_t, work);
 	GCC_DIAGNOSTIC_POP();
@@ -148,15 +156,10 @@ dbg_ring_poll_worker(struct work_struct *work)
 		DHD_DBG_RING_UNLOCK(ring->lock, flags);
 	}
 
-	if (!CAN_SLEEP()) {
-		DHD_ERROR(("this context should be sleepable\n"));
-		sched = FALSE;
-		goto exit;
-	}
 
-	buf = MALLOCZ(dhdp->osh, buflen);
+	buf = VMALLOCZ(dhdp->osh, buflen);
 	if (!buf) {
-		DHD_ERROR(("%s failed to allocate read buf\n", __FUNCTION__));
+		DHD_CONS_ONLY(("%s failed to allocate read buf\n", __FUNCTION__));
 		sched = FALSE;
 		goto exit;
 	}
@@ -196,7 +199,7 @@ dbg_ring_poll_worker(struct work_struct *work)
 		rlen -= ENTRY_LENGTH(hdr);
 		hdr = (dhd_dbg_ring_entry_t *)((char *)hdr + ENTRY_LENGTH(hdr));
 	}
-	MFREE(dhdp->osh, buf, buflen);
+	VMFREE(dhdp->osh, buf, buflen);
 
 	DHD_DBG_RING_LOCK(ring->lock, flags);
 	if (!ring->sched_pull) {
@@ -289,8 +292,6 @@ dhd_os_reset_logging(dhd_pub_t *dhdp)
 		DHD_INFO(("%s: Stop ring buffer %d\n", __FUNCTION__, ring_id));
 
 		ring_info = &os_priv[ring_id];
-		/* cancel any pending work */
-		cancel_delayed_work_sync(&ring_info->work);
 		/* log level zero makes stop logging on that ring */
 		ring_info->log_level = 0;
 		ring_info->interval = 0;
@@ -300,6 +301,8 @@ dhd_os_reset_logging(dhd_pub_t *dhdp)
 			DHD_ERROR(("dhd_set_configuration is failed : %d\n", ret));
 			return ret;
 		}
+		/* cancel any pending work */
+		cancel_delayed_work_sync(&ring_info->work);
 	}
 	return ret;
 }
@@ -534,9 +537,9 @@ dhd_os_dbg_attach(dhd_pub_t *dhdp)
 	int ring_id;
 
 	/* os_dbg data */
-	os_priv = MALLOCZ(dhdp->osh, sizeof(*os_priv) * DEBUG_RING_ID_MAX);
+	os_priv = VMALLOCZ(dhdp->osh, sizeof(*os_priv) * DEBUG_RING_ID_MAX);
 	if (!os_priv) {
-		DHD_ERROR(("%s:%d: MALLOC failed for os_priv, size %d\n", __FUNCTION__,
+		DHD_ERROR(("%s:%d: VMALLOC failed for os_priv, size %d\n", __FUNCTION__,
 			__LINE__, (uint32)sizeof(*os_priv) * DEBUG_RING_ID_MAX));
 		return BCME_NOMEM;
 	}
@@ -551,7 +554,7 @@ dhd_os_dbg_attach(dhd_pub_t *dhdp)
 
 	ret = dhd_dbg_attach(dhdp, dhd_os_dbg_pullreq, dhd_os_dbg_urgent_notifier, os_priv);
 	if (ret) {
-		MFREE(dhdp->osh, os_priv, sizeof(*os_priv) * DEBUG_RING_ID_MAX);
+		VMFREE(dhdp->osh, os_priv, sizeof(*os_priv) * DEBUG_RING_ID_MAX);
 	}
 
 	return ret;
@@ -574,7 +577,7 @@ dhd_os_dbg_detach(dhd_pub_t *dhdp)
 			cancel_delayed_work_sync(&ring_info->work);
 		}
 	}
-	MFREE(dhdp->osh, os_priv, sizeof(*os_priv) * DEBUG_RING_ID_MAX);
+	VMFREE(dhdp->osh, os_priv, sizeof(*os_priv) * DEBUG_RING_ID_MAX);
 
 	return dhd_dbg_detach(dhdp);
 }
