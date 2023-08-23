@@ -23019,9 +23019,12 @@ dhd_mem_dump(void *handle, void *event_info, u8 event)
 
 #ifdef DHD_SSSR_DUMP
 	ret = dhd_collect_coredump(dhdp, dump);
-	if (ret) {
+	if (ret == BCME_ERROR) {
 		DHD_ERROR(("%s: dhd_collect_coredump() failed.\n", __FUNCTION__));
 		goto exit;
+	} else if (ret == BCME_UNSUPPORTED) {
+		DHD_ERROR(("%s: Unable to collect SSSR dumps. Skip it.\n",
+			__FUNCTION__));
 	}
 #endif /* DHD_SSSR_DUMP */
 
