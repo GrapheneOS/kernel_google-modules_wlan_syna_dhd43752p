@@ -30108,6 +30108,10 @@ dhd_net_del_flowrings_sta(dhd_pub_t *dhd, struct net_device *ndev)
 		__FUNCTION__, ifp->idx));
 
 	dhd_del_all_sta(dhd, ifp->idx);
+#ifdef DHD_PCIE_RUNTIMEPM
+	DHD_ERROR(("dhd_bus_busy_state = 0x%x\n", dhd->dhd_bus_busy_state));
+	dhdpcie_runtime_bus_wake(dhd, CAN_SLEEP(), __builtin_return_address(0));
+#endif /* DHD_PCIE_RUNTIMEPM */
 	dhd_flow_rings_delete(dhd, ifp->idx);
 }
 #endif /* PCIE_FULL_DONGLE */
