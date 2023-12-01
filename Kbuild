@@ -185,6 +185,9 @@ DHDCFLAGS += -DRTT_GEOFENCE_INTERVAL
 #Debug flag
 DHDCFLAGS += -DRTT_GEOFENCE_CONT
 
+# debug code to identify root cause of scan timeout due to syncid mismatch
+DHDCFLAGS += -DSYNCID_MISMATCH_DEBUG
+
 #Debug flag
 DHDCFLAGS += -DDEBUGABILITY
 DHDCFLAGS += -DDEBUGABILITY_DISABLE_MEMDUMP
