@@ -13460,6 +13460,9 @@ wl_handle_assoc_events(struct bcm_cfg80211 *cfg,
 #endif /* WL_CLIENT_SAE */
 			}
 
+                        /* Update latest bssid */
+                        wl_update_prof(cfg, as.ndev, NULL,
+                                (const void *)&e->addr, WL_PROF_LATEST_BSSID);
 			/* Intentional fall through */
 		case WLC_E_ASSOC:
 			wl_get_auth_assoc_status(cfg, as.ndev, e, data);
