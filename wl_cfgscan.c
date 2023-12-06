@@ -3737,6 +3737,9 @@ wl_cfg80211_sched_scan_start(struct wiphy *wiphy,
 		goto exit;
 	}
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) && (defined(SUPPORT_RANDOM_MAC_SCAN)) */
+#ifdef PNO_DISABLE_EL
+	dhd_dbg_set_configuration_pno(dhdp, TRUE);
+#endif /* PNO_DISABLE_EL */
 
 exit:
 	if (event_data) {
@@ -3787,6 +3790,10 @@ wl_cfg80211_sched_scan_stop(struct wiphy *wiphy, struct net_device *dev)
 	cfg->sched_scan_req = NULL;
 	cfg->sched_scan_running = FALSE;
 	mutex_unlock(&cfg->scan_sync);
+
+#ifdef PNO_DISABLE_EL
+	dhd_dbg_set_configuration_pno(dhdp, FALSE);
+#endif /* PNO_DISABLE_EL */
 
 	return 0;
 }
