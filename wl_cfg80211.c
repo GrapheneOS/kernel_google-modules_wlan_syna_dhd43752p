@@ -5128,19 +5128,14 @@ wl_cfg80211_set_mfp(struct bcm_cfg80211 *cfg,
 
 	/* Parse the wpa2ie to decode the MFP capablity */
 	if (((wpa2_ie = bcm_parse_tlvs((const u8 *)sme->ie, sme->ie_len,
-			DOT11_MNG_RSN_ID)) != NULL) &&
-			(wl_cfg80211_get_rsn_capa(wpa2_ie, &rsn_cap) == 0) && rsn_cap) {
+		DOT11_MNG_RSN_ID)) != NULL) &&
+		(wl_cfg80211_get_rsn_capa(wpa2_ie, &rsn_cap) == 0) && rsn_cap) {
 		WL_DBG(("rsn_cap 0x%x%x\n", rsn_cap[0], rsn_cap[1]));
 		/* Check for MFP cap in the RSN capability field */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0))
-		if (sme->mfp)
-#endif
-		{
-			if (rsn_cap[0] & RSN_CAP_MFPR) {
-				mfp = WL_MFP_REQUIRED;
-			} else if (rsn_cap[0] & RSN_CAP_MFPC) {
-				mfp = WL_MFP_CAPABLE;
-			}
+		if (rsn_cap[0] & RSN_CAP_MFPR) {
+			mfp = WL_MFP_REQUIRED;
+		} else if (rsn_cap[0] & RSN_CAP_MFPC) {
+			mfp = WL_MFP_CAPABLE;
 		}
 		/*
 		 * eptr --> end/last byte addr of wpa2_ie
@@ -5149,13 +5144,18 @@ wl_cfg80211_set_mfp(struct bcm_cfg80211 *cfg,
 		eptr = (const u8*)wpa2_ie + (wpa2_ie->len + TLV_HDR_LEN);
 		/* pointing ptr to the next byte after rns_cap */
 		ptr = (const u8*)rsn_cap + RSN_CAP_LEN;
-		if (mfp && (eptr - ptr) >= WPA2_PMKID_COUNT_LEN) {
+		/* If sme->mfp is not set, the bip iovar will not be fired. */
+		if (mfp &&
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0))
+			(sme->mfp) &&
+#endif
+			(eptr - ptr) >= WPA2_PMKID_COUNT_LEN) {
 			/* pmkid now to point to 1st byte addr of pmkid in wpa2_ie */
 			pmkid = (const wpa_pmkid_list_t*)ptr;
 			count = pmkid->count.low | (pmkid->count.high << 8);
 			/* ptr now to point to last byte addr of pmkid */
 			ptr = (const u8*)pmkid + (count * WPA2_PMKID_LEN
-					+ WPA2_PMKID_COUNT_LEN);
+				+ WPA2_PMKID_COUNT_LEN);
 			if ((eptr - ptr) >= WPA_SUITE_LEN) {
 				/* group_mgmt_cs now to point to first byte addr of bip */
 				group_mgmt_cs = ptr;
@@ -5202,7 +5202,7 @@ wl_cfg80211_set_mfp(struct bcm_cfg80211 *cfg,
 	}
 
 	if (group_mgmt_cs && bcmp((const uint8 *)WPA2_OUI,
-			group_mgmt_cs, (WPA_SUITE_LEN - 1)) == 0) {
+		group_mgmt_cs, (WPA_SUITE_LEN - 1)) == 0) {
 		WL_DBG(("BIP is found\n"));
 		err = wldev_iovar_setbuf(dev, "bip",
 			group_mgmt_cs, WPA_SUITE_LEN, cfg->ioctl_buf,
@@ -10969,6 +10969,35 @@ s32 wl_mode_to_nl80211_iftype(s32 mode)
 }
 
 static bool
+wl_is_ccode_change_allowed(struct net_device *net)
+{
+	struct wireless_dev *wdev = ndev_to_wdev(net);
+	struct wiphy *wiphy = wdev->wiphy;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_info *iter, *next;
+
+	/* Country code isn't allowed change on AP/GO, NDP established  */
+	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
+	for_each_ndev(cfg, iter, next) {
+		GCC_DIAGNOSTIC_POP();
+		if (iter->ndev) {
+			if (wl_get_drv_status(cfg, AP_CREATED, iter->ndev)) {
+				WL_ERR(("AP active. skip country ccode change"));
+				return false;
+			}
+		}
+	}
+
+#ifdef WL_NAN
+	if (wl_cfgnan_is_enabled(cfg) && wl_cfgnan_is_dp_active(net)) {
+		WL_ERR(("NDP established. skip country ccode change"));
+		return false;
+	}
+#endif /* WL_NAN */
+	return true;
+}
+
+static bool
 wl_is_ccode_change_required(struct net_device *net,
 	char *country_code, int revinfo)
 {
@@ -11212,6 +11241,12 @@ wl_cfg80211_set_country_code(struct net_device *net, char *country_code,
 
 	if ((wl_is_ccode_change_required(net, country_code, revinfo) == false) &&
 		!dhd_force_country_change(net)) {
+		goto exit;
+	}
+
+	if (wl_is_ccode_change_allowed(net) == false) {
+		WL_ERR(("country code change isn't allowed during AP role/NAN connected\n"));
+		ret = BCME_EPERM;
 		goto exit;
 	}
 
